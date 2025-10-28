@@ -1,0 +1,474 @@
+import React, { useState, useEffect } from 'react';
+import { Card, CardContent } from '../../components/ui/card';
+import { Button } from '../../components/ui/button';
+import { Wallet, Plus, DollarSign, TrendingUp, AlertCircle, CheckCircle, Copy } from 'lucide-react';
+import { useAuth } from '../../contexts/AuthContext';
+import { supabase } from '../../lib/supabase';
+import { flutterwaveService } from '../../services/flutterwaveService';
+
+interface VendorData {
+  id: string;
+  business_name: string;
+  wallet_balance: number;
+  flutterwave_wallet_id: string | null;
+  flutterwave_account_number: string | null;
+  flutterwave_bank_name: string | null;
+  flutterwave_account_name: string | null;
+}
+
+interface PayoutAccount {
+  id: string;
+  bank_name: string;
+  bank_code: string;
+  account_number: string;
+  account_name: string;
+  is_default: boolean;
+  is_verified: boolean;
+}
+
+export const WalletScreen: React.FC = () => {
+  const { user, profile } = useAuth();
+  const [loading, setLoading] = useState(true);
+  const [vendorData, setVendorData] = useState<VendorData | null>(null);
+  const [payoutAccounts, setPayoutAccounts] = useState<PayoutAccount[]>([]);
+  const [isCreatingWallet, setIsCreatingWallet] = useState(false);
+  const [showAddAccount, setShowAddAccount] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const [copied, setCopied] = useState(false);
+
+  const [newAccount, setNewAccount] = useState({
+    bankCode: '',
+    accountNumber: '',
+    accountName: '',
+  });
+
+  useEffect(() => {
+    if (user && profile?.role === 'vendor') {
+      loadVendorData();
+      loadPayoutAccounts();
+    }
+  }, [user, profile]);
+
+  const loadVendorData = async () => {
+    if (!user) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('vendors')
+        .select('*')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      if (error) throw error;
+      if (data) {
+        setVendorData(data as VendorData);
+      }
+    } catch (err) {
+      console.error('Error loading vendor data:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadPayoutAccounts = async () => {
+    if (!user) return;
+
+    try {
+      const { data: vendorData } = await supabase
+        .from('vendors')
+        .select('id')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      if (!vendorData) return;
+
+      const { data, error } = await supabase
+        .from('vendor_payout_accounts')
+        .select('*')
+        .eq('vendor_id', vendorData.id)
+        .order('is_default', { ascending: false });
+
+      if (error) throw error;
+      if (data) {
+        setPayoutAccounts(data as PayoutAccount[]);
+      }
+    } catch (err) {
+      console.error('Error loading payout accounts:', err);
+    }
+  };
+
+  const handleCreateWallet = async () => {
+    if (!vendorData || !user?.email) return;
+
+    setIsCreatingWallet(true);
+    setError('');
+    setSuccess('');
+
+    try {
+      const result = await flutterwaveService.createVendorWallet(vendorData.id, {
+        business_name: vendorData.business_name,
+        email: user.email,
+        phone: profile?.phone || '',
+      });
+
+      if (result.success && result.data) {
+        setSuccess('Wallet created successfully!');
+        await loadVendorData();
+      } else {
+        setError(result.error || 'Failed to create wallet');
+      }
+    } catch (err) {
+      setError('An error occurred while creating wallet');
+    } finally {
+      setIsCreatingWallet(false);
+    }
+  };
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleAddPayoutAccount = async () => {
+    if (!vendorData || !newAccount.bankCode || !newAccount.accountNumber) {
+      setError('Please fill in all required fields');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+
+    try {
+      const banks = await flutterwaveService.getBankList();
+      const selectedBank = banks.banks?.find(b => b.code === newAccount.bankCode);
+
+      if (!selectedBank) {
+        setError('Invalid bank selected');
+        return;
+      }
+
+      const resolved = await flutterwaveService.resolveAccountNumber(
+        newAccount.accountNumber,
+        newAccount.bankCode
+      );
+
+      if (!resolved.success) {
+        setError('Unable to verify account number');
+        return;
+      }
+
+      const { error: insertError } = await supabase
+        .from('vendor_payout_accounts')
+        .insert({
+          vendor_id: vendorData.id,
+          bank_name: selectedBank.name,
+          bank_code: newAccount.bankCode,
+          account_number: newAccount.accountNumber,
+          account_name: resolved.accountName || '',
+          is_default: payoutAccounts.length === 0,
+          is_verified: true,
+        });
+
+      if (insertError) throw insertError;
+
+      setSuccess('Payout account added successfully');
+      setShowAddAccount(false);
+      setNewAccount({ bankCode: '', accountNumber: '', accountName: '' });
+      await loadPayoutAccounts();
+    } catch (err) {
+      console.error('Error adding payout account:', err);
+      setError('Failed to add payout account');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="w-full min-h-screen bg-neutral-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-12 h-12 border-4 border-primary-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+          <p className="font-sans text-neutral-600">Loading wallet...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!vendorData) {
+    return (
+      <div className="w-full min-h-screen bg-neutral-50 flex items-center justify-center">
+        <Card>
+          <CardContent className="p-12 text-center">
+            <AlertCircle className="w-16 h-16 text-error mx-auto mb-4" />
+            <h3 className="font-heading font-semibold text-lg text-neutral-900 mb-2">
+              Vendor Account Not Found
+            </h3>
+            <p className="font-sans text-neutral-600">
+              Unable to load your vendor information
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  return (
+    <div className="w-full min-h-screen bg-neutral-50">
+      <div className="max-w-7xl mx-auto px-3 md:px-6 py-4 md:py-8">
+        <h1 className="font-heading font-bold text-lg md:text-3xl text-neutral-900 mb-6">
+          Wallet & Financials
+        </h1>
+
+        {error && (
+          <Card className="mb-6 border-error bg-error/5">
+            <CardContent className="p-4 flex items-center gap-3">
+              <AlertCircle className="w-5 h-5 text-error flex-shrink-0" />
+              <p className="font-sans text-sm text-error">{error}</p>
+            </CardContent>
+          </Card>
+        )}
+
+        {success && (
+          <Card className="mb-6 border-primary-500 bg-primary-50">
+            <CardContent className="p-4 flex items-center gap-3">
+              <CheckCircle className="w-5 h-5 text-primary-700 flex-shrink-0" />
+              <p className="font-sans text-sm text-primary-700">{success}</p>
+            </CardContent>
+          </Card>
+        )}
+
+        <div className="grid md:grid-cols-2 gap-6 mb-8">
+          <Card className="bg-gradient-to-br from-primary-500 to-primary-700 text-white">
+            <CardContent className="p-6">
+              <div className="flex items-start justify-between mb-4">
+                <div>
+                  <p className="font-sans text-sm text-primary-100 mb-1">Available Balance</p>
+                  <h2 className="font-heading font-bold text-3xl">
+                    ₦{vendorData.wallet_balance.toLocaleString()}
+                  </h2>
+                </div>
+                <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center">
+                  <Wallet className="w-6 h-6" />
+                </div>
+              </div>
+              <Button
+                variant="outline"
+                className="w-full bg-white text-primary-700 hover:bg-primary-50"
+              >
+                Withdraw Funds
+              </Button>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="p-6">
+              <div className="flex items-start justify-between mb-4">
+                <div>
+                  <p className="font-sans text-sm text-neutral-600 mb-1">Pending Settlements</p>
+                  <h2 className="font-heading font-bold text-2xl text-neutral-900">
+                    ₦0
+                  </h2>
+                </div>
+                <div className="w-12 h-12 bg-neutral-100 rounded-full flex items-center justify-center">
+                  <TrendingUp className="w-6 h-6 text-neutral-600" />
+                </div>
+              </div>
+              <p className="font-sans text-xs text-neutral-500">
+                Funds will be available after delivery confirmation
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+
+        {!vendorData.flutterwave_wallet_id ? (
+          <Card className="mb-8">
+            <CardContent className="p-8 text-center">
+              <div className="w-16 h-16 bg-primary-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Wallet className="w-8 h-8 text-primary-600" />
+              </div>
+              <h3 className="font-heading font-bold text-xl text-neutral-900 mb-2">
+                Create Your Digital Wallet
+              </h3>
+              <p className="font-sans text-neutral-600 mb-6 max-w-md mx-auto">
+                Set up a Flutterwave wallet to receive payments directly from customers when orders are completed
+              </p>
+              <Button
+                onClick={handleCreateWallet}
+                disabled={isCreatingWallet}
+                className="bg-primary-500 hover:bg-primary-600"
+              >
+                {isCreatingWallet ? 'Creating Wallet...' : 'Create Wallet Now'}
+              </Button>
+            </CardContent>
+          </Card>
+        ) : (
+          <Card className="mb-8">
+            <CardContent className="p-6">
+              <h3 className="font-heading font-semibold text-lg text-neutral-900 mb-4">
+                Your Digital Wallet
+              </h3>
+              <div className="bg-neutral-50 rounded-lg p-4 space-y-3">
+                <div className="flex justify-between items-center">
+                  <span className="font-sans text-sm text-neutral-600">Bank Name</span>
+                  <span className="font-sans font-medium text-neutral-900">
+                    {vendorData.flutterwave_bank_name}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="font-sans text-sm text-neutral-600">Account Number</span>
+                  <div className="flex items-center gap-2">
+                    <span className="font-sans font-medium text-neutral-900">
+                      {vendorData.flutterwave_account_number}
+                    </span>
+                    <button
+                      onClick={() => copyToClipboard(vendorData.flutterwave_account_number || '')}
+                      className="p-1.5 hover:bg-neutral-200 rounded transition-colors"
+                    >
+                      <Copy className="w-4 h-4 text-neutral-600" />
+                    </button>
+                  </div>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="font-sans text-sm text-neutral-600">Account Name</span>
+                  <span className="font-sans font-medium text-neutral-900">
+                    {vendorData.flutterwave_account_name || vendorData.business_name}
+                  </span>
+                </div>
+              </div>
+              <p className="font-sans text-xs text-neutral-500 mt-4">
+                Share this account number with customers for direct payments
+              </p>
+            </CardContent>
+          </Card>
+        )}
+
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="font-heading font-semibold text-lg text-neutral-900">
+                Payout Accounts
+              </h3>
+              <Button
+                onClick={() => setShowAddAccount(true)}
+                variant="outline"
+                className="flex items-center gap-2"
+              >
+                <Plus className="w-4 h-4" />
+                Add Account
+              </Button>
+            </div>
+
+            {payoutAccounts.length === 0 ? (
+              <div className="text-center py-8">
+                <DollarSign className="w-12 h-12 text-neutral-300 mx-auto mb-3" />
+                <p className="font-sans text-neutral-600">No payout accounts added yet</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {payoutAccounts.map((account) => (
+                  <div
+                    key={account.id}
+                    className="flex items-center justify-between p-4 border border-neutral-200 rounded-lg"
+                  >
+                    <div>
+                      <p className="font-sans font-medium text-neutral-900">{account.bank_name}</p>
+                      <p className="font-sans text-sm text-neutral-600">
+                        {account.account_number} - {account.account_name}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {account.is_default && (
+                        <span className="px-2 py-1 bg-primary-100 text-primary-700 text-xs font-medium rounded">
+                          Default
+                        </span>
+                      )}
+                      {account.is_verified && (
+                        <CheckCircle className="w-5 h-5 text-primary-600" />
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {showAddAccount && (
+              <div className="mt-6 p-6 border border-neutral-200 rounded-lg bg-neutral-50">
+                <h4 className="font-heading font-semibold text-neutral-900 mb-4">
+                  Add Payout Account
+                </h4>
+                <div className="space-y-4">
+                  <div>
+                    <label className="font-sans text-sm text-neutral-700 mb-2 block">
+                      Bank
+                    </label>
+                    <select
+                      value={newAccount.bankCode}
+                      onChange={(e) => setNewAccount({ ...newAccount, bankCode: e.target.value })}
+                      className="w-full px-4 py-2 border border-neutral-300 rounded-lg font-sans text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    >
+                      <option value="">Select Bank</option>
+                      <option value="044">Access Bank</option>
+                      <option value="063">Diamond Bank</option>
+                      <option value="050">Ecobank</option>
+                      <option value="070">Fidelity Bank</option>
+                      <option value="011">First Bank</option>
+                      <option value="214">First City Monument Bank</option>
+                      <option value="058">Guaranty Trust Bank</option>
+                      <option value="030">Heritage Bank</option>
+                      <option value="301">Jaiz Bank</option>
+                      <option value="082">Keystone Bank</option>
+                      <option value="526">Parallex Bank</option>
+                      <option value="076">Polaris Bank</option>
+                      <option value="101">Providus Bank</option>
+                      <option value="221">Stanbic IBTC Bank</option>
+                      <option value="068">Standard Chartered</option>
+                      <option value="232">Sterling Bank</option>
+                      <option value="100">Suntrust Bank</option>
+                      <option value="032">Union Bank</option>
+                      <option value="033">United Bank for Africa</option>
+                      <option value="215">Unity Bank</option>
+                      <option value="035">Wema Bank</option>
+                      <option value="057">Zenith Bank</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="font-sans text-sm text-neutral-700 mb-2 block">
+                      Account Number
+                    </label>
+                    <input
+                      type="text"
+                      value={newAccount.accountNumber}
+                      onChange={(e) =>
+                        setNewAccount({ ...newAccount, accountNumber: e.target.value })
+                      }
+                      className="w-full px-4 py-2 border border-neutral-300 rounded-lg font-sans text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      placeholder="0123456789"
+                      maxLength={10}
+                    />
+                  </div>
+                  <div className="flex gap-3">
+                    <Button onClick={handleAddPayoutAccount} className="flex-1">
+                      Add Account
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setShowAddAccount(false);
+                        setNewAccount({ bankCode: '', accountNumber: '', accountName: '' });
+                      }}
+                      className="flex-1"
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+};
