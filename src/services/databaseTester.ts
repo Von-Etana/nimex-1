@@ -106,7 +106,7 @@ class DatabaseTester {
   }> {
     try {
       // Test basic connection with a simple query
-      const { data, error } = await supabase.from('profiles').select('count', { count: 'exact', head: true });
+      const { data, error } = await supabase.from('profiles').select('id', { count: 'exact', head: true });
 
       if (error) {
         return {
@@ -125,7 +125,7 @@ class DatabaseTester {
     } catch (error) {
       return {
         connected: false,
-        error: error instanceof Error ? error.message : 'Unknown connection error'
+        error: error instanceof Error ? `Connection failed: ${error.message}` : 'Unknown connection error'
       };
     }
   }

@@ -136,32 +136,50 @@ class APIKeyTester {
         };
       }
 
-      // Test user profile endpoint
-      const response = await fetch('https://api.sendgrid.com/v3/user/profile', {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${apiSecret}`,
-        },
-      });
+      // Test user profile endpoint with timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
 
-      if (response.ok) {
-        const data = await response.json();
-        return {
-          service: 'sendgrid',
-          status: 'success',
-          details: {
-            username: data.username,
-            email: data.email,
-            firstName: data.first_name,
-            lastName: data.last_name
-          }
-        };
-      } else {
-        return {
-          service: 'sendgrid',
-          status: 'failed',
-          error: `HTTP ${response.status}: ${response.statusText}`
-        };
+      try {
+        const response = await fetch('https://api.sendgrid.com/v3/user/profile', {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${apiSecret}`,
+          },
+          signal: controller.signal,
+        });
+
+        clearTimeout(timeoutId);
+
+        if (response.ok) {
+          const data = await response.json();
+          return {
+            service: 'sendgrid',
+            status: 'success',
+            details: {
+              username: data.username,
+              email: data.email,
+              firstName: data.first_name,
+              lastName: data.last_name
+            }
+          };
+        } else {
+          return {
+            service: 'sendgrid',
+            status: 'failed',
+            error: `HTTP ${response.status}: ${response.statusText}`
+          };
+        }
+      } catch (fetchError) {
+        clearTimeout(timeoutId);
+        if (fetchError instanceof Error && fetchError.name === 'AbortError') {
+          return {
+            service: 'sendgrid',
+            status: 'failed',
+            error: 'Request timeout - service may be unavailable'
+          };
+        }
+        throw fetchError;
       }
     } catch (error) {
       return {
@@ -225,34 +243,53 @@ class APIKeyTester {
       }
 
       // Test with a simple geocoding request
-      const response = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?address=Lagos,Nigeria&key=${apiKey}`);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
 
-      if (!response.ok) {
-        return {
-          service: 'google_maps',
-          status: 'failed',
-          error: `HTTP ${response.status}: ${response.statusText}`
-        };
-      }
+      try {
+        const response = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?address=Lagos,Nigeria&key=${apiKey}`, {
+          signal: controller.signal,
+        });
 
-      const data = await response.json();
+        clearTimeout(timeoutId);
 
-      if (data.status === 'OK') {
-        return {
-          service: 'google_maps',
-          status: 'success',
-          details: {
-            status: data.status,
-            resultsCount: data.results?.length || 0
-          }
-        };
-      } else {
-        return {
-          service: 'google_maps',
-          status: 'failed',
-          error: `API returned status: ${data.status}`,
-          details: data
-        };
+        if (!response.ok) {
+          return {
+            service: 'google_maps',
+            status: 'failed',
+            error: `HTTP ${response.status}: ${response.statusText}`
+          };
+        }
+
+        const data = await response.json();
+
+        if (data.status === 'OK') {
+          return {
+            service: 'google_maps',
+            status: 'success',
+            details: {
+              status: data.status,
+              resultsCount: data.results?.length || 0
+            }
+          };
+        } else {
+          return {
+            service: 'google_maps',
+            status: 'failed',
+            error: `API returned status: ${data.status}`,
+            details: data
+          };
+        }
+      } catch (fetchError) {
+        clearTimeout(timeoutId);
+        if (fetchError instanceof Error && fetchError.name === 'AbortError') {
+          return {
+            service: 'google_maps',
+            status: 'failed',
+            error: 'Request timeout - service may be unavailable'
+          };
+        }
+        throw fetchError;
       }
     } catch (error) {
       return {
