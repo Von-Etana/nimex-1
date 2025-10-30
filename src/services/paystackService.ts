@@ -41,9 +41,73 @@ class PaystackService {
 
   constructor() {
     this.config = {
-      publicKey: import.meta.env.VITE_PAYSTACK_PUBLIC_KEY || '',
+      publicKey: import.meta.env.VITE_PAYSTACK_PUBLIC_KEY,
       testMode: import.meta.env.VITE_PAYSTACK_TEST_MODE === 'true',
     };
+
+    if (!this.config.publicKey) {
+      throw new Error('Missing required environment variable: VITE_PAYSTACK_PUBLIC_KEY');
+    }
+  }
+
+  async initializeSubscriptionPayment(
+    email: string,
+    plan: string,
+    vendorId: string
+  ): Promise<InitializePaymentResponse> {
+    try {
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+      // Get plan details
+      const { subscriptionService } = await import('./subscriptionService');
+      const tier = subscriptionService.getTierByPlan(plan as any);
+
+      if (!tier) {
+        throw new Error('Invalid subscription plan');
+      }
+
+      const response = await fetch(`${supabaseUrl}/functions/v1/initialize-payment`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${supabaseKey}`,
+        },
+        body: JSON.stringify({
+          email,
+          amount: Math.round(tier.price * 100),
+          reference: `NIMEX-SUB-${vendorId}-${plan}-${Date.now()}`,
+          metadata: {
+            type: 'subscription',
+            vendor_id: vendorId,
+            plan: plan,
+            price: tier.price,
+          },
+          callback_url: `${window.location.origin}/vendor/subscription/success`,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to initialize subscription payment');
+      }
+
+      const data = await response.json();
+
+      return {
+        success: true,
+        data: {
+          authorizationUrl: data.authorization_url,
+          accessCode: data.access_code,
+          reference: data.reference,
+        },
+      };
+    } catch (error) {
+      console.error('Failed to initialize subscription payment:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to initialize subscription payment',
+      };
+    }
   }
 
   async initializePayment(request: InitializePaymentRequest): Promise<InitializePaymentResponse> {
@@ -88,6 +152,42 @@ class PaystackService {
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to initialize payment',
+      };
+    }
+  }
+
+  async verifySubscriptionPayment(reference: string) {
+    try {
+      const verification = await this.verifyPayment(reference);
+
+      if (verification.success && verification.data?.status === 'success') {
+        // Extract metadata from reference
+        const parts = reference.split('-');
+        if (parts.length >= 4 && parts[1] === 'SUB') {
+          const vendorId = parts[2];
+          const plan = parts[3];
+
+          // Update vendor subscription
+          const { subscriptionService } = await import('./subscriptionService');
+          await subscriptionService.updateVendorSubscription(vendorId, plan as any);
+
+          return {
+            success: true,
+            data: {
+              ...verification.data,
+              vendorId,
+              plan,
+            }
+          };
+        }
+      }
+
+      return verification;
+    } catch (error) {
+      console.error('Failed to verify subscription payment:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to verify subscription payment',
       };
     }
   }

@@ -57,6 +57,9 @@ export const AdminDashboardScreen: React.FC = () => {
     newListings: 0,
     uptimeStatus: '99.9%',
     totalRevenue: 0,
+    activeSubscriptions: 0,
+    monthlyRevenue: 0,
+    expiredSubscriptions: 0,
   });
 
   useEffect(() => {
@@ -65,15 +68,28 @@ export const AdminDashboardScreen: React.FC = () => {
 
   const loadMetrics = async () => {
     try {
-      const [usersRes, vendorsRes, productsRes, ordersRes, kycRes] = await Promise.all([
+      const [
+        usersRes,
+        vendorsRes,
+        productsRes,
+        ordersRes,
+        kycRes,
+        subscriptionsRes,
+        expiredSubsRes
+      ] = await Promise.all([
         supabase.from('profiles').select('id', { count: 'exact', head: true }),
         supabase.from('vendors').select('id', { count: 'exact', head: true }),
         supabase.from('products').select('id', { count: 'exact', head: true }),
         supabase.from('orders').select('total_amount'),
         supabase.from('vendors').select('kyc_status', { count: 'exact' }).eq('kyc_status', 'pending'),
+        supabase.from('vendors').select('subscription_status', { count: 'exact' }).eq('subscription_status', 'active'),
+        supabase.from('vendors').select('subscription_status', { count: 'exact' }).eq('subscription_status', 'expired'),
       ]);
 
       const totalRevenue = ordersRes.data?.reduce((sum: number, order: any) => sum + (order.total_amount || 0), 0) || 0;
+
+      // Calculate monthly revenue from subscriptions
+      const monthlyRevenue = (subscriptionsRes.count || 0) * 1200; // Assuming average monthly subscription
 
       // Calculate new listings from last 30 days
       const thirtyDaysAgo = new Date();
@@ -92,6 +108,9 @@ export const AdminDashboardScreen: React.FC = () => {
         newListings: newListingsCount || 0,
         uptimeStatus: '99.9%',
         totalRevenue: totalRevenue,
+        activeSubscriptions: subscriptionsRes.count || 0,
+        monthlyRevenue: monthlyRevenue,
+        expiredSubscriptions: expiredSubsRes.count || 0,
       });
     } catch (error) {
       console.error('Error loading metrics:', error);
@@ -226,7 +245,7 @@ export const AdminDashboardScreen: React.FC = () => {
             <h2 className="font-heading font-bold text-xl md:text-2xl text-neutral-900 mb-4">
               Key Metrics
             </h2>
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
+            <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 md:gap-4">
               <MetricCard
                 title="Total Users"
                 value={metrics.totalUsers.toLocaleString()}
@@ -261,6 +280,22 @@ export const AdminDashboardScreen: React.FC = () => {
                 title="Uptime Status"
                 value={metrics.uptimeStatus}
                 icon={<CheckCircle className="w-5 h-5 text-green-600" />}
+              />
+              <MetricCard
+                title="Active Subscriptions"
+                value={metrics.activeSubscriptions.toLocaleString()}
+                icon={<CheckCircle className="w-5 h-5 text-green-600" />}
+              />
+              <MetricCard
+                title="Monthly Recurring Revenue"
+                value={`₦${(metrics.monthlyRevenue / 1000).toFixed(0)}K`}
+                icon={<DollarSign className="w-5 h-5 text-neutral-600" />}
+                bgColor="bg-blue-50"
+              />
+              <MetricCard
+                title="Expired Subscriptions"
+                value={metrics.expiredSubscriptions}
+                icon={<Clock className="w-5 h-5 text-red-600" />}
               />
               <MetricCard
                 title="Total Revenue"

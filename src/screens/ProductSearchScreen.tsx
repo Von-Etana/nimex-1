@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { SearchIcon, SlidersHorizontal, XIcon, MapPin } from 'lucide-react';
+import { SearchIcon, SlidersHorizontal, XIcon, MapPin, TrendingUp, Award } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Card, CardContent } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
 import { supabase } from '../lib/supabase';
 import { googleMapsService, type PlaceResult } from '../services/googleMapsService';
+import { recommendationService } from '../services/recommendationService';
+import { useAuth } from '../contexts/AuthContext';
 
 interface Product {
   id: string;
@@ -21,11 +23,16 @@ interface Product {
 export const ProductSearchScreen: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [products, setProducts] = useState<Product[]>([]);
+  const [recommendedProducts, setRecommendedProducts] = useState<Product[]>([]);
+  const [trendingProducts, setTrendingProducts] = useState<Product[]>([]);
+  const [topVendors, setTopVendors] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showFilters, setShowFilters] = useState(false);
   const [locationSuggestions, setLocationSuggestions] = useState<string[]>([]);
   const [showLocationSuggestions, setShowLocationSuggestions] = useState(false);
+  const [showRecommendations, setShowRecommendations] = useState(false);
 
   const query = searchParams.get('q') || '';
   const category = searchParams.get('category') || '';
@@ -36,7 +43,15 @@ export const ProductSearchScreen: React.FC = () => {
 
   useEffect(() => {
     fetchProducts();
+    loadRecommendations();
   }, [query, category, minPrice, maxPrice, location, sortBy]);
+
+  useEffect(() => {
+    // Track search when user performs a search
+    if (query && user?.id) {
+      recommendationService.trackUserSearch(user.id, query, category, location);
+    }
+  }, [query, category, location, user?.id]);
 
   const fetchProducts = async () => {
     setLoading(true);
@@ -84,6 +99,27 @@ export const ProductSearchScreen: React.FC = () => {
       console.error('Error fetching products:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadRecommendations = async () => {
+    try {
+      if (user?.id) {
+        // Get personalized recommendations
+        const recommendations = await recommendationService.getPersonalizedRecommendations(user.id, 6);
+        setRecommendedProducts(recommendations.map(r => r.product));
+      }
+
+      // Get trending products
+      const trending = await recommendationService.getTrendingProducts(6);
+      setTrendingProducts(trending.map(t => t.product));
+
+      // Get top vendors
+      const vendors = await recommendationService.getTopVendors(4);
+      setTopVendors(vendors.map(v => v.vendor));
+
+    } catch (error) {
+      console.error('Error loading recommendations:', error);
     }
   };
 
@@ -161,6 +197,130 @@ export const ProductSearchScreen: React.FC = () => {
             <p className="font-sans text-neutral-600">
               {loading ? 'Searching...' : `Found ${products.length} results for "${query}"`}
             </p>
+          )}
+
+          {!query && user && (
+            <div className="mb-6">
+              <Button
+                variant="outline"
+                onClick={() => setShowRecommendations(!showRecommendations)}
+                className="mb-4"
+              >
+                <TrendingUp className="w-4 h-4 mr-2" />
+                {showRecommendations ? 'Hide' : 'Show'} Recommendations
+              </Button>
+
+              {showRecommendations && (
+                <div className="space-y-6">
+                  {/* Personalized Recommendations */}
+                  {recommendedProducts.length > 0 && (
+                    <div>
+                      <h3 className="font-heading font-semibold text-lg text-neutral-900 mb-3 flex items-center gap-2">
+                        <Award className="w-5 h-5 text-primary-500" />
+                        Recommended for You
+                      </h3>
+                      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                        {recommendedProducts.slice(0, 6).map((product) => (
+                          <Card
+                            key={product.id}
+                            onClick={() => {
+                              navigate(`/product/${product.id}`);
+                              recommendationService.trackProductView(product.id, user.id);
+                            }}
+                            className="cursor-pointer hover:shadow-lg transition-all"
+                          >
+                            <CardContent className="p-0">
+                              <div
+                                className="w-full h-32 bg-cover bg-center rounded-t-lg"
+                                style={{ backgroundImage: `url(${product.images?.[0] || '/image-1.png'})` }}
+                              />
+                              <div className="p-2">
+                                <h4 className="font-sans text-xs font-medium text-neutral-900 line-clamp-2">
+                                  {product.title}
+                                </h4>
+                                <p className="font-sans font-bold text-primary-500 text-sm">
+                                  ₦{product.price?.toLocaleString()}
+                                </p>
+                              </div>
+                            </CardContent>
+                          </Card>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Trending Products */}
+                  {trendingProducts.length > 0 && (
+                    <div>
+                      <h3 className="font-heading font-semibold text-lg text-neutral-900 mb-3 flex items-center gap-2">
+                        <TrendingUp className="w-5 h-5 text-orange-500" />
+                        Trending This Week
+                      </h3>
+                      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                        {trendingProducts.slice(0, 6).map((product) => (
+                          <Card
+                            key={product.id}
+                            onClick={() => {
+                              navigate(`/product/${product.id}`);
+                              recommendationService.trackProductView(product.id, user.id);
+                            }}
+                            className="cursor-pointer hover:shadow-lg transition-all"
+                          >
+                            <CardContent className="p-0">
+                              <div
+                                className="w-full h-32 bg-cover bg-center rounded-t-lg"
+                                style={{ backgroundImage: `url(${product.images?.[0] || '/image-1.png'})` }}
+                              />
+                              <div className="p-2">
+                                <h4 className="font-sans text-xs font-medium text-neutral-900 line-clamp-2">
+                                  {product.title}
+                                </h4>
+                                <p className="font-sans font-bold text-primary-500 text-sm">
+                                  ₦{product.price?.toLocaleString()}
+                                </p>
+                              </div>
+                            </CardContent>
+                          </Card>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Top Vendors */}
+                  {topVendors.length > 0 && (
+                    <div>
+                      <h3 className="font-heading font-semibold text-lg text-neutral-900 mb-3 flex items-center gap-2">
+                        <Award className="w-5 h-5 text-yellow-500" />
+                        Top Rated Vendors
+                      </h3>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        {topVendors.slice(0, 4).map((vendor) => (
+                          <Card
+                            key={vendor.id}
+                            onClick={() => navigate(`/vendor/${vendor.id}`)}
+                            className="cursor-pointer hover:shadow-lg transition-all"
+                          >
+                            <CardContent className="p-4 text-center">
+                              <div className="w-16 h-16 bg-neutral-100 rounded-full mx-auto mb-3 flex items-center justify-center">
+                                <span className="font-heading font-bold text-lg text-neutral-700">
+                                  {vendor.business_name?.charAt(0)?.toUpperCase() || 'V'}
+                                </span>
+                              </div>
+                              <h4 className="font-sans font-medium text-neutral-900 text-sm mb-1">
+                                {vendor.business_name || 'Vendor'}
+                              </h4>
+                              <p className="font-sans text-xs text-neutral-600">
+                                {vendor.market_location || 'Location'}
+                              </p>
+                            </CardContent>
+                          </Card>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           )}
         </div>
 
@@ -291,7 +451,12 @@ export const ProductSearchScreen: React.FC = () => {
               return (
                 <Card
                   key={product.id}
-                  onClick={() => navigate(`/product/${product.id}`)}
+                  onClick={() => {
+                    navigate(`/product/${product.id}`);
+                    if (user?.id) {
+                      recommendationService.trackProductView(product.id, user.id);
+                    }
+                  }}
                   className="cursor-pointer hover:shadow-lg hover:border-primary-200 transition-all"
                 >
                   <CardContent className="p-0">

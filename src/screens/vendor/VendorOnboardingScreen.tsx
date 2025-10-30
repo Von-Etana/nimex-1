@@ -176,12 +176,38 @@ const VendorOnboardingScreen: React.FC = () => {
       if (selectedSubscription === 'free') {
         navigate('/vendor/dashboard');
       } else {
-        navigate('/vendor/subscription/payment', {
-          state: {
-            plan: selectedSubscription,
-            vendorData
-          }
-        });
+        // Initialize payment with Paystack
+        const { paystackService } = await import('../../services/paystackService');
+        const paymentResult = await paystackService.initializeSubscriptionPayment(
+          profile.email,
+          selectedSubscription,
+          vendorData.id
+        );
+
+        if (paymentResult.success && paymentResult.data) {
+          // Open payment modal
+          await paystackService.loadPaystackScript();
+          paystackService.openPaymentModal(
+            profile.email,
+            subscriptionService.getTierByPlan(selectedSubscription as any)?.price || 0,
+            paymentResult.data.reference,
+            async (reference) => {
+              // Verify payment and update subscription
+              const verification = await paystackService.verifySubscriptionPayment(reference);
+              if (verification.success) {
+                navigate('/vendor/dashboard');
+              } else {
+                alert('Payment verification failed. Please contact support.');
+              }
+            },
+            () => {
+              // Payment cancelled
+              console.log('Payment cancelled');
+            }
+          );
+        } else {
+          alert('Failed to initialize payment. Please try again.');
+        }
       }
     } catch (error) {
       console.error('Error completing onboarding:', error);
