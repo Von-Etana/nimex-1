@@ -34,5 +34,10 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
     return <Navigate to="/" replace />;
   }
 
+  // Check if vendor needs onboarding
+  if (user && profile?.role === 'vendor' && profile.needsOnboarding) {
+    return <Navigate to="/vendor/onboarding" replace />;
+  }
+
   return <>{children}</>;
 };

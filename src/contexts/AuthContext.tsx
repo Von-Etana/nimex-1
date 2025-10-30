@@ -25,6 +25,7 @@ interface Profile {
   location: string | null;
   adminRoles?: AdminRole[];
   adminPermissions?: string[];
+  needsOnboarding?: boolean;
 }
 
 interface AuthContextType {
@@ -129,6 +130,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           }
         }
 
+        // Check if vendor needs onboarding
+        if (profileData.role === 'vendor') {
+          const { data: vendorData } = await supabase
+            .from('vendors')
+            .select('business_name, subscription_plan, subscription_status')
+            .eq('user_id', userId)
+            .single();
+
+          if (vendorData && (!vendorData.business_name || vendorData.business_name.trim() === '')) {
+            // Vendor needs to complete onboarding
+            profileData.needsOnboarding = true;
+          } else {
+            profileData.needsOnboarding = false;
+          }
+        }
+
         setProfile(profileData);
       }
     } catch (error) {
@@ -167,6 +184,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (profileError) {
           console.error('Error creating profile:', profileError);
           // Don't return error here as auth was successful
+        }
+
+        // If vendor, create initial vendor record with free subscription
+        if (role === 'vendor') {
+          const { error: vendorError } = await supabase
+            .from('vendors')
+            .insert({
+              user_id: data.user.id,
+              business_name: '', // Will be filled during onboarding
+              subscription_plan: 'free',
+              subscription_status: 'active',
+              subscription_start_date: new Date().toISOString(),
+              verification_badge: 'none',
+              is_active: true,
+            });
+
+          if (vendorError) {
+            console.error('Error creating vendor record:', vendorError);
+          }
         }
       }
 

@@ -24,6 +24,7 @@ import { TermsScreen } from './screens/TermsScreen';
 import { PrivacyScreen } from './screens/PrivacyScreen';
 import { ContactScreen } from './screens/ContactScreen';
 import { AdsManagementScreen, VendorDashboardScreen, OrdersManagementScreen, VendorProfileSettingsScreen, ProductsManagementScreen, CreateProductScreen, VendorAccountScreen, AnalyticsScreen, CustomersScreen, MessagesScreen, WalletScreen } from './screens/vendor';
+import VendorOnboardingScreen from './screens/vendor/VendorOnboardingScreen';
 import { CheckoutScreen } from './screens/CheckoutScreen';
 import { OrderTrackingScreen } from './screens/OrderTrackingScreen';
 import { DeliveryManagementScreen } from './screens/vendor/DeliveryManagementScreen';
@@ -179,6 +180,15 @@ const App: React.FC = () => {
                 <MainLayout>
                   <NotificationsScreen />
                 </MainLayout>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/vendor/onboarding"
+            element={
+              <ProtectedRoute>
+                <VendorOnboardingScreen />
               </ProtectedRoute>
             }
           />
