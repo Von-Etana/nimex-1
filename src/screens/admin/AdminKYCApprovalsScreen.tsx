@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Card, CardContent } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Search, CheckCircle, XCircle, Eye, FileText } from 'lucide-react';
+import { twilioService } from '../../services/twilioService';
 
 interface KYCSubmission {
   id: string;
@@ -84,10 +85,20 @@ export const AdminKYCApprovalsScreen: React.FC = () => {
     }
   };
 
-  const handleApprove = (id: string) => {
-    setSubmissions(
-      submissions.map((sub) => (sub.id === id ? { ...sub, status: 'approved' as const } : sub))
-    );
+  const handleApprove = async (id: string) => {
+    try {
+      // In a real implementation, this would call an API
+      setSubmissions(
+        submissions.map((sub) => (sub.id === id ? { ...sub, status: 'approved' as const } : sub))
+      );
+      // Send notification email
+      const submission = submissions.find(s => s.id === id);
+      if (submission) {
+        await twilioService.sendKYCApprovalEmail(submission.email, submission.vendor_name);
+      }
+    } catch (error) {
+      console.error('Error approving KYC:', error);
+    }
   };
 
   const handleReject = (id: string) => {

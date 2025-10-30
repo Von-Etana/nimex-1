@@ -31,15 +31,19 @@ import { EscrowDashboardScreen } from './screens/vendor/EscrowDashboardScreen';
 import { ProfileScreen } from './screens/ProfileScreen';
 import { OrdersScreen } from './screens/OrdersScreen';
 import { NotificationsScreen } from './screens/NotificationsScreen';
+import { configValidator } from './services/configValidator';
 
 const App: React.FC = () => {
+  // Validate configuration at startup
+  configValidator.validateAndThrow();
+
   return (
     <BrowserRouter>
       <AuthProvider>
-        <Routes>
-          <Route path="/login" element={<LoginScreen />} />
-          <Route path="/signin" element={<LoginScreen />} />
-          <Route path="/signup" element={<SignupScreen />} />
+          <Routes>
+            <Route path="/login" element={<LoginScreen />} />
+            <Route path="/signin" element={<LoginScreen />} />
+            <Route path="/signup" element={<SignupScreen />} />
 
           <Route
             path="/"
@@ -428,9 +432,9 @@ const App: React.FC = () => {
           </Route>
 
           <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </AuthProvider>
-    </BrowserRouter>
+          </Routes>
+        </AuthProvider>
+      </BrowserRouter>
   );
 };
 

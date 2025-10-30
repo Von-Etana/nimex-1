@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Card, CardContent } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import {
@@ -45,6 +46,7 @@ const MetricCard: React.FC<MetricCardProps> = ({ title, value, icon, bgColor = '
 );
 
 export const AdminDashboardScreen: React.FC = () => {
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [metrics, setMetrics] = useState({
     totalUsers: 0,
@@ -63,22 +65,31 @@ export const AdminDashboardScreen: React.FC = () => {
 
   const loadMetrics = async () => {
     try {
-      const [usersRes, vendorsRes, productsRes, ordersRes] = await Promise.all([
+      const [usersRes, vendorsRes, productsRes, ordersRes, kycRes] = await Promise.all([
         supabase.from('profiles').select('id', { count: 'exact', head: true }),
         supabase.from('vendors').select('id', { count: 'exact', head: true }),
         supabase.from('products').select('id', { count: 'exact', head: true }),
-        supabase.from('orders').select('total_amount', { count: 'exact' }),
+        supabase.from('orders').select('total_amount'),
+        supabase.from('vendors').select('kyc_status', { count: 'exact' }).eq('kyc_status', 'pending'),
       ]);
 
-      const totalRevenue = ordersRes.data?.reduce((sum, order) => sum + (order.total_amount || 0), 0) || 0;
+      const totalRevenue = ordersRes.data?.reduce((sum: number, order: any) => sum + (order.total_amount || 0), 0) || 0;
+
+      // Calculate new listings from last 30 days
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      const { count: newListingsCount } = await supabase
+        .from('products')
+        .select('id', { count: 'exact', head: true })
+        .gte('created_at', thirtyDaysAgo.toISOString());
 
       setMetrics({
         totalUsers: usersRes.count || 0,
         activeVendors: vendorsRes.count || 0,
         totalListings: productsRes.count || 0,
-        pendingKYC: 45,
+        pendingKYC: kycRes.count || 0,
         totalTransactions: ordersRes.count || 0,
-        newListings: 215,
+        newListings: newListingsCount || 0,
         uptimeStatus: '99.9%',
         totalRevenue: totalRevenue,
       });
@@ -196,7 +207,10 @@ export const AdminDashboardScreen: React.FC = () => {
                     ₦12,500,000
                   </p>
                 </div>
-                <Button className="bg-yellow-400 hover:bg-yellow-500 text-neutral-900 font-sans font-semibold px-6 py-2">
+                <Button
+                  onClick={() => navigate('/admin/transactions')}
+                  className="bg-yellow-400 hover:bg-yellow-500 text-neutral-900 font-sans font-semibold px-6 py-2"
+                >
                   View Full Report
                 </Button>
               </div>
@@ -500,25 +514,37 @@ export const AdminDashboardScreen: React.FC = () => {
                 Quick Admin Actions
               </h2>
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                <button className="flex flex-col items-center gap-3 p-4 rounded-lg border border-neutral-200 hover:bg-neutral-50 transition-colors">
+                <button
+                  onClick={() => navigate('/admin/users')}
+                  className="flex flex-col items-center gap-3 p-4 rounded-lg border border-neutral-200 hover:bg-neutral-50 transition-colors"
+                >
                   <Users className="w-8 h-8 text-neutral-700" />
                   <span className="font-sans text-sm font-medium text-neutral-900">
                     Manage Users
                   </span>
                 </button>
-                <button className="flex flex-col items-center gap-3 p-4 rounded-lg border border-neutral-200 hover:bg-neutral-50 transition-colors">
+                <button
+                  onClick={() => navigate('/admin/listings')}
+                  className="flex flex-col items-center gap-3 p-4 rounded-lg border border-neutral-200 hover:bg-neutral-50 transition-colors"
+                >
                   <List className="w-8 h-8 text-neutral-700" />
                   <span className="font-sans text-sm font-medium text-neutral-900">
                     Moderate Listings
                   </span>
                 </button>
-                <button className="flex flex-col items-center gap-3 p-4 rounded-lg border border-neutral-200 hover:bg-neutral-50 transition-colors">
+                <button
+                  onClick={() => navigate('/admin/kyc')}
+                  className="flex flex-col items-center gap-3 p-4 rounded-lg border border-neutral-200 hover:bg-neutral-50 transition-colors"
+                >
                   <FileCheck className="w-8 h-8 text-neutral-700" />
                   <span className="font-sans text-sm font-medium text-neutral-900">
                     Approve KYC
                   </span>
                 </button>
-                <button className="flex flex-col items-center gap-3 p-4 rounded-lg border border-neutral-200 hover:bg-neutral-50 transition-colors">
+                <button
+                  onClick={() => navigate('/admin/transactions')}
+                  className="flex flex-col items-center gap-3 p-4 rounded-lg border border-neutral-200 hover:bg-neutral-50 transition-colors"
+                >
                   <Clock className="w-8 h-8 text-neutral-700" />
                   <span className="font-sans text-sm font-medium text-neutral-900">
                     View Transactions

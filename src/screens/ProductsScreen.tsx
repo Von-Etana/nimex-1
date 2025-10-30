@@ -10,6 +10,7 @@ import {
   Heart,
   ChevronDown,
   X,
+  SearchIcon,
 } from 'lucide-react';
 
 interface Product {
@@ -207,13 +208,18 @@ export const ProductsScreen: React.FC = () => {
   const [minRating, setMinRating] = useState(0);
   const [sortBy, setSortBy] = useState('featured');
   const [showFilters, setShowFilters] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
 
   const filteredProducts = mockProducts.filter((product) => {
     const categoryMatch = selectedCategory === 'All' || product.category === selectedCategory;
     const priceRange = priceRanges[selectedPriceRange];
     const priceMatch = product.price >= priceRange.min && product.price <= priceRange.max;
     const ratingMatch = product.rating >= minRating;
-    return categoryMatch && priceMatch && ratingMatch;
+    const searchMatch = !searchQuery ||
+      product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      product.vendor.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      product.category.toLowerCase().includes(searchQuery.toLowerCase());
+    return categoryMatch && priceMatch && ratingMatch && searchMatch;
   });
 
   const sortedProducts = [...filteredProducts].sort((a, b) => {
@@ -281,34 +287,48 @@ export const ProductsScreen: React.FC = () => {
               </p>
             </div>
 
+            {/* Search Bar */}
             <div className="flex items-center gap-3">
-              <Button
-                variant="outline"
-                onClick={() => setShowFilters(!showFilters)}
-                className="md:hidden border-neutral-200 text-neutral-700 font-sans text-sm"
-              >
-                <SlidersHorizontal className="w-4 h-4 mr-2" />
-                Filters
-                {activeFiltersCount > 0 && (
-                  <Badge className="ml-2 bg-primary-500 text-white">
-                    {activeFiltersCount}
-                  </Badge>
-                )}
-              </Button>
-
               <div className="relative">
-                <select
-                  value={sortBy}
-                  onChange={(e) => setSortBy(e.target.value)}
-                  className="appearance-none bg-white border border-neutral-200 rounded-lg px-4 py-2 pr-10 font-sans text-sm text-neutral-700 focus:outline-none focus:ring-2 focus:ring-primary-500 cursor-pointer"
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search products..."
+                  className="w-64 h-10 pl-10 pr-4 rounded-lg border border-neutral-200 font-sans text-sm text-neutral-900 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                />
+                <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400" />
+              </div>
+
+              <div className="flex items-center gap-3">
+                <Button
+                  variant="outline"
+                  onClick={() => setShowFilters(!showFilters)}
+                  className="md:hidden border-neutral-200 text-neutral-700 font-sans text-sm"
                 >
-                  {sortOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400 pointer-events-none" />
+                  <SlidersHorizontal className="w-4 h-4 mr-2" />
+                  Filters
+                  {activeFiltersCount > 0 && (
+                    <Badge className="ml-2 bg-primary-500 text-white">
+                      {activeFiltersCount}
+                    </Badge>
+                  )}
+                </Button>
+
+                <div className="relative">
+                  <select
+                    value={sortBy}
+                    onChange={(e) => setSortBy(e.target.value)}
+                    className="appearance-none bg-white border border-neutral-200 rounded-lg px-4 py-2 pr-10 font-sans text-sm text-neutral-700 focus:outline-none focus:ring-2 focus:ring-primary-500 cursor-pointer"
+                  >
+                    {sortOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400 pointer-events-none" />
+                </div>
               </div>
             </div>
           </div>

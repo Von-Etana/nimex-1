@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { PackageIcon, Bell, User, Menu, X, LogOut, MessageCircle } from 'lucide-react';
+import { SearchIcon, Bell, User, Menu, X, LogOut, MessageCircle, PackageIcon } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 
 export const MobileHeader: React.FC = () => {
@@ -26,6 +26,28 @@ export const MobileHeader: React.FC = () => {
               NIMEX
             </span>
           </Link>
+
+          {/* Mobile Search Bar */}
+          {user && (
+            <div className="flex-1 max-w-xs mx-4">
+              <div className="relative">
+                <input
+                  type="text"
+                  placeholder="Search..."
+                  onKeyPress={(e) => {
+                    if (e.key === 'Enter') {
+                      const searchQuery = (e.target as HTMLInputElement).value.trim();
+                      if (searchQuery) {
+                        navigate(`/search?q=${encodeURIComponent(searchQuery)}`);
+                      }
+                    }
+                  }}
+                  className="w-full h-8 pl-8 pr-3 rounded-lg border border-neutral-200 font-sans text-sm text-neutral-900 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                />
+                <SearchIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-neutral-400" />
+              </div>
+            </div>
+          )}
 
           <div className="flex items-center gap-2">
             {user ? (

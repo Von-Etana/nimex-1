@@ -48,13 +48,22 @@ export const DesktopHeader: React.FC = () => {
         <div className="flex items-center gap-3">
           {user ? (
             <>
-              <Button
-                onClick={() => navigate('/search')}
-                className="bg-green-700 hover:bg-green-800 text-white font-sans text-sm px-6 py-2 rounded-lg flex items-center gap-2"
-              >
-                <SearchIcon className="w-4 h-4" />
-                Search
-              </Button>
+              <div className="relative">
+                <input
+                  type="text"
+                  placeholder="Search products..."
+                  onKeyPress={(e) => {
+                    if (e.key === 'Enter') {
+                      const searchQuery = (e.target as HTMLInputElement).value.trim();
+                      if (searchQuery) {
+                        navigate(`/search?q=${encodeURIComponent(searchQuery)}`);
+                      }
+                    }
+                  }}
+                  className="w-64 h-10 pl-10 pr-4 rounded-lg border border-neutral-200 font-sans text-sm text-neutral-900 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                />
+                <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400" />
+              </div>
               <Button
                 onClick={() => navigate('/chat')}
                 className="bg-green-700 hover:bg-green-800 text-white font-sans text-sm px-6 py-2 rounded-lg flex items-center gap-2"

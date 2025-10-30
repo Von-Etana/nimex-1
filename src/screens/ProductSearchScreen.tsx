@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { SearchIcon, SlidersHorizontal, XIcon } from 'lucide-react';
+import { SearchIcon, SlidersHorizontal, XIcon, MapPin } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Card, CardContent } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
 import { supabase } from '../lib/supabase';
+import { googleMapsService, type PlaceResult } from '../services/googleMapsService';
 
 interface Product {
   id: string;
@@ -23,6 +24,8 @@ export const ProductSearchScreen: React.FC = () => {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [showFilters, setShowFilters] = useState(false);
+  const [locationSuggestions, setLocationSuggestions] = useState<string[]>([]);
+  const [showLocationSuggestions, setShowLocationSuggestions] = useState(false);
 
   const query = searchParams.get('q') || '';
   const category = searchParams.get('category') || '';
@@ -96,6 +99,30 @@ export const ProductSearchScreen: React.FC = () => {
 
   const clearFilters = () => {
     setSearchParams({ q: query });
+  };
+
+  const handleLocationInputChange = async (value: string) => {
+    updateFilter('location', value);
+
+    if (value.length > 2) {
+      try {
+        const suggestions = await googleMapsService.getAutocompleteSuggestions(value);
+        setLocationSuggestions(suggestions);
+        setShowLocationSuggestions(true);
+      } catch (error) {
+        console.error('Error getting location suggestions:', error);
+        setLocationSuggestions([]);
+        setShowLocationSuggestions(false);
+      }
+    } else {
+      setLocationSuggestions([]);
+      setShowLocationSuggestions(false);
+    }
+  };
+
+  const selectLocationSuggestion = (suggestion: string) => {
+    updateFilter('location', suggestion);
+    setShowLocationSuggestions(false);
   };
 
   const hasActiveFilters = category || minPrice || maxPrice || location;
@@ -176,17 +203,35 @@ export const ProductSearchScreen: React.FC = () => {
                   />
                 </div>
 
-                <div>
+                <div className="relative">
                   <label className="block font-sans font-medium text-sm text-neutral-700 mb-2">
                     Location
                   </label>
-                  <input
-                    type="text"
-                    value={location}
-                    onChange={(e) => updateFilter('location', e.target.value)}
-                    placeholder="Lagos, Abuja..."
-                    className="w-full h-10 px-3 rounded-lg border border-neutral-200 font-sans text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-                  />
+                  <div className="relative">
+                    <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400" />
+                    <input
+                      type="text"
+                      value={location}
+                      onChange={(e) => handleLocationInputChange(e.target.value)}
+                      placeholder="Lagos, Abuja..."
+                      className="w-full h-10 pl-10 pr-3 rounded-lg border border-neutral-200 font-sans text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    />
+                  </div>
+
+                  {showLocationSuggestions && locationSuggestions.length > 0 && (
+                    <div className="absolute top-full left-0 right-0 z-10 bg-white border border-neutral-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                      {locationSuggestions.map((suggestion, index) => (
+                        <button
+                          key={index}
+                          onClick={() => selectLocationSuggestion(suggestion)}
+                          className="w-full px-3 py-2 text-left hover:bg-neutral-50 font-sans text-sm text-neutral-700 border-b border-neutral-100 last:border-b-0"
+                        >
+                          <MapPin className="inline w-3 h-3 mr-2 text-neutral-400" />
+                          {suggestion}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 <div>

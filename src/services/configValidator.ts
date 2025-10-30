@@ -1,0 +1,79 @@
+interface ConfigValidationResult {
+  isValid: boolean;
+  missingVars: string[];
+  errors: string[];
+}
+
+class ConfigValidator {
+  private requiredEnvVars = [
+    'VITE_CLERK_PUBLISHABLE_KEY',
+    'VITE_TWILIO_ACCOUNT_SID',
+    'VITE_TWILIO_AUTH_TOKEN',
+    'VITE_TWILIO_API_KEY',
+    'VITE_TWILIO_API_SECRET',
+    'VITE_TWILIO_PHONE_NUMBER',
+    'VITE_SUPABASE_URL',
+    'VITE_SUPABASE_ANON_KEY',
+  ];
+
+  validate(): ConfigValidationResult {
+    const missingVars: string[] = [];
+    const errors: string[] = [];
+
+    // Check for missing environment variables
+    for (const varName of this.requiredEnvVars) {
+      const value = import.meta.env[varName];
+      if (!value || value.trim() === '') {
+        missingVars.push(varName);
+      }
+    }
+
+    // Validate specific formats
+    const clerkKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
+    if (clerkKey && !clerkKey.startsWith('pk_')) {
+      errors.push('VITE_CLERK_PUBLISHABLE_KEY must start with "pk_"');
+    }
+
+    const twilioPhone = import.meta.env.VITE_TWILIO_PHONE_NUMBER;
+    if (twilioPhone && !twilioPhone.match(/^\+[1-9]\d{1,14}$/)) {
+      errors.push('VITE_TWILIO_PHONE_NUMBER must be in E.164 format (e.g., +1234567890)');
+    }
+
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+    if (supabaseUrl && !supabaseUrl.match(/^https:\/\/[a-zA-Z0-9-]+\.supabase\.co$/)) {
+      errors.push('VITE_SUPABASE_URL must be a valid Supabase URL');
+    }
+
+    const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+    if (supabaseKey && supabaseKey.length < 100) {
+      errors.push('VITE_SUPABASE_ANON_KEY appears to be invalid (too short)');
+    }
+
+    return {
+      isValid: missingVars.length === 0 && errors.length === 0,
+      missingVars,
+      errors,
+    };
+  }
+
+  validateAndThrow(): void {
+    const result = this.validate();
+    if (!result.isValid) {
+      const messages = [];
+      if (result.missingVars.length > 0) {
+        messages.push(`Missing required environment variables: ${result.missingVars.join(', ')}`);
+      }
+      if (result.errors.length > 0) {
+        messages.push(`Configuration errors: ${result.errors.join('; ')}`);
+      }
+      throw new Error(`Configuration validation failed: ${messages.join('. ')}`);
+    }
+  }
+
+  getRequiredVars(): string[] {
+    return [...this.requiredEnvVars];
+  }
+}
+
+export const configValidator = new ConfigValidator();
+export type { ConfigValidationResult };
