@@ -15,7 +15,7 @@ export const SubscriptionStep: React.FC<SubscriptionStepProps> = ({
   selectedSubscription,
   loading = false,
   onSubscriptionSelect
-}): JSX.Element => {
+}) => {
   if (loading) {
     return (
       <Card className="max-w-4xl mx-auto">

@@ -17,7 +17,7 @@ export const BankDetailsStep: React.FC<BankDetailsStepProps> = ({
   bankAccountDetails,
   loading = false,
   onBankDetailsChange
-}): JSX.Element => {
+}) => {
   if (loading) {
     return (
       <Card className="max-w-2xl mx-auto">

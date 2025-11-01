@@ -30,7 +30,7 @@ export const DocumentsStep: React.FC<DocumentsStepProps> = ({
   loading = false,
   onFileUpload,
   onNextStep
-}): JSX.Element => {
+}) => {
   const calculateVerificationBadge = () => {
     let badge = 'none';
 
