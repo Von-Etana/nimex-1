@@ -18,7 +18,7 @@ Deno.serve(async (req: Request) => {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
-    
+
     const supabase = createClient(supabaseUrl, supabaseServiceKey, {
       auth: {
         autoRefreshToken: false,
@@ -27,13 +27,38 @@ Deno.serve(async (req: Request) => {
     });
 
     const results = {
+      deletedUsers: [] as string[],
       buyer: null as any,
       vendor: null as any,
       errors: [] as string[],
     };
 
-    const { data: existingBuyer } = await supabase.auth.admin.listUsers();
-    const buyerExists = existingBuyer?.users?.some(u => u.email === 'demo@buyer.nimex.ng');
+    // First, delete all existing users except demo accounts
+    const { data: allUsers } = await supabase.auth.admin.listUsers();
+
+    if (allUsers?.users) {
+      for (const user of allUsers.users) {
+        // Skip demo accounts
+        if (user.email === 'demo@buyer.nimex.ng' || user.email === 'demo@vendor.nimex.ng') {
+          continue;
+        }
+
+        try {
+          // Delete user from auth
+          await supabase.auth.admin.deleteUser(user.id);
+          results.deletedUsers.push(user.email || 'unknown');
+
+          // Delete related data (this will cascade due to foreign keys)
+          // Profiles, vendors, orders, etc. will be deleted automatically
+        } catch (deleteError) {
+          results.errors.push(`Failed to delete user ${user.email}: ${deleteError.message}`);
+        }
+      }
+    }
+
+    // Now create/recreate demo accounts
+    const { data: existingUsers } = await supabase.auth.admin.listUsers();
+    const buyerExists = existingUsers?.users?.some(u => u.email === 'demo@buyer.nimex.ng');
 
     if (!buyerExists) {
       const { data: buyerData, error: buyerError } = await supabase.auth.admin.createUser({
@@ -68,7 +93,7 @@ Deno.serve(async (req: Request) => {
       results.buyer = { message: 'Buyer account already exists' };
     }
 
-    const vendorExists = existingBuyer?.users?.some(u => u.email === 'demo@vendor.nimex.ng');
+    const vendorExists = existingUsers?.users?.some(u => u.email === 'demo@vendor.nimex.ng');
 
     if (!vendorExists) {
       const { data: vendorData, error: vendorError } = await supabase.auth.admin.createUser({
@@ -127,7 +152,7 @@ Deno.serve(async (req: Request) => {
     return new Response(
       JSON.stringify({
         success: true,
-        message: 'Demo accounts setup completed',
+        message: 'Database cleanup and demo accounts setup completed',
         results,
         credentials: {
           buyer: {
