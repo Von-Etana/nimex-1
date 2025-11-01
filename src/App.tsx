@@ -35,8 +35,16 @@ import { NotificationsScreen } from './screens/NotificationsScreen';
 import { configValidator } from './services/configValidator';
 
 const App: React.FC = () => {
-  // Validate configuration at startup
-  configValidator.validateAndThrow();
+  // Validate configuration at startup (non-blocking)
+  React.useEffect(() => {
+    const result = configValidator.validate();
+    if (!result.isValid) {
+      console.warn('Configuration validation warnings:', {
+        missingVars: result.missingVars,
+        errors: result.errors,
+      });
+    }
+  }, []);
 
   return (
     <BrowserRouter>
