@@ -72,17 +72,25 @@ export const DesktopHeader: React.FC = () => {
                 Chat
               </Button>
               <Button
-                onClick={() => {/* notifications logic */}}
+                onClick={() => navigate('/notifications')}
                 className="bg-green-700 hover:bg-green-800 text-white font-sans text-sm px-6 py-2 rounded-lg flex items-center gap-2"
               >
                 <Bell className="w-4 h-4" />
                 Notifications
               </Button>
               <button
-                onClick={handleSignOut}
+                onClick={() => navigate('/profile')}
                 className="w-10 h-10 rounded-full bg-neutral-900 hover:bg-neutral-800 flex items-center justify-center text-white transition-colors"
               >
-                <UserIcon className="w-5 h-5" />
+                {profile?.avatar_url ? (
+                  <img
+                    src={profile.avatar_url}
+                    alt={profile.full_name || 'User'}
+                    className="w-full h-full rounded-full object-cover"
+                  />
+                ) : (
+                  <UserIcon className="w-5 h-5" />
+                )}
               </button>
             </>
           ) : (

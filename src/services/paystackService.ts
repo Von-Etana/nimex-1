@@ -167,7 +167,7 @@ class PaystackService {
           const vendorId = parts[2];
           const plan = parts[3];
 
-          // Update vendor subscription
+          // Update vendor subscription to active and set end date
           const { subscriptionService } = await import('./subscriptionService');
           await subscriptionService.updateVendorSubscription(vendorId, plan as any);
 
