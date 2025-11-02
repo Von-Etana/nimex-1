@@ -15,6 +15,17 @@ interface AdminRole {
   permissions: AdminPermission[];
 }
 
+interface PermissionData {
+  permission_name: string;
+}
+
+interface RoleData {
+  admin_roles: {
+    name: string;
+    display_name: string;
+  };
+}
+
 interface Profile {
   id: string;
   email: string;
@@ -89,7 +100,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => subscription.unsubscribe();
   }, []);
 
-  const fetchProfile = async (userId: string) => {
+  /**
+   * Fetches and processes user profile data including admin permissions and vendor onboarding status
+   * @param userId - The unique identifier of the user
+   * @returns Promise that resolves when profile data is fetched and processed
+   *
+   * @description
+   * This function performs the following operations:
+   * 1. Fetches basic profile data from the profiles table
+   * 2. For admin users: fetches permissions and roles from related tables
+   * 3. For vendor users: checks if onboarding is required
+   * 4. Updates the profile state with processed data
+   *
+   * @throws Logs errors to console but doesn't throw to prevent auth flow interruption
+   */
+  const fetchProfile = async (userId: string): Promise<void> => {
     try {
       const { data, error } = await supabase
         .from('profiles')
@@ -100,15 +125,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (error) throw error;
 
       if (data) {
-        const profileData = data as Profile;
+        const profileData: Profile = data as Profile;
 
+        // Load admin-specific data if user is admin
         if (profileData.role === 'admin') {
           const { data: permissionsData } = await supabase.rpc('get_user_permissions', {
             user_id: userId,
           });
 
           if (permissionsData) {
-            profileData.adminPermissions = permissionsData.map((p: any) => p.permission_name);
+            profileData.adminPermissions = permissionsData.map((p: PermissionData) => p.permission_name);
           }
 
           const { data: rolesData } = await supabase
@@ -122,7 +148,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             .eq('user_id', userId);
 
           if (rolesData) {
-            profileData.adminRoles = rolesData.map((r: any) => ({
+            profileData.adminRoles = rolesData.map((r: RoleData) => ({
               name: r.admin_roles.name,
               display_name: r.admin_roles.display_name,
               permissions: [],
@@ -130,7 +156,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           }
         }
 
-        // Check if vendor needs onboarding
+        // Check vendor onboarding status
         if (profileData.role === 'vendor') {
           const { data: vendorData } = await supabase
             .from('vendors')
@@ -138,12 +164,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             .eq('user_id', userId)
             .single();
 
-          if (vendorData && (!vendorData.business_name || vendorData.business_name.trim() === '')) {
-            // Vendor needs to complete onboarding
-            profileData.needsOnboarding = true;
-          } else {
-            profileData.needsOnboarding = false;
-          }
+          // Vendor needs onboarding if business name is empty or just whitespace
+          profileData.needsOnboarding = Boolean(vendorData && (!vendorData.business_name || vendorData.business_name.trim() === ''));
+        } else {
+          profileData.needsOnboarding = false;
         }
 
         setProfile(profileData);
@@ -153,6 +177,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  /**
+   * Signs up a new user with the specified role and creates associated profile/vendor records
+   * @param email - User's email address
+   * @param password - User's password
+   * @param fullName - User's full name
+   * @param role - User role (buyer, vendor, or admin)
+   * @returns Promise resolving to object with error property (null if successful)
+   *
+   * @description
+   * This function performs the following operations:
+   * 1. Creates user account with Supabase Auth
+   * 2. Creates profile record in profiles table
+   * 3. If role is 'vendor', creates initial vendor record with free subscription
+   * 4. Returns error object or null on success
+   *
+   * @throws Returns AuthError object if signup fails, but doesn't throw exceptions
+   */
   const signUp = async (email: string, password: string, fullName: string, role: UserRole) => {
     try {
       const { data, error } = await supabase.auth.signUp({
