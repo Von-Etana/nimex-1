@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { PackageIcon, SearchIcon, UserIcon, MessageCircle, Bell } from 'lucide-react';
+import { PackageIcon, SearchIcon, UserIcon, MessageCircle, Bell, LogOut } from 'lucide-react';
 import { Button } from '../ui/button';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -8,9 +8,11 @@ export const DesktopHeader: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, profile, signOut } = useAuth();
+  const [showMenu, setShowMenu] = useState(false);
 
   const handleSignOut = async () => {
     await signOut();
+    setShowMenu(false);
     navigate('/login');
   };
 
@@ -78,20 +80,61 @@ export const DesktopHeader: React.FC = () => {
                 <Bell className="w-4 h-4" />
                 Notifications
               </Button>
-              <button
-                onClick={() => navigate('/profile')}
-                className="w-10 h-10 rounded-full bg-neutral-900 hover:bg-neutral-800 flex items-center justify-center text-white transition-colors"
-              >
-                {profile?.avatar_url ? (
-                  <img
-                    src={profile.avatar_url}
-                    alt={profile.full_name || 'User'}
-                    className="w-full h-full rounded-full object-cover"
-                  />
-                ) : (
-                  <UserIcon className="w-5 h-5" />
+              <div className="relative">
+                <button
+                  onClick={() => setShowMenu(!showMenu)}
+                  className="w-10 h-10 rounded-full bg-neutral-900 hover:bg-neutral-800 flex items-center justify-center text-white transition-colors"
+                  aria-label="User menu"
+                >
+                  {profile?.avatar_url ? (
+                    <img
+                      src={profile.avatar_url}
+                      alt={profile.full_name || 'User'}
+                      className="w-full h-full rounded-full object-cover"
+                    />
+                  ) : (
+                    <UserIcon className="w-5 h-5" />
+                  )}
+                </button>
+
+                {showMenu && (
+                  <div className="absolute right-0 top-12 w-48 bg-white rounded-lg shadow-lg border border-neutral-200 py-2 z-50">
+                    <button
+                      onClick={() => {
+                        navigate('/profile');
+                        setShowMenu(false);
+                      }}
+                      className="w-full flex items-center gap-3 px-4 py-2 text-left hover:bg-neutral-50 transition-colors"
+                    >
+                      <UserIcon className="w-4 h-4 text-neutral-600" />
+                      <span className="font-sans text-sm text-neutral-900">My Profile</span>
+                    </button>
+
+                    {profile?.role === 'vendor' && (
+                      <button
+                        onClick={() => {
+                          navigate('/vendor/dashboard');
+                          setShowMenu(false);
+                        }}
+                        className="w-full flex items-center gap-3 px-4 py-2 text-left hover:bg-neutral-50 transition-colors"
+                      >
+                        <PackageIcon className="w-4 h-4 text-neutral-600" />
+                        <span className="font-sans text-sm text-neutral-900">Vendor Dashboard</span>
+                      </button>
+                    )}
+
+                    <div className="border-t border-neutral-100 my-1"></div>
+
+                    <button
+                      onClick={handleSignOut}
+                      className="w-full flex items-center gap-3 px-4 py-2 text-left hover:bg-red-50 transition-colors"
+                    >
+                      <LogOut className="w-4 h-4 text-red-600" />
+                      <span className="font-sans text-sm text-red-600">Sign Out</span>
+                    </button>
+                  </div>
                 )}
-              </button>
+              </div>
             </>
           ) : (
             <Button
