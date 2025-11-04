@@ -50,17 +50,17 @@ const categories = [
 
 const sampleProducts = [
   {
-    image: "/image-1.png",
-    title: "Latest Gen Smartphone X200",
-    price: "₦ 120,000",
-    oldPrice: "₦ 150,000",
-    vendor: "Tech Hub",
+    image: "https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?w=400&h=400&fit=crop",
+    title: "Demo Smartphone - Test Product",
+    price: "₦ 150,000",
+    oldPrice: "₦ 180,000",
+    vendor: "Demo Artisan Crafts",
     vendorImage: "/image-1.png",
     location: "Lagos",
     views: "1.2k",
     rating: 5,
     verified: true,
-    badge: { text: "Verified Seller", variant: "yellow" as const },
+    badge: { text: "Demo Product", variant: "green" as const },
   },
   {
     image: "/image-2.png",
