@@ -81,7 +81,7 @@ export const AdminDashboardScreen: React.FC = () => {
         supabase.from('vendors').select('id', { count: 'exact', head: true }),
         supabase.from('products').select('id', { count: 'exact', head: true }),
         supabase.from('orders').select('total_amount'),
-        supabase.from('vendors').select('kyc_status', { count: 'exact' }).eq('kyc_status', 'pending'),
+        supabase.from('kyc_submissions').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
         supabase.from('vendors').select('subscription_status', { count: 'exact' }).eq('subscription_status', 'active'),
         supabase.from('vendors').select('subscription_status', { count: 'exact' }).eq('subscription_status', 'expired'),
       ]);
@@ -119,50 +119,34 @@ export const AdminDashboardScreen: React.FC = () => {
     }
   };
 
-  const recentActivities: Activity[] = [
-    {
-      id: '1',
-      event: 'New vendor registered',
-      user: 'VendorX',
-      timestamp: '2024-07-29 14:30',
-      status: 'New',
-    },
-    {
-      id: '2',
-      event: 'KYC submission received',
-      user: 'SellerY',
-      timestamp: '2024-07-29 11:00',
-      status: 'Pending',
-    },
-    {
-      id: '3',
-      event: 'Listing "Handmade Crafts" approved',
-      user: 'CraftsCo',
-      timestamp: '2024-07-28 16:15',
-      status: 'Approved',
-    },
-    {
-      id: '4',
-      event: 'Transaction processed',
-      user: 'CustomerZ',
-      timestamp: '2024-07-28 10:45',
-      status: 'Approved',
-    },
-    {
-      id: '5',
-      event: 'Vendor profile updated',
-      user: 'VendorX',
-      timestamp: '2024-07-27 09:00',
-      status: 'New',
-    },
-    {
-      id: '6',
-      event: 'KYC submission rejected',
-      user: 'SellerA',
-      timestamp: '2024-07-27 15:00',
-      status: 'Rejected',
-    },
-  ];
+  const [recentActivities, setRecentActivities] = useState<Activity[]>([]);
+
+  useEffect(() => {
+    loadRecentActivities();
+  }, []);
+
+  const loadRecentActivities = async () => {
+    try {
+      const { data: logs } = await supabase
+        .from('system_logs')
+        .select('id, event, user_id, created_at, metadata')
+        .order('created_at', { ascending: false })
+        .limit(6);
+
+      if (logs) {
+        const activities: Activity[] = logs.map(log => ({
+          id: log.id,
+          event: log.event,
+          user: log.metadata?.user_name || 'System',
+          timestamp: new Date(log.created_at).toLocaleString(),
+          status: log.metadata?.status || 'New',
+        }));
+        setRecentActivities(activities);
+      }
+    } catch (error) {
+      console.error('Error loading recent activities:', error);
+    }
+  };
 
   const getStatusColor = (status: Activity['status']) => {
     switch (status) {
