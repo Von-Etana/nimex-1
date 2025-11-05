@@ -41,7 +41,17 @@ export const LoginScreen: React.FC = () => {
           if (userProfile?.role === 'admin') {
             navigate('/admin', { replace: true });
           } else if (userProfile?.role === 'vendor') {
-            navigate('/vendor/dashboard', { replace: true });
+            const { data: vendorData } = await supabase
+              .from('vendors')
+              .select('business_name')
+              .eq('user_id', session.user.id)
+              .maybeSingle();
+
+            if (!vendorData || !vendorData.business_name || vendorData.business_name.trim() === '') {
+              navigate('/vendor/onboarding', { replace: true });
+            } else {
+              navigate('/vendor/dashboard', { replace: true });
+            }
           } else {
             const from = (location.state as any)?.from?.pathname || '/';
             navigate(from, { replace: true });
