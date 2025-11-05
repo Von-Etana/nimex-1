@@ -288,18 +288,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const signOut = async () => {
     try {
-      const { error } = await supabase.auth.signOut();
-      if (error) {
-        console.error('Error signing out:', error);
-        throw error;
-      }
+      // Clear local state first
       setUser(null);
       setSession(null);
       setProfile(null);
+
+      // Clear any local storage
+      localStorage.removeItem('nimex_cart');
+
+      // Sign out from Supabase
+      const { error } = await supabase.auth.signOut();
+      if (error) {
+        console.error('Error signing out:', error);
+        // Don't throw - still navigate to login even if signOut fails
+      }
+
+      // Navigate to login page
       window.location.href = '/login';
     } catch (error) {
-      console.error('Error signing out:', error);
-      throw error;
+      console.error('Unexpected error during sign out:', error);
+      // Still navigate to login even on error
+      window.location.href = '/login';
     }
   };
 
