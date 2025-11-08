@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { Card, CardContent } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { ArrowLeft, Save, Loader2, Upload, X } from 'lucide-react';
@@ -15,6 +15,8 @@ interface Category {
 export const CreateProductScreen: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const { id } = useParams<{ id: string }>();
+  const isEditing = !!id;
   const [loading, setLoading] = useState(false);
   const [categories, setCategories] = useState<Category[]>([]);
   const [error, setError] = useState('');
@@ -33,7 +35,10 @@ export const CreateProductScreen: React.FC = () => {
 
   useEffect(() => {
     loadCategories();
-  }, []);
+    if (isEditing && id) {
+      loadProductForEditing(id);
+    }
+  }, [isEditing, id]);
 
   const loadCategories = async () => {
     try {
@@ -46,6 +51,41 @@ export const CreateProductScreen: React.FC = () => {
       setCategories(data || []);
     } catch (err: any) {
       console.error('Error loading categories:', err);
+    }
+  };
+
+  const loadProductForEditing = async (productId: string) => {
+    try {
+      setLoading(true);
+      const { data: product, error } = await supabase
+        .from('products')
+        .select(`
+          *,
+          product_tags (
+            tag
+          )
+        `)
+        .eq('id', productId)
+        .single();
+
+      if (error) throw error;
+
+      if (product) {
+        setFormData({
+          name: product.name,
+          description: product.description || '',
+          price: product.price.toString(),
+          stock_quantity: product.stock_quantity.toString(),
+          category_id: product.category_id || '',
+          image_url: product.image_url || '',
+          tags: product.product_tags?.map((pt: any) => pt.tag) || [],
+        });
+      }
+    } catch (err: any) {
+      setError('Failed to load product for editing');
+      console.error('Error loading product:', err);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -73,39 +113,78 @@ export const CreateProductScreen: React.FC = () => {
       if (vendorError) throw vendorError;
       if (!vendor) throw new Error('Vendor profile not found');
 
-      // Create product
-      const { data: product, error: productError } = await supabase
-        .from('products')
-        .insert({
-          vendor_id: vendor.id,
-          name: formData.name,
-          description: formData.description || null,
-          price: parseFloat(formData.price),
-          stock_quantity: parseInt(formData.stock_quantity),
-          category_id: formData.category_id || null,
-          image_url: formData.image_url || null,
-          is_active: true,
-        })
-        .select()
-        .single();
+      let product;
 
-      if (productError) throw productError;
+      if (isEditing && id) {
+        // Update existing product
+        const { data: updatedProduct, error: updateError } = await supabase
+          .from('products')
+          .update({
+            name: formData.name,
+            description: formData.description || null,
+            price: parseFloat(formData.price),
+            stock_quantity: parseInt(formData.stock_quantity),
+            category_id: formData.category_id || null,
+            image_url: formData.image_url || null,
+          })
+          .eq('id', id)
+          .select()
+          .single();
 
-      // Add tags if any
-      if (formData.tags.length > 0 && product) {
-        const tagInserts = formData.tags.map(tag => ({
-          product_id: product.id,
-          tag: tag,
-        }));
+        if (updateError) throw updateError;
+        product = updatedProduct;
+      } else {
+        // Create new product
+        const { data: newProduct, error: createError } = await supabase
+          .from('products')
+          .insert({
+            vendor_id: vendor.id,
+            name: formData.name,
+            description: formData.description || null,
+            price: parseFloat(formData.price),
+            stock_quantity: parseInt(formData.stock_quantity),
+            category_id: formData.category_id || null,
+            image_url: formData.image_url || null,
+            is_active: true,
+          })
+          .select()
+          .single();
 
-        const { error: tagsError } = await supabase
-          .from('product_tags')
-          .insert(tagInserts);
-
-        if (tagsError) throw tagsError;
+        if (createError) throw createError;
+        product = newProduct;
       }
 
-      setSuccess('Product created successfully!');
+      if (isEditing && id) {
+        // For updates, we already have the product from the update operation
+      } else {
+        // For creates, check for error
+        if (createError) throw createError;
+      }
+
+      // Handle tags for both create and update
+      if (product) {
+        // Delete existing tags first
+        await supabase
+          .from('product_tags')
+          .delete()
+          .eq('product_id', product.id);
+
+        // Add new tags if any
+        if (formData.tags.length > 0) {
+          const tagInserts = formData.tags.map((tag: string) => ({
+            product_id: product.id,
+            tag: tag,
+          }));
+
+          const { error: tagsError } = await supabase
+            .from('product_tags')
+            .insert(tagInserts);
+
+          if (tagsError) throw tagsError;
+        }
+      }
+
+      setSuccess(isEditing ? 'Product updated successfully!' : 'Product created successfully!');
       setTimeout(() => {
         navigate('/vendor/products');
       }, 1500);
@@ -129,7 +208,7 @@ export const CreateProductScreen: React.FC = () => {
             </button>
             <div>
               <h1 className="font-heading font-bold text-lg md:text-3xl text-neutral-900">
-                Create New Product
+                {isEditing ? 'Edit Product' : 'Create New Product'}
               </h1>
               <p className="font-sans text-xs md:text-sm text-neutral-600 mt-0.5 md:mt-1">
                 Add a new product to your store

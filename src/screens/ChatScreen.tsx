@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useParams } from 'react-router-dom';
 import { MessageCircle, Send, Search, ArrowLeft, MoreVertical, Phone, Video } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
@@ -34,6 +35,7 @@ interface Message {
 
 export const ChatScreen: React.FC = () => {
   const { user } = useAuth();
+  const { vendorId } = useParams<{ vendorId: string }>();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedConversation, setSelectedConversation] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -52,8 +54,12 @@ export const ChatScreen: React.FC = () => {
   useEffect(() => {
     if (user) {
       loadConversations();
+      if (vendorId) {
+        // If vendorId is provided in URL, start a conversation with that vendor
+        startConversationWithVendor(vendorId);
+      }
     }
-  }, [user]);
+  }, [user, vendorId]);
 
   useEffect(() => {
     if (selectedConversation) {
@@ -129,6 +135,52 @@ export const ChatScreen: React.FC = () => {
     } catch (error) {
       console.error('Error loading messages:', error);
       setMessages([]);
+    }
+  };
+
+  const startConversationWithVendor = async (vendorId: string) => {
+    try {
+      // Check if conversation already exists
+      const { data: existingConversation } = await supabase
+        .from('conversation_participants')
+        .select(`
+          conversation_id,
+          conversations!inner(id)
+        `)
+        .eq('user_id', user?.id)
+        .eq('conversations.participants', vendorId); // This might need adjustment based on your schema
+
+      if (existingConversation && existingConversation.length > 0) {
+        setSelectedConversation(existingConversation[0].conversation_id);
+        return;
+      }
+
+      // Create new conversation
+      const { data: newConversation, error: convError } = await supabase
+        .from('conversations')
+        .insert({
+          created_at: new Date().toISOString(),
+          last_message_at: new Date().toISOString()
+        })
+        .select()
+        .single();
+
+      if (convError) throw convError;
+
+      // Add participants
+      const { error: partError } = await supabase
+        .from('conversation_participants')
+        .insert([
+          { conversation_id: newConversation.id, user_id: user?.id },
+          { conversation_id: newConversation.id, user_id: vendorId }
+        ]);
+
+      if (partError) throw partError;
+
+      setSelectedConversation(newConversation.id);
+      loadConversations(); // Refresh the conversation list
+    } catch (error) {
+      console.error('Error starting conversation:', error);
     }
   };
 

@@ -162,6 +162,16 @@ const App: React.FC = () => {
               </ProtectedRoute>
             }
           />
+          <Route
+            path="/chat/:vendorId"
+            element={
+              <ProtectedRoute>
+                <MainLayout>
+                  <ChatScreen />
+                </MainLayout>
+              </ProtectedRoute>
+            }
+          />
 
           <Route
             path="/profile"
@@ -240,6 +250,16 @@ const App: React.FC = () => {
 
           <Route
             path="/vendor/products/create"
+            element={
+              <ProtectedRoute>
+                <VendorLayout>
+                  <CreateProductScreen />
+                </VendorLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/vendor/products/:id/edit"
             element={
               <ProtectedRoute>
                 <VendorLayout>
