@@ -14,6 +14,7 @@ class ConfigValidator {
     'VITE_TWILIO_PHONE_NUMBER',
     'VITE_SUPABASE_URL',
     'VITE_SUPABASE_ANON_KEY',
+    'VITE_GOOGLE_MAPS_API_KEY',
   ];
 
   validate(): ConfigValidationResult {
@@ -22,7 +23,7 @@ class ConfigValidator {
 
     // Check for missing environment variables
     for (const varName of this.requiredEnvVars) {
-      const value = import.meta.env[varName];
+      const value = (import.meta.env as any)[varName];
       if (!value || value.trim() === '') {
         missingVars.push(varName);
       }

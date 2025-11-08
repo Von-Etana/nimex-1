@@ -89,6 +89,7 @@ export const SignupScreen: React.FC = () => {
       setError(signUpError.message);
       setLoading(false);
     } else {
+      setLoading(false);
       if (selectedRole === 'vendor') {
         const params = formData.referralCode ? `?ref=${formData.referralCode}` : '';
         navigate(`/vendor/onboarding${params}`);
