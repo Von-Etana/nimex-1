@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { PackageIcon, Eye, EyeOff, ShoppingBag, UserIcon, CheckCircle } from 'lucide-react';
 import { Button } from '../../components/ui/button';
@@ -29,15 +29,7 @@ export const SignupScreen: React.FC = () => {
     checking: boolean;
   }>({ valid: false, type: null, checking: false });
 
-  useEffect(() => {
-    const refCode = searchParams.get('ref');
-    if (refCode) {
-      setFormData(prev => ({ ...prev, referralCode: refCode }));
-      validateReferralCode(refCode);
-    }
-  }, [searchParams]);
-
-  const validateReferralCode = async (code: string) => {
+  const validateReferralCode = useCallback(async (code: string) => {
     if (!code) {
       setReferralValidation({ valid: false, type: null, checking: false });
       return;
@@ -50,7 +42,15 @@ export const SignupScreen: React.FC = () => {
       type: result.type,
       checking: false,
     });
-  };
+  }, []);
+
+  useEffect(() => {
+    const refCode = searchParams.get('ref');
+    if (refCode) {
+      setFormData(prev => ({ ...prev, referralCode: refCode }));
+      validateReferralCode(refCode);
+    }
+  }, [searchParams, validateReferralCode]);
 
   const handleRoleSelect = (role: UserRole) => {
     setSelectedRole(role);

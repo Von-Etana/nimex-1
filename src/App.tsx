@@ -46,6 +46,42 @@ const App: React.FC = () => {
         errors: result.errors,
       });
     }
+
+    // Auto-create demo accounts if they don't exist
+    const createDemoAccounts = async () => {
+      try {
+        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+        const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+        if (!supabaseUrl || !supabaseKey) {
+          console.warn('Supabase configuration missing, skipping demo account creation');
+          return;
+        }
+
+        // Check if demo accounts already exist
+        const response = await fetch(`${supabaseUrl}/functions/v1/create-demo-accounts`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${supabaseKey}`,
+          },
+        });
+
+        if (response.ok) {
+          const result = await response.json();
+          console.log('Demo accounts setup:', result);
+        } else {
+          console.warn('Failed to create demo accounts:', response.statusText);
+        }
+      } catch (error) {
+        console.warn('Error creating demo accounts:', error);
+      }
+    };
+
+    // Only create demo accounts in development
+    if (import.meta.env.DEV) {
+      createDemoAccounts();
+    }
   }, []);
 
   return (

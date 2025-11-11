@@ -137,12 +137,50 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // Load admin-specific data if user is admin
         if (profileData.role === 'admin') {
           try {
-            // Skip admin permissions for now to avoid RPC issues
-            profileData.adminPermissions = [];
-            profileData.adminRoles = [];
+            // Load admin role assignments and permissions
+            const { data: roleAssignments, error: roleError } = await supabase
+              .from('admin_role_assignments')
+              .select(`
+                role_id,
+                admin_roles (
+                  id,
+                  name,
+                  display_name
+                )
+              `)
+              .eq('user_id', userId);
+
+            if (!roleError && roleAssignments) {
+              profileData.adminRoles = roleAssignments.map(ra => ({
+                name: (ra as any).admin_roles?.name || '',
+                display_name: (ra as any).admin_roles?.display_name || '',
+                permissions: [], // We'll load permissions separately if needed
+              }));
+
+              // Load permissions for all assigned roles
+              const roleIds = roleAssignments.map(ra => (ra as any).role_id);
+              if (roleIds.length > 0) {
+                const { data: permissions, error: permError } = await supabase
+                  .from('role_permissions')
+                  .select(`
+                    admin_permissions (
+                      name,
+                      category,
+                      description
+                    )
+                  `)
+                  .in('role_id', roleIds);
+
+                if (!permError && permissions) {
+                  profileData.adminPermissions = permissions.map(p => (p as any).admin_permissions?.name).filter(Boolean);
+                }
+              }
+            }
           } catch (adminError) {
             console.error('Error loading admin data:', adminError);
             // Continue without admin data - user can still access basic features
+            profileData.adminPermissions = [];
+            profileData.adminRoles = [];
           }
         }
 

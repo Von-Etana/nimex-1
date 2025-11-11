@@ -314,7 +314,7 @@ export const ProductsScreen: React.FC = () => {
 
   return (
     <div className="flex flex-col w-full min-h-screen bg-neutral-50">
-      <div className="w-full max-w-7xl mx-auto px-4 md:px-6 py-6 md:py-8">
+      <div className="w-full max-w-7xl mx-auto px-3 sm:px-4 md:px-6 py-4 sm:py-6 md:py-8">
         <div className="flex flex-col gap-6">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
@@ -326,48 +326,34 @@ export const ProductsScreen: React.FC = () => {
               </p>
             </div>
 
-            {/* Search Bar */}
             <div className="flex items-center gap-3">
+              <Button
+                variant="outline"
+                onClick={() => setShowFilters(!showFilters)}
+                className="md:hidden border-neutral-200 text-neutral-700 font-sans text-sm"
+              >
+                <SlidersHorizontal className="w-4 h-4 mr-2" />
+                Filters
+                {activeFiltersCount > 0 && (
+                  <Badge className="ml-2 bg-primary-500 text-white">
+                    {activeFiltersCount}
+                  </Badge>
+                )}
+              </Button>
+
               <div className="relative">
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search products..."
-                  className="w-64 h-10 pl-10 pr-4 rounded-lg border border-neutral-200 font-sans text-sm text-neutral-900 focus:outline-none focus:ring-2 focus:ring-primary-500"
-                />
-                <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400" />
-              </div>
-
-              <div className="flex items-center gap-3">
-                <Button
-                  variant="outline"
-                  onClick={() => setShowFilters(!showFilters)}
-                  className="md:hidden border-neutral-200 text-neutral-700 font-sans text-sm"
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value)}
+                  className="appearance-none bg-white border border-neutral-200 rounded-lg px-4 py-2 pr-10 font-sans text-sm text-neutral-700 focus:outline-none focus:ring-2 focus:ring-primary-500 cursor-pointer"
                 >
-                  <SlidersHorizontal className="w-4 h-4 mr-2" />
-                  Filters
-                  {activeFiltersCount > 0 && (
-                    <Badge className="ml-2 bg-primary-500 text-white">
-                      {activeFiltersCount}
-                    </Badge>
-                  )}
-                </Button>
-
-                <div className="relative">
-                  <select
-                    value={sortBy}
-                    onChange={(e) => setSortBy(e.target.value)}
-                    className="appearance-none bg-white border border-neutral-200 rounded-lg px-4 py-2 pr-10 font-sans text-sm text-neutral-700 focus:outline-none focus:ring-2 focus:ring-primary-500 cursor-pointer"
-                  >
-                    {sortOptions.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400 pointer-events-none" />
-                </div>
+                  {sortOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400 pointer-events-none" />
               </div>
             </div>
           </div>

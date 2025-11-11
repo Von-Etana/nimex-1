@@ -27,27 +27,6 @@ export const MobileHeader: React.FC = () => {
             </span>
           </Link>
 
-          {/* Mobile Search Bar */}
-          {user && (
-            <div className="flex-1 max-w-xs mx-4">
-              <div className="relative">
-                <input
-                  type="text"
-                  placeholder="Search..."
-                  onKeyPress={(e) => {
-                    if (e.key === 'Enter') {
-                      const searchQuery = (e.target as HTMLInputElement).value.trim();
-                      if (searchQuery) {
-                        navigate(`/search?q=${encodeURIComponent(searchQuery)}`);
-                      }
-                    }
-                  }}
-                  className="w-full h-8 pl-8 pr-3 rounded-lg border border-neutral-200 font-sans text-sm text-neutral-900 focus:outline-none focus:ring-2 focus:ring-primary-500"
-                />
-                <SearchIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-neutral-400" />
-              </div>
-            </div>
-          )}
 
           <div className="flex items-center gap-2">
             {user ? (
