@@ -107,9 +107,10 @@ const orderStatusData = [
 ];
 
 export const VendorDashboardScreen: React.FC = () => {
-  const navigate = useNavigate();
-  const [orders] = useState<Order[]>(mockOrders);
-  const [messages] = useState<Message[]>(mockMessages);
+   console.log('VendorDashboardScreen: Component rendering');
+   const navigate = useNavigate();
+   const [orders] = useState<Order[]>(mockOrders);
+   const [messages] = useState<Message[]>(mockMessages);
 
   const getStatusColor = (status: Order['status']) => {
     switch (status) {

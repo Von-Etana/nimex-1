@@ -36,7 +36,23 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
 
   // Check if vendor needs onboarding (but allow access to onboarding page itself)
   if (user && profile?.role === 'vendor' && profile.needsOnboarding && location.pathname !== '/vendor/onboarding') {
+    console.log('ProtectedRoute: Vendor needs onboarding, redirecting to /vendor/onboarding', {
+      userId: user.id,
+      role: profile.role,
+      needsOnboarding: profile.needsOnboarding,
+      currentPath: location.pathname
+    });
     return <Navigate to="/vendor/onboarding" replace />;
+  }
+
+  if (user && profile?.role === 'vendor' && !profile.needsOnboarding && location.pathname === '/vendor/onboarding') {
+    console.log('ProtectedRoute: Vendor onboarding complete, redirecting to dashboard', {
+      userId: user.id,
+      role: profile.role,
+      needsOnboarding: profile.needsOnboarding,
+      currentPath: location.pathname
+    });
+    return <Navigate to="/vendor/dashboard" replace />;
   }
 
   return <>{children}</>;

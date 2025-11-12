@@ -186,6 +186,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         // Check vendor onboarding status
         if (profileData.role === 'vendor') {
+          console.log('Checking vendor onboarding status for user:', userId);
           const { data: vendorData, error: vendorError } = await supabase
             .from('vendors')
             .select('business_name, subscription_plan, subscription_status')
@@ -195,13 +196,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           if (vendorError) {
             console.error('Error fetching vendor data:', vendorError);
             profileData.needsOnboarding = true; // Assume onboarding needed if vendor record doesn't exist
+            console.log('Vendor onboarding needed due to error:', true);
           } else if (vendorData) {
             // Vendor needs onboarding if business name is empty or just whitespace
             const businessName = (vendorData as any)?.business_name || '';
             profileData.needsOnboarding = !businessName || businessName.trim() === '';
+            console.log('Vendor data found:', { businessName, needsOnboarding: profileData.needsOnboarding });
           } else {
             // No vendor record exists, needs onboarding
             profileData.needsOnboarding = true;
+            console.log('No vendor record found, needs onboarding:', true);
           }
         } else {
           profileData.needsOnboarding = false;
