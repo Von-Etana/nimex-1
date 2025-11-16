@@ -7,8 +7,7 @@ interface VendorLayoutProps {
 }
 
 export const VendorLayout: React.FC<VendorLayoutProps> = ({ children }) => {
-   console.log('VendorLayout: Component rendering');
-   return (
+    return (
     <div className="flex flex-col min-h-screen bg-neutral-50">
       <VendorDesktopHeader />
       <VendorMobileHeader />

@@ -125,3 +125,37 @@ export const TIME = {
   DAY: 24 * 60 * 60 * 1000,
   WEEK: 7 * 24 * 60 * 60 * 1000
 } as const;
+
+// Database table constants
+export const TABLES = {
+  PROFILES: 'profiles',
+  VENDORS: 'vendors',
+  ADMIN_ROLES: 'admin_roles',
+  ADMIN_PERMISSIONS: 'admin_permissions',
+  ROLE_PERMISSIONS: 'role_permissions',
+  ADMIN_ROLE_ASSIGNMENTS: 'admin_role_assignments'
+} as const;
+
+// Database column constants
+export const COLUMNS = {
+  PROFILES: {
+    ID: 'id',
+    EMAIL: 'email',
+    FULL_NAME: 'full_name',
+    ROLE: 'role'
+  },
+  VENDORS: {
+    USER_ID: 'user_id',
+    BUSINESS_NAME: 'business_name',
+    SUBSCRIPTION_PLAN: 'subscription_plan',
+    SUBSCRIPTION_STATUS: 'subscription_status'
+  },
+  ADMIN_ROLE_ASSIGNMENTS: {
+    USER_ID: 'user_id',
+    ROLE_ID: 'role_id'
+  },
+  ROLE_PERMISSIONS: {
+    ROLE_ID: 'role_id',
+    PERMISSION_ID: 'permission_id'
+  }
+} as const;

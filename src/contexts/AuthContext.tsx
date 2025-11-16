@@ -1,13 +1,13 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useReducer, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
-import type { UserRole } from '../types/database';
+import { logger } from '../lib/logger';
+import { signUpSchema, signInSchema, updateProfileSchema, type SignUpInput, type SignInInput, type UpdateProfileInput } from '../lib/validation';
+import { TABLES, COLUMNS, ROUTES, STORAGE_KEYS } from '../services/constants';
+import type { UserRole, Database } from '../types/database';
 import type { User, Session, AuthError } from '@supabase/supabase-js';
 
-interface AdminPermission {
-  name: string;
-  category: string;
-  description: string;
-}
+type AdminPermission = Database['public']['Tables']['admin_permissions']['Row'];
 
 interface AdminRole {
   name: string;
@@ -15,18 +15,18 @@ interface AdminRole {
   permissions: AdminPermission[];
 }
 
-interface PermissionData {
-  permission_name: string;
-  category: string;
-  description: string;
-}
+type AdminRoleAssignmentWithRole = {
+  role_id: string;
+  admin_roles: Database['public']['Tables']['admin_roles']['Row'];
+  role_permissions: Array<{
+    admin_permissions: AdminPermission;
+  }>;
+};
 
-interface RoleData {
-  admin_roles: {
-    name: string;
-    display_name: string;
-  };
-}
+type VendorOnboardingCheck = Pick<
+  Database['public']['Tables']['vendors']['Row'],
+  'business_name' | 'subscription_plan' | 'subscription_status'
+>;
 
 interface Profile {
   id: string;
@@ -46,13 +46,44 @@ interface AuthContextType {
   session: Session | null;
   profile: Profile | null;
   loading: boolean;
-  signUp: (email: string, password: string, fullName: string, role: UserRole) => Promise<{ error: AuthError | Error | null }>;
-  signIn: (email: string, password: string) => Promise<{ error: AuthError | null }>;
+  signUp: (input: SignUpInput) => Promise<{ error: AuthError | Error | null }>;
+  signIn: (input: SignInInput) => Promise<{ error: AuthError | null }>;
   signOut: () => Promise<void>;
-  updateProfile: (updates: Partial<Profile>) => Promise<{ error: Error | null }>;
+  updateProfile: (updates: UpdateProfileInput) => Promise<{ error: Error | null }>;
   hasPermission: (permission: string) => boolean;
   isAdmin: () => boolean;
 }
+
+interface AuthState {
+  user: User | null;
+  session: Session | null;
+  profile: Profile | null;
+  loading: boolean;
+}
+
+type AuthAction =
+  | { type: 'SET_USER'; payload: User | null }
+  | { type: 'SET_SESSION'; payload: Session | null }
+  | { type: 'SET_PROFILE'; payload: Profile | null }
+  | { type: 'SET_LOADING'; payload: boolean }
+  | { type: 'RESET' };
+
+const authReducer = (state: AuthState, action: AuthAction): AuthState => {
+  switch (action.type) {
+    case 'SET_USER':
+      return { ...state, user: action.payload };
+    case 'SET_SESSION':
+      return { ...state, session: action.payload };
+    case 'SET_PROFILE':
+      return { ...state, profile: action.payload };
+    case 'SET_LOADING':
+      return { ...state, loading: action.payload };
+    case 'RESET':
+      return { user: null, session: null, profile: null, loading: false };
+    default:
+      return state;
+  }
+};
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -65,265 +96,305 @@ export const useAuth = () => {
 };
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null);
-  const [session, setSession] = useState<Session | null>(null);
-  const [profile, setProfile] = useState<Profile | null>(null);
-  const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
+  const [state, dispatch] = useReducer(authReducer, {
+    user: null,
+    session: null,
+    profile: null,
+    loading: true
+  });
 
   useEffect(() => {
     // Get initial session
     supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
+      dispatch({ type: 'SET_SESSION', payload: session });
+      dispatch({ type: 'SET_USER', payload: session?.user ?? null });
       if (session?.user) {
         fetchProfile(session.user.id);
       } else {
-        setProfile(null);
+        dispatch({ type: 'SET_PROFILE', payload: null });
       }
-      setLoading(false);
+      dispatch({ type: 'SET_LOADING', payload: false });
     });
 
     // Listen for auth changes
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
-      setSession(session);
-      setUser(session?.user ?? null);
+      dispatch({ type: 'SET_SESSION', payload: session });
+      dispatch({ type: 'SET_USER', payload: session?.user ?? null });
 
       if (session?.user) {
         await fetchProfile(session.user.id);
       } else {
-        setProfile(null);
+        dispatch({ type: 'SET_PROFILE', payload: null });
       }
 
-      setLoading(false);
+      dispatch({ type: 'SET_LOADING', payload: false });
     });
 
     return () => subscription.unsubscribe();
   }, []);
 
+  const fetchBasicProfile = async (userId: string): Promise<Profile | null> => {
+    logger.info(`Fetching basic profile for user: ${userId}`);
+    const { data, error } = await supabase
+      .from(TABLES.PROFILES)
+      .select('*')
+      .eq(COLUMNS.PROFILES.ID, userId)
+      .maybeSingle();
+
+    if (error) {
+      logger.error('Database error fetching profile', error);
+      throw error;
+    }
+
+    return data as Profile | null;
+  };
+
+  const loadAdminData = async (userId: string): Promise<{ roles: AdminRole[]; permissions: string[] }> => {
+    logger.info(`Loading admin data for user: ${userId}`);
+
+    const { data: roleAssignments, error: roleError } = await supabase
+      .from(TABLES.ADMIN_ROLE_ASSIGNMENTS)
+      .select(`
+        ${COLUMNS.ADMIN_ROLE_ASSIGNMENTS.ROLE_ID},
+        ${TABLES.ADMIN_ROLES}!inner (
+          id,
+          name,
+          display_name
+        ),
+        ${TABLES.ROLE_PERMISSIONS}!inner (
+          ${TABLES.ADMIN_PERMISSIONS}!inner (
+            name,
+            category,
+            description
+          )
+        )
+      `)
+      .eq(COLUMNS.ADMIN_ROLE_ASSIGNMENTS.USER_ID, userId);
+
+    if (roleError) {
+      logger.error('Error fetching admin role assignments', roleError);
+      return { roles: [], permissions: [] };
+    }
+
+    if (!roleAssignments) {
+      return { roles: [], permissions: [] };
+    }
+
+    const roles: AdminRole[] = [];
+    const permissions: string[] = [];
+
+    (roleAssignments as AdminRoleAssignmentWithRole[]).forEach(ra => {
+      if (ra.admin_roles) {
+        roles.push({
+          name: ra.admin_roles.name,
+          display_name: ra.admin_roles.display_name,
+          permissions: ra.role_permissions?.map(rp => rp.admin_permissions).filter(Boolean) || []
+        });
+      }
+
+      ra.role_permissions?.forEach(rp => {
+        if (rp.admin_permissions?.name) {
+          permissions.push(rp.admin_permissions.name);
+        }
+      });
+    });
+
+    return { roles, permissions };
+  };
+
+  const checkVendorOnboarding = async (userId: string): Promise<boolean> => {
+    logger.info(`Checking vendor onboarding for user: ${userId}`);
+
+    const { data: vendorData, error: vendorError } = await supabase
+      .from(TABLES.VENDORS)
+      .select(`${COLUMNS.VENDORS.BUSINESS_NAME}, ${COLUMNS.VENDORS.SUBSCRIPTION_PLAN}, ${COLUMNS.VENDORS.SUBSCRIPTION_STATUS}`)
+      .eq(COLUMNS.VENDORS.USER_ID, userId)
+      .maybeSingle();
+
+    if (vendorError) {
+      logger.error('Error fetching vendor data', vendorError);
+      return true; // Assume onboarding needed if error
+    }
+
+    if (!vendorData) {
+      return true; // No vendor record
+    }
+
+    const businessName = (vendorData as VendorOnboardingCheck).business_name || '';
+    return !businessName || businessName.trim() === '';
+  };
+
   /**
    * Fetches and processes user profile data including admin permissions and vendor onboarding status
    * @param userId - The unique identifier of the user
    * @returns Promise that resolves when profile data is fetched and processed
-   *
-   * @description
-   * This function performs the following operations:
-   * 1. Fetches basic profile data from the profiles table
-   * 2. For admin users: fetches permissions and roles from related tables
-   * 3. For vendor users: checks if onboarding is required
-   * 4. Updates the profile state with processed data
-   *
-   * @throws Logs errors to console but doesn't throw to prevent auth flow interruption
    */
   const fetchProfile = async (userId: string): Promise<void> => {
     try {
-      console.log('Fetching profile for user:', userId);
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .maybeSingle();
+      const profileData = await fetchBasicProfile(userId);
 
-      if (error) {
-        console.error('Database error fetching profile:', error);
-        throw error;
+      if (!profileData) {
+        dispatch({ type: 'SET_PROFILE', payload: null });
+        return;
       }
 
-      if (data) {
-        console.log('Profile data retrieved:', { id: (data as any).id, role: (data as any).role });
-        const profileData: Profile = data as Profile;
-
-        // Load admin-specific data if user is admin
-        if (profileData.role === 'admin') {
-          try {
-            // Load admin role assignments and permissions
-            const { data: roleAssignments, error: roleError } = await supabase
-              .from('admin_role_assignments')
-              .select(`
-                role_id,
-                admin_roles (
-                  id,
-                  name,
-                  display_name
-                )
-              `)
-              .eq('user_id', userId);
-
-            if (!roleError && roleAssignments) {
-              profileData.adminRoles = roleAssignments.map(ra => ({
-                name: (ra as any).admin_roles?.name || '',
-                display_name: (ra as any).admin_roles?.display_name || '',
-                permissions: [], // We'll load permissions separately if needed
-              }));
-
-              // Load permissions for all assigned roles
-              const roleIds = roleAssignments.map(ra => (ra as any).role_id);
-              if (roleIds.length > 0) {
-                const { data: permissions, error: permError } = await supabase
-                  .from('role_permissions')
-                  .select(`
-                    admin_permissions (
-                      name,
-                      category,
-                      description
-                    )
-                  `)
-                  .in('role_id', roleIds);
-
-                if (!permError && permissions) {
-                  profileData.adminPermissions = permissions.map(p => (p as any).admin_permissions?.name).filter(Boolean);
-                }
-              }
-            }
-          } catch (adminError) {
-            console.error('Error loading admin data:', adminError);
-            // Continue without admin data - user can still access basic features
-            profileData.adminPermissions = [];
-            profileData.adminRoles = [];
-          }
-        }
-
-        // Check vendor onboarding status
-        if (profileData.role === 'vendor') {
-          console.log('Checking vendor onboarding status for user:', userId);
-          const { data: vendorData, error: vendorError } = await supabase
-            .from('vendors')
-            .select('business_name, subscription_plan, subscription_status')
-            .eq('user_id', userId)
-            .maybeSingle();
-
-          if (vendorError) {
-            console.error('Error fetching vendor data:', vendorError);
-            profileData.needsOnboarding = true; // Assume onboarding needed if vendor record doesn't exist
-            console.log('Vendor onboarding needed due to error:', true);
-          } else if (vendorData) {
-            // Vendor needs onboarding if business name is empty or just whitespace
-            const businessName = (vendorData as any)?.business_name || '';
-            profileData.needsOnboarding = !businessName || businessName.trim() === '';
-            console.log('Vendor data found:', { businessName, needsOnboarding: profileData.needsOnboarding });
-          } else {
-            // No vendor record exists, needs onboarding
-            profileData.needsOnboarding = true;
-            console.log('No vendor record found, needs onboarding:', true);
-          }
-        } else {
-          profileData.needsOnboarding = false;
-        }
-
-        setProfile(profileData);
+      // Load admin-specific data if user is admin
+      if (profileData.role === 'admin') {
+        const { roles, permissions } = await loadAdminData(userId);
+        profileData.adminRoles = roles;
+        profileData.adminPermissions = permissions;
       }
+
+      // Check vendor onboarding status
+      if (profileData.role === 'vendor') {
+        profileData.needsOnboarding = await checkVendorOnboarding(userId);
+      } else {
+        profileData.needsOnboarding = false;
+      }
+
+      dispatch({ type: 'SET_PROFILE', payload: profileData });
     } catch (error) {
-      console.error('Error fetching profile:', error);
-      // Set profile to null on error to prevent inconsistent state
-      setProfile(null);
-      throw error; // Re-throw to allow calling code to handle
+      logger.error('Error fetching profile', error);
+      dispatch({ type: 'SET_PROFILE', payload: null });
+      throw error;
     }
+  };
+
+  const createAuthUser = async (input: SignUpInput) => {
+    logger.info(`Creating auth user for: ${input.email}`);
+
+    const { data, error } = await supabase.auth.signUp({
+      email: input.email,
+      password: input.password,
+      options: {
+        data: {
+          full_name: input.fullName,
+          role: input.role,
+        },
+        emailRedirectTo: window.location.origin
+      }
+    });
+
+    if (error) {
+      logger.error('Auth signup error', error);
+      return { data: null, error };
+    }
+
+    if (!data.user) {
+      const noUserError = new Error('No user data returned from signup');
+      logger.error('No user data returned from signup');
+      return { data: null, error: noUserError as AuthError };
+    }
+
+    return { data, error: null };
+  };
+
+  const createProfileRecord = async (userId: string, input: SignUpInput) => {
+    logger.info(`Creating profile record for user: ${userId}`);
+
+    const { error } = await (supabase
+      .from(TABLES.PROFILES) as any)
+      .insert({
+        id: userId,
+        email: input.email,
+        full_name: input.fullName,
+        role: input.role,
+      });
+
+    if (error) {
+      logger.error('Error creating profile', error);
+      return { error: new Error(`Failed to create profile: ${error.message}`) as AuthError };
+    }
+
+    return { error: null };
+  };
+
+  const createVendorRecord = async (userId: string) => {
+    logger.info(`Creating vendor record for user: ${userId}`);
+
+    const { error } = await (supabase
+      .from(TABLES.VENDORS) as any)
+      .insert({
+        user_id: userId,
+        business_name: '',
+        subscription_plan: 'free',
+        subscription_status: 'active',
+        subscription_start_date: new Date().toISOString(),
+        verification_badge: 'none',
+        verification_status: 'pending',
+        is_active: true,
+      });
+
+    if (error) {
+      logger.error('Error creating vendor record', error);
+      return { error: new Error(`Failed to create vendor record: ${error.message}`) as AuthError };
+    }
+
+    return { error: null };
   };
 
   /**
    * Signs up a new user with the specified role and creates associated profile/vendor records
-   * @param email - User's email address
-   * @param password - User's password
-   * @param fullName - User's full name
-   * @param role - User role (buyer, vendor, or admin)
-   * @returns Promise resolving to object with error property (null if successful)
-   *
-   * @description
-   * This function performs the following operations:
-   * 1. Creates user account with Supabase Auth
-   * 2. Creates profile record in profiles table
-   * 3. If role is 'vendor', creates initial vendor record with free subscription
-   * 4. Returns error object or null on success
-   *
-   * @throws Returns AuthError object if signup fails, but doesn't throw exceptions
    */
-  const signUp = async (email: string, password: string, fullName: string, role: UserRole) => {
+  const signUp = async (input: SignUpInput) => {
     try {
-      console.log('Starting signup process for:', email, 'as', role);
-
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: {
-            full_name: fullName,
-            role: role,
-          },
-          emailRedirectTo: window.location.origin
-        }
-      });
-
-      if (error) {
-        console.error('Auth signup error:', error);
-        return { error };
+      // Validate input
+      const validationResult = signUpSchema.safeParse(input);
+      if (!validationResult.success) {
+        const error = new Error('Invalid input data');
+        logger.error('SignUp validation failed', validationResult.error);
+        return { error: error as AuthError };
       }
 
-      if (!data.user) {
-        console.error('No user data returned from signup');
-        return { error: new Error('No user data returned') as AuthError };
+      // Create auth user
+      const { data, error: authError } = await createAuthUser(input);
+      if (authError || !data?.user) {
+        return { error: authError };
       }
-
-      console.log('User created in auth:', data.user.id);
 
       // Create profile record
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .insert({
-          id: data.user.id,
-          email: email,
-          full_name: fullName,
-          role: role,
-        });
-
-      if (profileError) {
-        console.error('Error creating profile:', profileError);
-        return { error: new Error(`Failed to create profile: ${profileError.message}`) as AuthError };
+      const profileError = await createProfileRecord(data.user.id, input);
+      if (profileError.error) {
+        return profileError;
       }
-
-      console.log('Profile created successfully');
 
       // If vendor, create initial vendor record
-      if (role === 'vendor') {
-        console.log('Creating vendor record...');
-        const { error: vendorError } = await supabase
-          .from('vendors')
-          .insert({
-            user_id: data.user.id,
-            business_name: '',
-            subscription_plan: 'free',
-            subscription_status: 'active',
-            subscription_start_date: new Date().toISOString(),
-            verification_badge: 'none',
-            verification_status: 'pending',
-            is_active: true,
-          });
-
-        if (vendorError) {
-          console.error('Error creating vendor record:', vendorError);
-          return { error: new Error(`Failed to create vendor record: ${vendorError.message}`) as AuthError };
+      if (input.role === 'vendor') {
+        const vendorError = await createVendorRecord(data.user.id);
+        if (vendorError.error) {
+          return vendorError;
         }
-
-        console.log('Vendor record created successfully');
       }
 
-      console.log('Signup completed successfully');
+      logger.info('Signup completed successfully');
       return { error: null };
     } catch (error) {
-      console.error('Unexpected error during signup:', error);
+      logger.error('Unexpected error during signup', error);
       return { error: error as AuthError };
     }
   };
 
-  const signIn = async (email: string, password: string) => {
+  const signIn = async (input: SignInInput) => {
     try {
+      // Validate input
+      const validationResult = signInSchema.safeParse(input);
+      if (!validationResult.success) {
+        const error = new Error('Invalid input data');
+        logger.error('SignIn validation failed', validationResult.error);
+        return { error: error as AuthError };
+      }
+
       const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
+        email: input.email,
+        password: input.password,
       });
 
       return { error };
     } catch (error) {
+      logger.error('Unexpected error during sign in', error);
       return { error: error as AuthError };
     }
   };
@@ -331,63 +402,62 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const signOut = async () => {
     try {
       // Clear local state first
-      setUser(null);
-      setSession(null);
-      setProfile(null);
+      dispatch({ type: 'RESET' });
 
       // Clear any local storage
-      localStorage.removeItem('nimex_cart');
+      localStorage.removeItem(STORAGE_KEYS.CART);
 
       // Sign out from Supabase
       const { error } = await supabase.auth.signOut();
       if (error) {
-        console.error('Error signing out:', error);
+        logger.error('Error signing out', error);
         // Don't throw - still navigate to login even if signOut fails
       }
 
       // Navigate to login page
-      window.location.href = '/login';
+      navigate(ROUTES.LOGIN);
     } catch (error) {
-      console.error('Unexpected error during sign out:', error);
+      logger.error('Unexpected error during sign out', error);
       // Still navigate to login even on error
-      window.location.href = '/login';
+      navigate(ROUTES.LOGIN);
     }
   };
 
-  const updateProfile = async (updates: Partial<Profile>) => {
-    if (!user) {
+  const updateProfile = async (updates: UpdateProfileInput) => {
+    if (!state.user) {
       return { error: new Error('No user logged in') };
     }
 
     try {
       const { error } = await (supabase
-        .from('profiles') as any)
-        .update(updates as any)
-        .eq('id', user.id);
+        .from(TABLES.PROFILES) as any)
+        .update(updates)
+        .eq(COLUMNS.PROFILES.ID, state.user.id);
 
       if (error) throw error;
 
-      await fetchProfile(user.id);
+      await fetchProfile(state.user.id);
       return { error: null };
     } catch (error) {
+      logger.error('Error updating profile', error);
       return { error: error as Error };
     }
   };
 
-  const hasPermission = (permission: string): boolean => {
-    if (!profile || profile.role !== 'admin') return false;
-    return profile.adminPermissions?.includes(permission) ?? false;
-  };
+  const hasPermission = useMemo(() => (permission: string): boolean => {
+    if (!state.profile || state.profile.role !== 'admin') return false;
+    return state.profile.adminPermissions?.includes(permission) ?? false;
+  }, [state.profile]);
 
-  const isAdmin = (): boolean => {
-    return profile?.role === 'admin';
-  };
+  const isAdmin = useMemo(() => (): boolean => {
+    return state.profile?.role === 'admin';
+  }, [state.profile]);
 
   const value: AuthContextType = {
-    user,
-    session,
-    profile,
-    loading,
+    user: state.user,
+    session: state.session,
+    profile: state.profile,
+    loading: state.loading,
     signUp,
     signIn,
     signOut,

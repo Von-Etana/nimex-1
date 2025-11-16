@@ -251,6 +251,101 @@ export interface Database {
           delivered_at: string | null;
         };
       };
+      admin_roles: {
+        Row: {
+          id: string;
+          name: string;
+          display_name: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          name: string;
+          display_name: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          name?: string;
+          display_name?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
+      admin_permissions: {
+        Row: {
+          id: string;
+          name: string;
+          category: string;
+          description: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          name: string;
+          category: string;
+          description: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          name?: string;
+          category?: string;
+          description?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
+      role_permissions: {
+        Row: {
+          role_id: string;
+          permission_id: string;
+          created_at: string;
+        };
+        Insert: {
+          role_id: string;
+          permission_id: string;
+          created_at?: string;
+        };
+        Update: {
+          role_id?: string;
+          permission_id?: string;
+          created_at?: string;
+        };
+      };
+      admin_role_assignments: {
+        Row: {
+          id: string;
+          user_id: string;
+          role_id: string;
+          assigned_by: string | null;
+          assigned_at: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          role_id: string;
+          assigned_by?: string | null;
+          assigned_at?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          role_id?: string;
+          assigned_by?: string | null;
+          assigned_at?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
     };
     Views: {
       [_ in never]: never;

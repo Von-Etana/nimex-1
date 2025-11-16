@@ -25,7 +25,8 @@
     "react-dom": "^18.2.0",
     "react-router-dom": "^6.8.1",
     "tailwind-merge": "2.5.4",
-    "tailwindcss-animate": "1.0.7"
+    "tailwindcss-animate": "1.0.7",
+    "zod": "^4.1.12"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^5.16.5",
