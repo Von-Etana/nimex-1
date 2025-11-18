@@ -78,12 +78,12 @@ export const SignupScreen: React.FC = () => {
 
     setLoading(true);
 
-    const { error: signUpError } = await signUp(
-      formData.email,
-      formData.password,
-      formData.fullName,
-      selectedRole
-    );
+    const { error: signUpError } = await signUp({
+      email: formData.email,
+      password: formData.password,
+      fullName: formData.fullName,
+      role: selectedRole
+    });
 
     if (signUpError) {
       setError(signUpError.message);

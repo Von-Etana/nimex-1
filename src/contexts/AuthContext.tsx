@@ -379,14 +379,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const signIn = async (input: SignInInput) => {
     try {
-      // Validate input
-      const validationResult = signInSchema.safeParse(input);
-      if (!validationResult.success) {
-        const error = new Error('Invalid input data');
-        logger.error('SignIn validation failed', validationResult.error);
-        return { error: error as AuthError };
-      }
-
       const { error } = await supabase.auth.signInWithPassword({
         email: input.email,
         password: input.password,

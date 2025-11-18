@@ -20,7 +20,10 @@ export const LoginScreen: React.FC = () => {
     setError('');
     setLoading(true);
 
-    const { error: signInError } = await signIn(formData.email, formData.password);
+    const { error: signInError } = await signIn({
+      email: formData.email,
+      password: formData.password
+    });
 
     if (signInError) {
       setError(signInError.message);

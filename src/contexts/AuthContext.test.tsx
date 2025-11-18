@@ -248,7 +248,10 @@ describe('AuthContext', () => {
         wrapper: AuthProvider,
       });
 
-      const response = await result.current.signIn('test@example.com', 'password123');
+      const response = await result.current.signIn({
+        email: 'test@example.com',
+        password: 'password123'
+      });
 
       expect(response.error).toBeNull();
       expect(mockSignIn).toHaveBeenCalledWith({
@@ -269,7 +272,10 @@ describe('AuthContext', () => {
         wrapper: AuthProvider,
       });
 
-      const response = await result.current.signIn('wrong@example.com', 'wrongpass');
+      const response = await result.current.signIn({
+        email: 'wrong@example.com',
+        password: 'wrongpass'
+      });
 
       expect(response.error).toEqual(mockError);
     });
