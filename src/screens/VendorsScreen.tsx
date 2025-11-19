@@ -11,63 +11,14 @@ import {
   X,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { logger } from '../lib/logger';
+import { TABLES, COLUMNS } from '../services/constants';
+import type { Database } from '../types/database';
 
-const featuredVendors = [
-  {
-    id: 1,
-    name: "Tech Haven Electronics",
-    category: "Smartphones, Laptops, Accessories",
-    image: "/image-1.png",
-    rating: 4.8,
-    reviews: 245,
-    location: "12.1 km, Ikeja, Lagos",
-  },
-  {
-    id: 2,
-    name: "Mama Nkechi's Kitchen",
-    category: "Authentic Nigerian Meals, Catering",
-    image: "/image-4.png",
-    rating: 4.9,
-    reviews: 1200,
-    location: "3.2 km, Lekki, Lagos",
-  },
-  {
-    id: 3,
-    name: "Fashion Finesse Boutique",
-    category: "Men's & Women's Apparel, Tailoring",
-    image: "/image-2.png",
-    rating: 4.5,
-    reviews: 890,
-    location: "8.7 km, VI, Asokoro, Jabi Metropark",
-  },
-  {
-    id: 4,
-    name: "AutoFix Pro Garage",
-    category: "Car Repair, Maintenance, Diagnostics",
-    image: "/image-8.png",
-    rating: 4.7,
-    reviews: 456,
-    location: "5.3 km, Ikeja, Lagos",
-  },
-  {
-    id: 5,
-    name: "Green Thumb Gardens",
-    category: "Plants, Landscaping, Garden Supplies",
-    image: "/image-7.png",
-    rating: 4.6,
-    reviews: 320,
-    location: "9.2 km, Oniru, Victoria Island",
-  },
-  {
-    id: 6,
-    name: "The Bookworm Nook",
-    category: "New & Used Books, Stationery",
-    image: "/image-5.png",
-    rating: 4.9,
-    reviews: 1850,
-    location: "2.4 km, Surulere, Lagos",
-  },
-];
+type VendorWithProfile = Database['public']['Tables']['vendors']['Row'] & {
+  profile?: Database['public']['Tables']['profiles']['Row'];
+  review_count?: number;
+};
 
 interface Market {
   id: string;
@@ -84,9 +35,12 @@ export const VendorsScreen: React.FC = () => {
   const [selectedMarket, setSelectedMarket] = useState<string | null>(null);
   const [showMarketFilter, setShowMarketFilter] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [vendors, setVendors] = useState<VendorWithProfile[]>([]);
+  const [vendorsLoading, setVendorsLoading] = useState(true);
 
   useEffect(() => {
     loadMarkets();
+    loadVendors();
   }, []);
 
   const loadMarkets = async () => {
@@ -102,7 +56,65 @@ export const VendorsScreen: React.FC = () => {
       if (error) throw error;
       setMarkets(data || []);
     } catch (error) {
-      console.error('Error loading markets:', error);
+      logger.error('Error loading markets', error);
+    }
+  };
+
+  const loadVendors = async () => {
+    try {
+      setVendorsLoading(true);
+      logger.info('Loading vendors for buyers dashboard');
+
+      // Fetch vendors who have completed onboarding (business_name is not empty)
+      const { data: vendorsData, error } = await (supabase
+        .from(TABLES.VENDORS) as any)
+        .select(`
+          *,
+          profiles:user_id (
+            id,
+            email,
+            full_name
+          )
+        `)
+        .eq(COLUMNS.VENDORS.IS_ACTIVE, true)
+        .not(COLUMNS.VENDORS.BUSINESS_NAME, 'is', null)
+        .neq(COLUMNS.VENDORS.BUSINESS_NAME, '')
+        .order(COLUMNS.VENDORS.RATING, { ascending: false })
+        .limit(20);
+
+      if (error) {
+        logger.error('Error loading vendors', error);
+        throw error;
+      }
+
+      // Get review counts for each vendor
+      const vendorsWithReviews = await Promise.all(
+        (vendorsData || []).map(async (vendor: any) => {
+          try {
+            const { count } = await supabase
+              .from('reviews')
+              .select('*', { count: 'exact', head: true })
+              .eq('vendor_id', vendor.id);
+
+            return {
+              ...vendor,
+              review_count: count || 0
+            };
+          } catch (reviewError) {
+            logger.error(`Error getting review count for vendor ${vendor.id}`, reviewError);
+            return {
+              ...vendor,
+              review_count: 0
+            };
+          }
+        })
+      );
+
+      setVendors(vendorsWithReviews);
+    } catch (error) {
+      logger.error('Error loading vendors', error);
+    } finally {
+      setVendorsLoading(false);
     }
   };
 
@@ -110,17 +122,137 @@ export const VendorsScreen: React.FC = () => {
     setLocation('Lagos, Nigeria');
   };
 
-  const handleSearchVendors = () => {
-    console.log('Searching vendors near:', location);
+  const handleSearchVendors = async () => {
+    if (!location.trim()) return;
+
+    try {
+      setVendorsLoading(true);
+      logger.info(`Searching vendors near: ${location}`);
+
+      // For now, we'll search by market location or business address
+      // In a real implementation, you might use geocoding or location services
+      const { data: searchResults, error } = await (supabase
+        .from(TABLES.VENDORS) as any)
+        .select(`
+          *,
+          profiles:user_id (
+            id,
+            email,
+            full_name
+          )
+        `)
+        .eq(COLUMNS.VENDORS.IS_ACTIVE, true)
+        .not(COLUMNS.VENDORS.BUSINESS_NAME, 'is', null)
+        .neq(COLUMNS.VENDORS.BUSINESS_NAME, '')
+        .or(`market_location.ilike.%${location}%,business_address.ilike.%${location}%`)
+        .order(COLUMNS.VENDORS.RATING, { ascending: false })
+        .limit(20);
+
+      if (error) {
+        logger.error('Error searching vendors', error);
+        return;
+      }
+
+      // Get review counts for search results
+      const vendorsWithReviews = await Promise.all(
+        (searchResults || []).map(async (vendor: any) => {
+          try {
+            const { count } = await supabase
+              .from('reviews')
+              .select('*', { count: 'exact', head: true })
+              .eq('vendor_id', vendor.id);
+
+            return {
+              ...vendor,
+              review_count: count || 0
+            };
+          } catch (reviewError) {
+            logger.error(`Error getting review count for vendor ${vendor.id}`, reviewError);
+            return {
+              ...vendor,
+              review_count: 0
+            };
+          }
+        })
+      );
+
+      setVendors(vendorsWithReviews);
+    } catch (error) {
+      logger.error('Error searching vendors', error);
+    } finally {
+      setVendorsLoading(false);
+    }
   };
 
-  const handleVendorClick = (vendorId: number) => {
+  const handleVendorClick = (vendorId: string) => {
     navigate(`/vendor/${vendorId}`);
   };
 
-  const handleMarketSelect = (marketId: string) => {
-    setSelectedMarket(marketId === selectedMarket ? null : marketId);
+  const handleMarketSelect = async (marketId: string) => {
+    const newSelectedMarket = marketId === selectedMarket ? null : marketId;
+    setSelectedMarket(newSelectedMarket);
     setShowMarketFilter(false);
+
+    if (newSelectedMarket) {
+      try {
+        setVendorsLoading(true);
+        logger.info(`Filtering vendors by market: ${marketId}`);
+
+        const { data: marketVendors, error } = await (supabase
+          .from(TABLES.VENDORS) as any)
+          .select(`
+            *,
+            profiles:user_id (
+              id,
+              email,
+              full_name
+            )
+          `)
+          .eq(COLUMNS.VENDORS.IS_ACTIVE, true)
+          .not(COLUMNS.VENDORS.BUSINESS_NAME, 'is', null)
+          .neq(COLUMNS.VENDORS.BUSINESS_NAME, '')
+          .eq(COLUMNS.VENDORS.MARKET_LOCATION, markets.find(m => m.id === marketId)?.name || '')
+          .order(COLUMNS.VENDORS.RATING, { ascending: false })
+          .limit(20);
+
+        if (error) {
+          logger.error('Error filtering vendors by market', error);
+          return;
+        }
+
+        // Get review counts for filtered results
+        const vendorsWithReviews = await Promise.all(
+          (marketVendors || []).map(async (vendor: any) => {
+            try {
+              const { count } = await supabase
+                .from('reviews')
+                .select('*', { count: 'exact', head: true })
+                .eq('vendor_id', vendor.id);
+
+              return {
+                ...vendor,
+                review_count: count || 0
+              };
+            } catch (reviewError) {
+              logger.error(`Error getting review count for vendor ${vendor.id}`, reviewError);
+              return {
+                ...vendor,
+                review_count: 0
+              };
+            }
+          })
+        );
+
+        setVendors(vendorsWithReviews);
+      } catch (error) {
+        logger.error('Error filtering vendors by market', error);
+      } finally {
+        setVendorsLoading(false);
+      }
+    } else {
+      // If no market selected, reload all vendors
+      loadVendors();
+    }
   };
 
   const clearMarketFilter = () => {
@@ -259,63 +391,86 @@ export const VendorsScreen: React.FC = () => {
           </p>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8 w-full">
-            {featuredVendors.map((vendor) => (
-              <Card
-                key={vendor.id}
-                onClick={() => handleVendorClick(vendor.id)}
-                className="border border-neutral-100 shadow-sm hover:shadow-md hover:border-primary-200 transition-all cursor-pointer"
-              >
-                <CardContent className="flex flex-col items-center text-center p-6 gap-4">
-                  <img
-                    src={vendor.image}
-                    alt={vendor.name}
-                    className="w-20 h-20 md:w-24 md:h-24 rounded-full object-cover border-4 border-neutral-100"
-                  />
-
-                  <div className="flex flex-col gap-2 w-full">
-                    <h3 className="font-heading font-bold text-neutral-900 text-base md:text-lg">
-                      {vendor.name}
-                    </h3>
-                    <p className="font-sans text-neutral-600 text-xs md:text-sm">
-                      {vendor.category}
-                    </p>
-                  </div>
-
-                  <div className="flex items-center justify-center gap-4 w-full">
-                    <div className="flex items-center gap-1">
-                      {[...Array(5)].map((_, i) => (
-                        <Star
-                          key={i}
-                          className={`w-4 h-4 ${
-                            i < Math.floor(vendor.rating)
-                              ? 'fill-accent-yellow text-accent-yellow'
-                              : 'text-neutral-300'
-                          }`}
-                        />
-                      ))}
+            {vendorsLoading ? (
+              // Loading skeleton
+              Array.from({ length: 6 }).map((_, index) => (
+                <Card key={index} className="border border-neutral-100 shadow-sm">
+                  <CardContent className="flex flex-col items-center text-center p-6 gap-4">
+                    <div className="w-20 h-20 md:w-24 md:h-24 rounded-full bg-neutral-200 animate-pulse" />
+                    <div className="flex flex-col gap-2 w-full">
+                      <div className="h-4 bg-neutral-200 rounded animate-pulse" />
+                      <div className="h-3 bg-neutral-200 rounded animate-pulse w-3/4" />
                     </div>
-                    <div className="flex flex-col items-start">
-                      <span className="font-sans font-bold text-neutral-900 text-sm">
-                        {vendor.rating}
-                      </span>
-                      <span className="font-sans text-neutral-500 text-xs">
-                        ({vendor.reviews.toLocaleString()} Reviews)
+                    <div className="h-8 bg-neutral-200 rounded animate-pulse w-full" />
+                  </CardContent>
+                </Card>
+              ))
+            ) : vendors.length === 0 ? (
+              <div className="col-span-full text-center py-12">
+                <p className="font-sans text-neutral-600 text-lg">No vendors found in your area.</p>
+                <p className="font-sans text-neutral-500 text-sm mt-2">Check back later or try a different location.</p>
+              </div>
+            ) : (
+              vendors.map((vendor) => (
+                <Card
+                  key={vendor.id}
+                  onClick={() => handleVendorClick(vendor.id)}
+                  className="border border-neutral-100 shadow-sm hover:shadow-md hover:border-primary-200 transition-all cursor-pointer"
+                >
+                  <CardContent className="flex flex-col items-center text-center p-6 gap-4">
+                    <img
+                      src="/image-1.png" // Default vendor image, could be enhanced to use actual vendor images
+                      alt={vendor.business_name}
+                      className="w-20 h-20 md:w-24 md:h-24 rounded-full object-cover border-4 border-neutral-100"
+                    />
+
+                    <div className="flex flex-col gap-2 w-full">
+                      <h3 className="font-heading font-bold text-neutral-900 text-base md:text-lg">
+                        {vendor.business_name}
+                      </h3>
+                      <p className="font-sans text-neutral-600 text-xs md:text-sm">
+                        {vendor.business_description || 'Local Business'}
+                      </p>
+                    </div>
+
+                    <div className="flex items-center justify-center gap-4 w-full">
+                      <div className="flex items-center gap-1">
+                        {[...Array(5)].map((_, i) => (
+                          <Star
+                            key={i}
+                            className={`w-4 h-4 ${
+                              i < Math.floor(vendor.rating)
+                                ? 'fill-accent-yellow text-accent-yellow'
+                                : 'text-neutral-300'
+                            }`}
+                          />
+                        ))}
+                      </div>
+                      <div className="flex flex-col items-start">
+                        <span className="font-sans font-bold text-neutral-900 text-sm">
+                          {vendor.rating.toFixed(1)}
+                        </span>
+                        <span className="font-sans text-neutral-500 text-xs">
+                          ({(vendor.review_count || 0).toLocaleString()} Reviews)
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 text-neutral-600 w-full justify-center">
+                      <MapPinIcon className="w-4 h-4 text-primary-500" />
+                      <span className="font-sans text-xs">
+                        {vendor.market_location || 'Location not specified'}
                       </span>
                     </div>
-                  </div>
 
-                  <div className="flex items-center gap-1.5 text-neutral-600 w-full justify-center">
-                    <MapPinIcon className="w-4 h-4 text-primary-500" />
-                    <span className="font-sans text-xs">{vendor.location}</span>
-                  </div>
-
-                  <Button className="w-full bg-primary-500 hover:bg-primary-600 text-white font-sans font-semibold text-sm py-2.5 rounded-lg flex items-center justify-center gap-2">
-                    <MessageSquareIcon className="w-4 h-4" />
-                    Chat Now
-                  </Button>
-                </CardContent>
-              </Card>
-            ))}
+                    <Button className="w-full bg-primary-500 hover:bg-primary-600 text-white font-sans font-semibold text-sm py-2.5 rounded-lg flex items-center justify-center gap-2">
+                      <MessageSquareIcon className="w-4 h-4" />
+                      Chat Now
+                    </Button>
+                  </CardContent>
+                </Card>
+              ))
+            )}
           </div>
         </div>
       </div>

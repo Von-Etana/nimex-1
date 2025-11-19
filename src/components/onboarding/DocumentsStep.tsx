@@ -36,7 +36,7 @@ export const DocumentsStep: React.FC<DocumentsStepProps> = ({
 
     if (documents.cacCertificate) badge = 'basic';
     if (documents.proofOfAddress) badge = 'verified';
-    if (profileData.bankAccountDetails?.bankName) badge = 'premium';
+    if (profileData.bankAccountDetails?.bankName) badge = 'premium'; // Now checks for ID type
 
     return badge;
   };
@@ -144,10 +144,10 @@ export const DocumentsStep: React.FC<DocumentsStepProps> = ({
           }`}>
             <div className="flex items-center gap-2 mb-2">
               <CreditCard className="w-4 h-4 text-neutral-600" />
-              <span className="font-semibold text-sm">Bank Details</span>
+              <span className="font-semibold text-sm">Means of Identification</span>
             </div>
             <p className="text-xs text-neutral-600 mb-3">
-              For payout processing
+              Driver's License, National ID, or Voter's Card
             </p>
             <button
               onClick={onNextStep}

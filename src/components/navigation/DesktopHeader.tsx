@@ -23,6 +23,7 @@ export const DesktopHeader: React.FC = () => {
     { label: 'Categories', path: '/categories' },
     { label: 'Products', path: '/products' },
     { label: 'Vendors', path: '/vendors' },
+    { label: 'Support', path: '/support' },
   ];
 
   return (

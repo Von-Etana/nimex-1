@@ -13,6 +13,7 @@ interface VendorProfile {
   businessPhone: string;
   marketLocation: string;
   subCategoryTags: string[];
+  businessCategory?: string;
   cacNumber?: string;
   proofOfAddressUrl?: string;
   bankAccountDetails?: {
@@ -28,6 +29,7 @@ interface FormErrors {
   businessAddress?: string;
   businessPhone?: string;
   marketLocation?: string;
+  businessCategory?: string;
   subCategoryTags?: string;
   cacCertificate?: string;
   proofOfAddress?: string;
@@ -53,6 +55,7 @@ interface BusinessInfoStepProps {
   onMarketLocationSearch: (query: string) => void;
   onSelectMarketLocation: (location: MarketLocation) => void;
   onToggleSubCategoryTag: (tagId: string) => void;
+  onAddCustomSubCategory: (customTag: string) => void;
 }
 
 export const BusinessInfoStep: React.FC<BusinessInfoStepProps> = ({
@@ -132,6 +135,38 @@ export const BusinessInfoStep: React.FC<BusinessInfoStepProps> = ({
           {formErrors.businessDescription && (
             <p id="business-description-error" className="text-red-500 text-xs mt-1" role="alert">
               {formErrors.businessDescription}
+            </p>
+          )}
+        </div>
+
+        <div>
+          <label className="block font-sans font-medium text-sm text-neutral-700 mb-2">
+            Business Category *
+          </label>
+          <select
+            value={profileData.businessCategory || ''}
+            onChange={(e) => onProfileDataChange('businessCategory', e.target.value)}
+            className={`w-full h-10 px-3 rounded-lg border font-sans text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 ${
+              formErrors.businessCategory ? 'border-red-500' : 'border-neutral-200'
+            }`}
+            aria-describedby={formErrors.businessCategory ? "business-category-error" : undefined}
+            aria-invalid={!!formErrors.businessCategory}
+          >
+            <option value="">Select your business category</option>
+            <option value="Fashion">Fashion & Clothing</option>
+            <option value="Electronics">Electronics</option>
+            <option value="Food">Food & Groceries</option>
+            <option value="Home & Garden">Home & Garden</option>
+            <option value="Books">Books & Education</option>
+            <option value="Art">Art & Crafts</option>
+            <option value="Health & Beauty">Health & Beauty</option>
+            <option value="Sports & Recreation">Sports & Recreation</option>
+            <option value="Automotive">Automotive</option>
+            <option value="Other">Other</option>
+          </select>
+          {formErrors.businessCategory && (
+            <p id="business-category-error" className="text-red-500 text-xs mt-1" role="alert">
+              {formErrors.businessCategory}
             </p>
           )}
         </div>
@@ -277,6 +312,50 @@ export const BusinessInfoStep: React.FC<BusinessInfoStepProps> = ({
                 {tag.name}
               </button>
             ))}
+          </div>
+
+          {/* Custom subcategory input */}
+          <div className="mt-3 pt-3 border-t border-neutral-200">
+            <label className="block font-sans font-medium text-sm text-neutral-700 mb-2">
+              Add Custom Subcategory (Optional)
+            </label>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                placeholder="Enter custom subcategory"
+                className="flex-1 h-10 px-3 rounded-lg border border-neutral-200 font-sans text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                onKeyPress={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    const input = e.target as HTMLInputElement;
+                    const customTag = input.value.trim();
+                    if (customTag && !profileData.subCategoryTags.includes(customTag)) {
+                      onToggleSubCategoryTag(customTag);
+                      onAddCustomSubCategory(customTag);
+                      input.value = '';
+                    }
+                  }
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  const input = document.querySelector('input[placeholder="Enter custom subcategory"]') as HTMLInputElement;
+                  const customTag = input?.value.trim();
+                  if (customTag && !profileData.subCategoryTags.includes(customTag)) {
+                    onToggleSubCategoryTag(customTag);
+                    onAddCustomSubCategory(customTag);
+                    input.value = '';
+                  }
+                }}
+                className="px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 font-sans text-sm"
+              >
+                Add
+              </button>
+            </div>
+            <p className="text-xs text-neutral-500 mt-1">
+              Custom subcategories will be added to the available list for future use
+            </p>
           </div>
         </div>
       </CardContent>

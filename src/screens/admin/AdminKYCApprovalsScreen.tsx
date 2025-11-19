@@ -1,10 +1,18 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
-import { Search, CheckCircle, XCircle, Eye, FileText } from 'lucide-react';
+import { Search, CheckCircle, XCircle, Eye, FileText, Loader2 } from 'lucide-react';
+import { supabase } from '../../lib/supabase';
+import { logger } from '../../lib/logger';
 import { twilioService } from '../../services/twilioService';
+import type { Database } from '../../types/database';
 
-interface KYCSubmission {
+type KYCSubmission = Database['public']['Tables']['kyc_submissions']['Row'] & {
+  profiles?: Database['public']['Tables']['profiles']['Row'];
+  vendors?: Database['public']['Tables']['vendors']['Row'];
+};
+
+interface KYCSubmissionDisplay {
   id: string;
   vendor_name: string;
   business_name: string;
@@ -15,51 +23,62 @@ interface KYCSubmission {
   status: 'pending' | 'approved' | 'rejected';
 }
 
-const mockKYCSubmissions: KYCSubmission[] = [
-  {
-    id: '1',
-    vendor_name: 'Aisha Adebayo',
-    business_name: 'Adebayo Crafts',
-    email: 'aisha@example.com',
-    phone: '+234 801 234 5678',
-    document_type: 'Business Registration',
-    submitted_date: '2024-07-28',
-    status: 'pending',
-  },
-  {
-    id: '2',
-    vendor_name: 'Chike Okoro',
-    business_name: 'Okoro Electronics',
-    email: 'chike@example.com',
-    phone: '+234 802 345 6789',
-    document_type: 'Tax ID',
-    submitted_date: '2024-07-27',
-    status: 'pending',
-  },
-  {
-    id: '3',
-    vendor_name: 'Fatima Musa',
-    business_name: 'Musa Fashion',
-    email: 'fatima@example.com',
-    phone: '+234 803 456 7890',
-    document_type: 'Business Registration',
-    submitted_date: '2024-07-26',
-    status: 'approved',
-  },
-  {
-    id: '4',
-    vendor_name: 'Emeka Obi',
-    business_name: 'Obi Ventures',
-    email: 'emeka@example.com',
-    phone: '+234 804 567 8901',
-    document_type: 'Tax ID',
-    submitted_date: '2024-07-25',
-    status: 'rejected',
-  },
-];
-
 export const AdminKYCApprovalsScreen: React.FC = () => {
-  const [submissions, setSubmissions] = useState<KYCSubmission[]>(mockKYCSubmissions);
+  const [submissions, setSubmissions] = useState<KYCSubmissionDisplay[]>([]);
+  const [rawSubmissions, setRawSubmissions] = useState<KYCSubmission[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+
+  useEffect(() => {
+    loadSubmissions();
+  }, []);
+
+  const loadSubmissions = async () => {
+    try {
+      setLoading(true);
+      logger.info('Loading KYC submissions');
+
+      const { data, error } = await (supabase
+        .from('kyc_submissions') as any)
+        .select(`
+          *,
+          profiles:user_id (
+            full_name,
+            email
+          ),
+          vendors:user_id (
+            business_name,
+            business_phone
+          )
+        `)
+        .order('submitted_at', { ascending: false });
+
+      if (error) {
+        logger.error('Error loading KYC submissions', error);
+        return;
+      }
+
+      setRawSubmissions(data || []);
+
+      // Map to display format
+      const displayData: KYCSubmissionDisplay[] = (data || []).map((sub: any) => ({
+        id: sub.id,
+        vendor_name: sub.profiles?.full_name || 'Unknown',
+        business_name: sub.vendors?.business_name || 'No business name',
+        email: sub.profiles?.email || 'No email',
+        phone: sub.vendors?.business_phone || 'No phone',
+        document_type: sub.id_type,
+        submitted_date: new Date(sub.submitted_at).toLocaleDateString(),
+        status: sub.status
+      }));
+
+      setSubmissions(displayData);
+    } catch (error) {
+      logger.error('Error loading KYC submissions', error);
+    } finally {
+      setLoading(false);
+    }
+  };
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
 
@@ -87,24 +106,72 @@ export const AdminKYCApprovalsScreen: React.FC = () => {
 
   const handleApprove = async (id: string) => {
     try {
-      // In a real implementation, this would call an API
+      setActionLoading(id);
+      logger.info(`Approving KYC submission: ${id}`);
+
+      const { error } = await (supabase
+        .from('kyc_submissions') as any)
+        .update({
+          status: 'approved',
+          reviewed_at: new Date().toISOString(),
+          admin_notes: 'Approved by admin'
+        })
+        .eq('id', id);
+
+      if (error) {
+        logger.error('Error approving KYC submission', error);
+        return;
+      }
+
+      // Update local state
       setSubmissions(
         submissions.map((sub) => (sub.id === id ? { ...sub, status: 'approved' as const } : sub))
       );
+
       // Send notification email
       const submission = submissions.find(s => s.id === id);
       if (submission) {
         await twilioService.sendKYCApprovalEmail(submission.email, submission.vendor_name);
       }
+
+      logger.info(`KYC submission ${id} approved successfully`);
     } catch (error) {
-      console.error('Error approving KYC:', error);
+      logger.error('Error approving KYC submission', error);
+    } finally {
+      setActionLoading(null);
     }
   };
 
-  const handleReject = (id: string) => {
-    setSubmissions(
-      submissions.map((sub) => (sub.id === id ? { ...sub, status: 'rejected' as const } : sub))
-    );
+  const handleReject = async (id: string) => {
+    try {
+      setActionLoading(id);
+      logger.info(`Rejecting KYC submission: ${id}`);
+
+      const { error } = await (supabase
+        .from('kyc_submissions') as any)
+        .update({
+          status: 'rejected',
+          reviewed_at: new Date().toISOString(),
+          admin_notes: 'Rejected by admin'
+        })
+        .eq('id', id);
+
+      if (error) {
+        logger.error('Error rejecting KYC submission', error);
+        return;
+      }
+
+      // Update local state
+      setSubmissions(
+        submissions.map((sub) => (sub.id === id ? { ...sub, status: 'rejected' as const } : sub))
+      );
+
+      logger.info(`KYC submission ${id} rejected successfully`);
+    } catch (error) {
+      logger.error('Error rejecting KYC submission', error);
+    } finally {
+      setActionLoading(null);
+    }
   };
 
   return (

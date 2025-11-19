@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
-import { Search, CheckCircle, XCircle, Eye } from 'lucide-react';
+import { Search, CheckCircle, XCircle, Eye, Loader2 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { logger } from '../../lib/logger';
 
 interface Listing {
   id: string;
@@ -10,15 +11,16 @@ interface Listing {
   vendor_name: string;
   category: string;
   price: number;
-  status: 'pending' | 'approved' | 'rejected';
+  status: 'active' | 'inactive' | 'moderation' | 'suspended';
   created_at: string;
 }
 
 export const AdminListingsScreen: React.FC = () => {
   const [listings, setListings] = useState<Listing[]>([]);
   const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
+  const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'inactive' | 'moderation' | 'suspended'>('all');
 
   useEffect(() => {
     loadListings();
@@ -26,19 +28,26 @@ export const AdminListingsScreen: React.FC = () => {
 
   const loadListings = async () => {
     try {
-      const { data, error } = await supabase
-        .from('products')
+      setLoading(true);
+      logger.info('Loading product listings');
+
+      const { data, error } = await (supabase
+        .from('products') as any)
         .select(`
           id,
           title,
           category,
           price,
+          status,
           created_at,
           vendor:vendors(business_name)
         `)
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
+      if (error) {
+        logger.error('Error loading listings', error);
+        return;
+      }
 
       const listingsData = (data || []).map((item: any) => ({
         id: item.id,
@@ -46,13 +55,13 @@ export const AdminListingsScreen: React.FC = () => {
         vendor_name: item.vendor?.business_name || 'Unknown',
         category: item.category,
         price: item.price,
-        status: 'approved' as const,
+        status: item.status,
         created_at: item.created_at,
       }));
 
       setListings(listingsData);
     } catch (error) {
-      console.error('Error loading listings:', error);
+      logger.error('Error loading listings', error);
     } finally {
       setLoading(false);
     }
@@ -68,14 +77,72 @@ export const AdminListingsScreen: React.FC = () => {
 
   const getStatusColor = (status: Listing['status']) => {
     switch (status) {
-      case 'pending':
-        return 'bg-yellow-100 text-yellow-700';
-      case 'approved':
+      case 'active':
         return 'bg-green-100 text-green-700';
-      case 'rejected':
+      case 'inactive':
+        return 'bg-neutral-100 text-neutral-700';
+      case 'moderation':
+        return 'bg-yellow-100 text-yellow-700';
+      case 'suspended':
         return 'bg-red-100 text-red-700';
       default:
         return 'bg-neutral-100 text-neutral-700';
+    }
+  };
+
+  const handleApprove = async (id: string) => {
+    try {
+      setActionLoading(id);
+      logger.info(`Approving product listing: ${id}`);
+
+      const { error } = await (supabase
+        .from('products') as any)
+        .update({ status: 'active' })
+        .eq('id', id);
+
+      if (error) {
+        logger.error('Error approving product listing', error);
+        return;
+      }
+
+      // Update local state
+      setListings(listings.map(listing =>
+        listing.id === id ? { ...listing, status: 'active' } : listing
+      ));
+
+      logger.info(`Product listing ${id} approved successfully`);
+    } catch (error) {
+      logger.error('Error approving product listing', error);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleReject = async (id: string) => {
+    try {
+      setActionLoading(id);
+      logger.info(`Suspending product listing: ${id}`);
+
+      const { error } = await (supabase
+        .from('products') as any)
+        .update({ status: 'suspended' })
+        .eq('id', id);
+
+      if (error) {
+        logger.error('Error suspending product listing', error);
+        return;
+      }
+
+      // Update local state
+      setListings(listings.map(listing =>
+        listing.id === id ? { ...listing, status: 'suspended' } : listing
+      ));
+
+      logger.info(`Product listing ${id} suspended successfully`);
+    } catch (error) {
+      logger.error('Error suspending product listing', error);
+    } finally {
+      setActionLoading(null);
     }
   };
 
@@ -106,7 +173,7 @@ export const AdminListingsScreen: React.FC = () => {
               />
             </div>
             <div className="flex items-center gap-2 overflow-x-auto">
-              {['all', 'pending', 'approved', 'rejected'].map((status) => (
+              {['all', 'active', 'inactive', 'moderation', 'suspended'].map((status) => (
                 <button
                   key={status}
                   onClick={() => setFilterStatus(status as any)}
@@ -190,15 +257,33 @@ export const AdminListingsScreen: React.FC = () => {
                           </td>
                           <td className="px-6 py-4">
                             <div className="flex items-center gap-2">
-                              <button className="p-2 hover:bg-green-100 rounded-lg transition-colors">
-                                <CheckCircle className="w-5 h-5 text-green-600" />
-                              </button>
-                              <button className="p-2 hover:bg-red-100 rounded-lg transition-colors">
-                                <XCircle className="w-5 h-5 text-red-600" />
-                              </button>
-                              <button className="p-2 hover:bg-neutral-100 rounded-lg transition-colors">
-                                <Eye className="w-5 h-5 text-neutral-600" />
-                              </button>
+                              {actionLoading === listing.id ? (
+                                <Loader2 className="w-5 h-5 animate-spin text-neutral-600" />
+                              ) : (
+                                <>
+                                  {listing.status !== 'active' && (
+                                    <button
+                                      onClick={() => handleApprove(listing.id)}
+                                      className="p-2 hover:bg-green-100 rounded-lg transition-colors"
+                                      title="Approve listing"
+                                    >
+                                      <CheckCircle className="w-5 h-5 text-green-600" />
+                                    </button>
+                                  )}
+                                  {listing.status !== 'suspended' && (
+                                    <button
+                                      onClick={() => handleReject(listing.id)}
+                                      className="p-2 hover:bg-red-100 rounded-lg transition-colors"
+                                      title="Suspend listing"
+                                    >
+                                      <XCircle className="w-5 h-5 text-red-600" />
+                                    </button>
+                                  )}
+                                  <button className="p-2 hover:bg-neutral-100 rounded-lg transition-colors" title="View details">
+                                    <Eye className="w-5 h-5 text-neutral-600" />
+                                  </button>
+                                </>
+                              )}
                             </div>
                           </td>
                         </tr>

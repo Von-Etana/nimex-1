@@ -1,24 +1,46 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
-import { Search, Download, Eye } from 'lucide-react';
+import { Search, Eye, DollarSign, CreditCard, Truck, Shield } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { logger } from '../../lib/logger';
 
 interface Transaction {
   id: string;
   order_id: string;
-  buyer_name: string;
-  vendor_name: string;
+  buyer_id: string;
+  vendor_id: string;
   amount: number;
-  status: 'completed' | 'pending' | 'failed';
-  date: string;
+  payment_status: 'pending' | 'paid' | 'refunded';
+  payment_method?: string;
+  payment_reference?: string;
+  created_at: string;
+  order?: {
+    order_number: string;
+    status: string;
+    total_amount: number;
+  };
+  buyer?: {
+    full_name: string;
+    email: string;
+  };
+  vendor?: {
+    business_name: string;
+  };
+  escrow?: {
+    status: string;
+    amount: number;
+    platform_fee: number;
+    vendor_amount: number;
+  };
 }
 
 export const AdminTransactionsScreen: React.FC = () => {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [filterStatus, setFilterStatus] = useState<'all' | 'completed' | 'pending' | 'failed'>('all');
+  const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'paid' | 'refunded'>('all');
+  const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
 
   useEffect(() => {
     loadTransactions();
@@ -26,33 +48,42 @@ export const AdminTransactionsScreen: React.FC = () => {
 
   const loadTransactions = async () => {
     try {
-      const { data, error } = await supabase
-        .from('orders')
+      setLoading(true);
+      logger.info('Loading transactions');
+
+      const { data, error } = await (supabase
+        .from('payment_transactions') as any)
         .select(`
-          id,
-          total_amount,
-          status,
-          created_at,
-          buyer:profiles!orders_buyer_id_fkey(full_name),
-          vendor:vendors(business_name)
+          *,
+          orders:order_id (
+            order_number,
+            status,
+            total_amount
+          ),
+          profiles:buyer_id (
+            full_name,
+            email
+          ),
+          vendors:vendor_id (
+            business_name
+          ),
+          escrow_transactions:order_id (
+            status,
+            amount,
+            platform_fee,
+            vendor_amount
+          )
         `)
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
+      if (error) {
+        logger.error('Error loading transactions', error);
+        return;
+      }
 
-      const transactionsData = (data || []).map((item: any) => ({
-        id: item.id,
-        order_id: `NIMX-${item.id.slice(0, 5).toUpperCase()}`,
-        buyer_name: item.buyer?.full_name || 'Unknown Buyer',
-        vendor_name: item.vendor?.business_name || 'Unknown Vendor',
-        amount: item.total_amount || 0,
-        status: item.status === 'delivered' ? 'completed' : (item.status === 'pending' ? 'pending' : 'pending'),
-        date: new Date(item.created_at).toLocaleDateString(),
-      }));
-
-      setTransactions(transactionsData);
+      setTransactions(data || []);
     } catch (error) {
-      console.error('Error loading transactions:', error);
+      logger.error('Error loading transactions', error);
     } finally {
       setLoading(false);
     }
@@ -60,27 +91,38 @@ export const AdminTransactionsScreen: React.FC = () => {
 
   const filteredTransactions = transactions.filter((transaction) => {
     const matchesSearch =
-      transaction.order_id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      transaction.buyer_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      transaction.vendor_name.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesFilter = filterStatus === 'all' || transaction.status === filterStatus;
+      transaction.order?.order_number?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      transaction.buyer?.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      transaction.vendor?.business_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      transaction.payment_reference?.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesFilter = filterStatus === 'all' || transaction.payment_status === filterStatus;
     return matchesSearch && matchesFilter;
   });
 
-  const getStatusColor = (status: Transaction['status']) => {
+  const getStatusColor = (status: Transaction['payment_status']) => {
     switch (status) {
-      case 'completed':
-        return 'bg-green-100 text-green-700';
       case 'pending':
         return 'bg-yellow-100 text-yellow-700';
-      case 'failed':
+      case 'paid':
+        return 'bg-green-100 text-green-700';
+      case 'refunded':
         return 'bg-red-100 text-red-700';
       default:
         return 'bg-neutral-100 text-neutral-700';
     }
   };
 
-  const totalAmount = filteredTransactions.reduce((sum, t) => sum + t.amount, 0);
+  const getTotalRevenue = () => {
+    return transactions
+      .filter(t => t.payment_status === 'paid')
+      .reduce((sum, t) => sum + (t.escrow?.platform_fee || 0), 0);
+  };
+
+  const getTotalVolume = () => {
+    return transactions
+      .filter(t => t.payment_status === 'paid')
+      .reduce((sum, t) => sum + t.amount, 0);
+  };
 
   return (
     <div className="w-full min-h-screen bg-neutral-50">
@@ -89,51 +131,53 @@ export const AdminTransactionsScreen: React.FC = () => {
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div>
               <h1 className="font-heading font-bold text-2xl md:text-3xl text-neutral-900">
-                Transactions
+                Transaction Management
               </h1>
               <p className="font-sans text-sm text-neutral-600 mt-1">
-                Monitor all platform transactions
+                View and manage transactions between buyers and sellers
               </p>
             </div>
-            <Button className="bg-green-700 hover:bg-green-800 text-white px-4 py-2 flex items-center gap-2">
-              <Download className="w-4 h-4" />
-              Export Report
-            </Button>
-          </div>
-
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
-            <Card className="border border-neutral-200 shadow-sm">
-              <CardContent className="p-4">
-                <p className="font-sans text-xs text-neutral-600 mb-1">Total Volume</p>
-                <p className="font-heading font-bold text-xl text-neutral-900">
-                  ₦{(totalAmount / 1000000).toFixed(1)}M
-                </p>
-              </CardContent>
-            </Card>
-            <Card className="border border-neutral-200 shadow-sm">
-              <CardContent className="p-4">
-                <p className="font-sans text-xs text-neutral-600 mb-1">Completed</p>
-                <p className="font-heading font-bold text-xl text-green-600">
-                  {transactions.filter((t) => t.status === 'completed').length}
-                </p>
-              </CardContent>
-            </Card>
-            <Card className="border border-neutral-200 shadow-sm">
-              <CardContent className="p-4">
-                <p className="font-sans text-xs text-neutral-600 mb-1">Pending</p>
-                <p className="font-heading font-bold text-xl text-yellow-600">
-                  {transactions.filter((t) => t.status === 'pending').length}
-                </p>
-              </CardContent>
-            </Card>
-            <Card className="border border-neutral-200 shadow-sm">
-              <CardContent className="p-4">
-                <p className="font-sans text-xs text-neutral-600 mb-1">Failed</p>
-                <p className="font-heading font-bold text-xl text-red-600">
-                  {transactions.filter((t) => t.status === 'failed').length}
-                </p>
-              </CardContent>
-            </Card>
+            <div className="grid grid-cols-3 gap-2">
+              <Card className="border border-neutral-200 shadow-sm">
+                <CardContent className="p-3">
+                  <div className="flex items-center gap-2">
+                    <DollarSign className="w-4 h-4 text-green-600" />
+                    <div>
+                      <p className="font-sans text-xs text-neutral-600">Revenue</p>
+                      <p className="font-heading font-bold text-lg text-green-600">
+                        ₦{getTotalRevenue().toLocaleString()}
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card className="border border-neutral-200 shadow-sm">
+                <CardContent className="p-3">
+                  <div className="flex items-center gap-2">
+                    <CreditCard className="w-4 h-4 text-blue-600" />
+                    <div>
+                      <p className="font-sans text-xs text-neutral-600">Volume</p>
+                      <p className="font-heading font-bold text-lg text-blue-600">
+                        ₦{getTotalVolume().toLocaleString()}
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card className="border border-neutral-200 shadow-sm">
+                <CardContent className="p-3">
+                  <div className="flex items-center gap-2">
+                    <Shield className="w-4 h-4 text-purple-600" />
+                    <div>
+                      <p className="font-sans text-xs text-neutral-600">Transactions</p>
+                      <p className="font-heading font-bold text-lg text-purple-600">
+                        {transactions.filter(t => t.payment_status === 'paid').length}
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
           </div>
 
           <div className="flex flex-col md:flex-row gap-3">
@@ -148,7 +192,7 @@ export const AdminTransactionsScreen: React.FC = () => {
               />
             </div>
             <div className="flex items-center gap-2 overflow-x-auto">
-              {['all', 'completed', 'pending', 'failed'].map((status) => (
+              {['all', 'pending', 'paid', 'refunded'].map((status) => (
                 <button
                   key={status}
                   onClick={() => setFilterStatus(status as any)}
@@ -171,7 +215,7 @@ export const AdminTransactionsScreen: React.FC = () => {
                   <thead className="bg-neutral-50 border-b border-neutral-200">
                     <tr>
                       <th className="text-left px-6 py-4 font-sans text-sm font-semibold text-neutral-700">
-                        Order ID
+                        Order
                       </th>
                       <th className="text-left px-6 py-4 font-sans text-sm font-semibold text-neutral-700">
                         Buyer
@@ -181,9 +225,6 @@ export const AdminTransactionsScreen: React.FC = () => {
                       </th>
                       <th className="text-left px-6 py-4 font-sans text-sm font-semibold text-neutral-700">
                         Amount
-                      </th>
-                      <th className="text-left px-6 py-4 font-sans text-sm font-semibold text-neutral-700">
-                        Date
                       </th>
                       <th className="text-left px-6 py-4 font-sans text-sm font-semibold text-neutral-700">
                         Status
@@ -196,13 +237,13 @@ export const AdminTransactionsScreen: React.FC = () => {
                   <tbody>
                     {loading ? (
                       <tr>
-                        <td colSpan={7} className="px-6 py-12 text-center text-neutral-500">
+                        <td colSpan={6} className="px-6 py-12 text-center text-neutral-500">
                           Loading transactions...
                         </td>
                       </tr>
                     ) : filteredTransactions.length === 0 ? (
                       <tr>
-                        <td colSpan={7} className="px-6 py-12 text-center text-neutral-500">
+                        <td colSpan={6} className="px-6 py-12 text-center text-neutral-500">
                           No transactions found
                         </td>
                       </tr>
@@ -213,31 +254,48 @@ export const AdminTransactionsScreen: React.FC = () => {
                           className="border-b border-neutral-100 hover:bg-neutral-50 transition-colors"
                         >
                           <td className="px-6 py-4 font-sans text-sm text-neutral-900 font-medium">
-                            {transaction.order_id}
+                            {transaction.order?.order_number || 'N/A'}
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="flex flex-col">
+                              <span className="font-sans text-sm text-neutral-900 font-medium">
+                                {transaction.buyer?.full_name || 'Unknown'}
+                              </span>
+                              <span className="font-sans text-xs text-neutral-600">
+                                {transaction.buyer?.email}
+                              </span>
+                            </div>
                           </td>
                           <td className="px-6 py-4 font-sans text-sm text-neutral-700">
-                            {transaction.buyer_name}
+                            {transaction.vendor?.business_name || 'Unknown'}
                           </td>
-                          <td className="px-6 py-4 font-sans text-sm text-neutral-700">
-                            {transaction.vendor_name}
-                          </td>
-                          <td className="px-6 py-4 font-sans text-sm text-neutral-900 font-semibold">
-                            ₦{transaction.amount.toLocaleString()}
-                          </td>
-                          <td className="px-6 py-4 font-sans text-sm text-neutral-700">
-                            {transaction.date}
+                          <td className="px-6 py-4">
+                            <div className="flex flex-col">
+                              <span className="font-sans text-sm text-neutral-900 font-semibold">
+                                ₦{transaction.amount.toLocaleString()}
+                              </span>
+                              {transaction.escrow && (
+                                <span className="font-sans text-xs text-neutral-600">
+                                  Fee: ₦{transaction.escrow.platform_fee?.toLocaleString() || '0'}
+                                </span>
+                              )}
+                            </div>
                           </td>
                           <td className="px-6 py-4">
                             <span
                               className={`px-3 py-1 rounded-full text-xs font-semibold ${getStatusColor(
-                                transaction.status
+                                transaction.payment_status
                               )}`}
                             >
-                              {transaction.status}
+                              {transaction.payment_status}
                             </span>
                           </td>
                           <td className="px-6 py-4">
-                            <button className="p-2 hover:bg-neutral-100 rounded-lg transition-colors">
+                            <button
+                              onClick={() => setSelectedTransaction(transaction)}
+                              className="p-2 hover:bg-neutral-100 rounded-lg transition-colors"
+                              title="View details"
+                            >
                               <Eye className="w-5 h-5 text-neutral-600" />
                             </button>
                           </td>
@@ -250,56 +308,147 @@ export const AdminTransactionsScreen: React.FC = () => {
             </Card>
           </div>
 
-          <div className="md:hidden space-y-3">
-            {loading ? (
-              <Card className="border border-neutral-200 shadow-sm">
-                <CardContent className="p-8 text-center">
-                  <p className="font-sans text-sm text-neutral-500">Loading transactions...</p>
-                </CardContent>
-              </Card>
-            ) : filteredTransactions.length === 0 ? (
-              <Card className="border border-neutral-200 shadow-sm">
-                <CardContent className="p-8 text-center">
-                  <p className="font-sans text-sm text-neutral-500">No transactions found</p>
-                </CardContent>
-              </Card>
-            ) : (
-              filteredTransactions.map((transaction) => (
-                <Card key={transaction.id} className="border border-neutral-200 shadow-sm">
-                  <CardContent className="p-3">
-                    <div className="flex items-start justify-between mb-2">
+          {/* Transaction Details Modal */}
+          {selectedTransaction && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+              <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+                <div className="p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="font-heading font-bold text-xl text-neutral-900">
+                      Transaction Details
+                    </h2>
+                    <button
+                      onClick={() => setSelectedTransaction(null)}
+                      className="p-2 hover:bg-neutral-100 rounded-lg"
+                    >
+                      <Eye className="w-5 h-5 text-neutral-600" />
+                    </button>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <h3 className="font-sans font-semibold text-sm text-neutral-900">
-                          {transaction.order_id}
+                        <label className="font-sans text-sm font-semibold text-neutral-700">
+                          Order Number
+                        </label>
+                        <p className="font-sans text-sm text-neutral-900">
+                          {selectedTransaction.order?.order_number || 'N/A'}
+                        </p>
+                      </div>
+                      <div>
+                        <label className="font-sans text-sm font-semibold text-neutral-700">
+                          Transaction Date
+                        </label>
+                        <p className="font-sans text-sm text-neutral-900">
+                          {new Date(selectedTransaction.created_at).toLocaleDateString()}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="font-sans text-sm font-semibold text-neutral-700">
+                          Buyer
+                        </label>
+                        <p className="font-sans text-sm text-neutral-900">
+                          {selectedTransaction.buyer?.full_name || 'Unknown'}
+                        </p>
+                        <p className="font-sans text-xs text-neutral-600">
+                          {selectedTransaction.buyer?.email}
+                        </p>
+                      </div>
+                      <div>
+                        <label className="font-sans text-sm font-semibold text-neutral-700">
+                          Vendor
+                        </label>
+                        <p className="font-sans text-sm text-neutral-900">
+                          {selectedTransaction.vendor?.business_name || 'Unknown'}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="font-sans text-sm font-semibold text-neutral-700">
+                          Amount
+                        </label>
+                        <p className="font-sans text-lg text-neutral-900 font-semibold">
+                          ₦{selectedTransaction.amount.toLocaleString()}
+                        </p>
+                      </div>
+                      <div>
+                        <label className="font-sans text-sm font-semibold text-neutral-700">
+                          Status
+                        </label>
+                        <span
+                          className={`px-3 py-1 rounded-full text-xs font-semibold ${getStatusColor(
+                            selectedTransaction.payment_status
+                          )}`}
+                        >
+                          {selectedTransaction.payment_status}
+                        </span>
+                      </div>
+                    </div>
+
+                    {selectedTransaction.escrow && (
+                      <div className="border-t pt-4">
+                        <h3 className="font-sans text-sm font-semibold text-neutral-700 mb-3">
+                          Escrow Details
                         </h3>
-                        <p className="font-sans text-xs text-neutral-600 mt-0.5">
-                          {transaction.buyer_name} → {transaction.vendor_name}
-                        </p>
+                        <div className="grid grid-cols-3 gap-4">
+                          <div>
+                            <label className="font-sans text-xs text-neutral-600">
+                              Total Amount
+                            </label>
+                            <p className="font-sans text-sm text-neutral-900 font-semibold">
+                              ₦{selectedTransaction.escrow.amount?.toLocaleString() || '0'}
+                            </p>
+                          </div>
+                          <div>
+                            <label className="font-sans text-xs text-neutral-600">
+                              Platform Fee
+                            </label>
+                            <p className="font-sans text-sm text-neutral-900">
+                              ₦{selectedTransaction.escrow.platform_fee?.toLocaleString() || '0'}
+                            </p>
+                          </div>
+                          <div>
+                            <label className="font-sans text-xs text-neutral-600">
+                              Vendor Amount
+                            </label>
+                            <p className="font-sans text-sm text-green-700 font-semibold">
+                              ₦{selectedTransaction.escrow.vendor_amount?.toLocaleString() || '0'}
+                            </p>
+                          </div>
+                        </div>
                       </div>
-                      <span
-                        className={`px-2 py-0.5 rounded-full text-xs font-semibold ml-2 ${getStatusColor(
-                          transaction.status
-                        )}`}
-                      >
-                        {transaction.status}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between pt-2 border-t border-neutral-200">
-                      <div>
-                        <p className="font-sans text-base font-bold text-neutral-900">
-                          ₦{transaction.amount.toLocaleString()}
-                        </p>
-                        <p className="font-sans text-xs text-neutral-500">{transaction.date}</p>
+                    )}
+
+                    <div className="border-t pt-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="font-sans text-sm font-semibold text-neutral-700">
+                            Payment Method
+                          </label>
+                          <p className="font-sans text-sm text-neutral-900">
+                            {selectedTransaction.payment_method || 'N/A'}
+                          </p>
+                        </div>
+                        <div>
+                          <label className="font-sans text-sm font-semibold text-neutral-700">
+                            Reference
+                          </label>
+                          <p className="font-sans text-xs text-neutral-600 font-mono">
+                            {selectedTransaction.payment_reference || 'N/A'}
+                          </p>
+                        </div>
                       </div>
-                      <button className="p-2 bg-neutral-100 rounded-lg">
-                        <Eye className="w-4 h-4 text-neutral-600" />
-                      </button>
                     </div>
-                  </CardContent>
-                </Card>
-              ))
-            )}
-          </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

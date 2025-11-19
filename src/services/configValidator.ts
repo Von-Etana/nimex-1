@@ -6,7 +6,6 @@ interface ConfigValidationResult {
 
 class ConfigValidator {
   private requiredEnvVars = [
-    'VITE_CLERK_PUBLISHABLE_KEY',
     'VITE_TWILIO_ACCOUNT_SID',
     'VITE_TWILIO_AUTH_TOKEN',
     'VITE_TWILIO_API_KEY',
@@ -30,10 +29,6 @@ class ConfigValidator {
     }
 
     // Validate specific formats
-    const clerkKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
-    if (clerkKey && !clerkKey.startsWith('pk_')) {
-      errors.push('VITE_CLERK_PUBLISHABLE_KEY must start with "pk_"');
-    }
 
     const twilioPhone = import.meta.env.VITE_TWILIO_PHONE_NUMBER;
     if (twilioPhone && !twilioPhone.match(/^\+[1-9]\d{1,14}$/)) {

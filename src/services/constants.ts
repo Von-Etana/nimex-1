@@ -145,10 +145,14 @@ export const COLUMNS = {
     ROLE: 'role'
   },
   VENDORS: {
+    ID: 'id',
     USER_ID: 'user_id',
     BUSINESS_NAME: 'business_name',
     SUBSCRIPTION_PLAN: 'subscription_plan',
-    SUBSCRIPTION_STATUS: 'subscription_status'
+    SUBSCRIPTION_STATUS: 'subscription_status',
+    IS_ACTIVE: 'is_active',
+    RATING: 'rating',
+    MARKET_LOCATION: 'market_location'
   },
   ADMIN_ROLE_ASSIGNMENTS: {
     USER_ID: 'user_id',

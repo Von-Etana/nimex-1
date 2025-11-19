@@ -33,6 +33,7 @@ interface VendorProfile {
     accountNumber: string;
     accountName: string;
   };
+  businessCategory?: string;
 }
 
 interface FormErrors {
@@ -41,6 +42,7 @@ interface FormErrors {
   businessAddress?: string;
   businessPhone?: string;
   marketLocation?: string;
+  businessCategory?: string;
   subCategoryTags?: string;
   cacCertificate?: string;
   proofOfAddress?: string;
@@ -113,12 +115,32 @@ export const VendorOnboardingScreen: React.FC = () => {
       })();
     }
 
+    // Handle browser back/forward navigation for mobile
+    const handleBrowserNavigation = (event: PopStateEvent) => {
+      // Prevent navigation away from onboarding flow
+      if (currentStep > 1) {
+        event.preventDefault();
+        setCurrentStep(prev => Math.max(1, prev - 1));
+        // Push current state back to prevent further back navigation
+        window.history.pushState(null, '', window.location.pathname);
+      } else {
+        // Allow navigation away if on first step
+        return;
+      }
+    };
+
+    // Push initial state to enable back button handling
+    window.history.pushState(null, '', window.location.pathname);
+
+    // Listen for browser navigation events
+    window.addEventListener('popstate', handleBrowserNavigation);
+
     // Cleanup function for event listeners
     return () => {
-      // Any cleanup logic for market suggestions dropdown
+      window.removeEventListener('popstate', handleBrowserNavigation);
       setShowMarketSuggestions(false);
     };
-  }, []);
+  }, [currentStep]);
 
   // Notification helper
   const showNotification = useCallback((type: NotificationState['type'], message: string) => {
@@ -147,6 +169,9 @@ export const VendorOnboardingScreen: React.FC = () => {
       }
       if (!profileData.marketLocation.trim()) {
         errors.marketLocation = 'Market location is required';
+      }
+      if (!profileData.businessCategory?.trim()) {
+        errors.businessCategory = 'Business category is required';
       }
       if (profileData.subCategoryTags.length === 0) {
         errors.subCategoryTags = 'Please select at least one sub-category tag';
@@ -298,7 +323,8 @@ export const VendorOnboardingScreen: React.FC = () => {
 
       const { data: insertedVendor, error } = await supabase
         .from('vendors')
-        .insert(vendorData)
+        .update(vendorData)
+        .eq('user_id', user.id)
         .select('id')
         .single();
 
@@ -428,6 +454,20 @@ export const VendorOnboardingScreen: React.FC = () => {
               onMarketLocationSearch={handleMarketLocationSearch}
               onSelectMarketLocation={selectMarketLocation}
               onToggleSubCategoryTag={toggleSubCategoryTag}
+              onAddCustomSubCategory={(customTag) => {
+                // Add custom tag to the global list if it doesn't exist
+                const existingTag = SUB_CATEGORY_TAGS.find(tag => tag.name.toLowerCase() === customTag.toLowerCase());
+                if (!existingTag) {
+                  // In a real app, this would be saved to the database
+                  // For now, we'll just add it to the local state
+                  const newTag = {
+                    id: `custom_${Date.now()}`,
+                    name: customTag,
+                    category: profileData.businessCategory || 'Other'
+                  };
+                  setAvailableTags(prev => [...prev, newTag]);
+                }
+              }}
             />
           )}
           {currentStep === 2 && (

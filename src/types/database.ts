@@ -80,6 +80,7 @@ export interface Database {
           total_sales: number;
           response_time: number;
           wallet_balance: number;
+          notification_preferences: Json | null;
           is_active: boolean;
           created_at: string;
           updated_at: string;
@@ -103,6 +104,7 @@ export interface Database {
           total_sales?: number;
           response_time?: number;
           wallet_balance?: number;
+          notification_preferences?: Json | null;
           is_active?: boolean;
           created_at?: string;
           updated_at?: string;
@@ -130,6 +132,7 @@ export interface Database {
           total_sales?: number;
           response_time?: number;
           wallet_balance?: number;
+          notification_preferences?: Json | null;
           is_active?: boolean;
           created_at?: string;
           updated_at?: string;
@@ -251,6 +254,50 @@ export interface Database {
           delivered_at: string | null;
         };
       };
+      kyc_submissions: {
+        Row: {
+          id: string;
+          user_id: string;
+          id_type: string;
+          id_number: string;
+          id_document_url: string;
+          selfie_url: string;
+          cac_document_url: string | null;
+          status: KYCStatus;
+          admin_notes: string | null;
+          submitted_at: string;
+          reviewed_at: string | null;
+          reviewed_by: string | null;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          id_type: string;
+          id_number: string;
+          id_document_url: string;
+          selfie_url: string;
+          cac_document_url?: string | null;
+          status?: KYCStatus;
+          admin_notes?: string | null;
+          submitted_at?: string;
+          reviewed_at?: string | null;
+          reviewed_by?: string | null;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          id_type?: string;
+          id_number?: string;
+          id_document_url?: string;
+          selfie_url?: string;
+          cac_document_url?: string | null;
+          status?: KYCStatus;
+          admin_notes?: string | null;
+          submitted_at?: string;
+          reviewed_at?: string | null;
+          reviewed_by?: string | null;
+        };
+      };
       admin_roles: {
         Row: {
           id: string;
@@ -344,6 +391,248 @@ export interface Database {
           assigned_at?: string;
           created_at?: string;
           updated_at?: string;
+        };
+      };
+      wallet_transactions: {
+        Row: {
+          id: string;
+          vendor_id: string;
+          type: TransactionType;
+          amount: number;
+          balance_after: number;
+          reference: string | null;
+          description: string | null;
+          status: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          vendor_id: string;
+          type: TransactionType;
+          amount: number;
+          balance_after: number;
+          reference?: string | null;
+          description?: string | null;
+          status?: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          vendor_id?: string;
+          type?: TransactionType;
+          amount?: number;
+          balance_after?: number;
+          reference?: string | null;
+          description?: string | null;
+          status?: string;
+          created_at?: string;
+        };
+      };
+      payouts: {
+        Row: {
+          id: string;
+          vendor_id: string;
+          amount: number;
+          bank_name: string;
+          account_number: string;
+          account_name: string;
+          status: PayoutStatus;
+          reference: string | null;
+          requested_at: string;
+          processed_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          vendor_id: string;
+          amount: number;
+          bank_name: string;
+          account_number: string;
+          account_name: string;
+          status?: PayoutStatus;
+          reference?: string | null;
+          requested_at?: string;
+          processed_at?: string | null;
+        };
+        Update: {
+          id?: string;
+          vendor_id?: string;
+          amount?: number;
+          bank_name?: string;
+          account_number?: string;
+          account_name?: string;
+          status?: PayoutStatus;
+          reference?: string | null;
+          requested_at?: string;
+          processed_at?: string | null;
+        };
+      };
+      escrow_transactions: {
+        Row: {
+          id: string;
+          order_id: string;
+          buyer_id: string;
+          vendor_id: string;
+          amount: number;
+          platform_fee: number;
+          vendor_amount: number;
+          status: EscrowStatus;
+          held_at: string;
+          released_at: string | null;
+          release_reason: string | null;
+          dispute_reason: string | null;
+        };
+        Insert: {
+          id?: string;
+          order_id: string;
+          buyer_id: string;
+          vendor_id: string;
+          amount: number;
+          platform_fee?: number;
+          vendor_amount: number;
+          status?: EscrowStatus;
+          held_at?: string;
+          released_at?: string | null;
+          release_reason?: string | null;
+          dispute_reason?: string | null;
+        };
+        Update: {
+          id?: string;
+          order_id?: string;
+          buyer_id?: string;
+          vendor_id?: string;
+          amount?: number;
+          platform_fee?: number;
+          vendor_amount?: number;
+          status?: EscrowStatus;
+          held_at?: string;
+          released_at?: string | null;
+          release_reason?: string | null;
+          dispute_reason?: string | null;
+        };
+      };
+      reviews: {
+        Row: {
+          id: string;
+          product_id: string;
+          order_id: string | null;
+          buyer_id: string;
+          vendor_id: string;
+          rating: number;
+          review_text: string | null;
+          images: Json | null;
+          is_verified_purchase: boolean;
+          helpful_count: number;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          product_id: string;
+          order_id?: string | null;
+          buyer_id: string;
+          vendor_id: string;
+          rating: number;
+          review_text?: string | null;
+          images?: Json | null;
+          is_verified_purchase?: boolean;
+          helpful_count?: number;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          product_id?: string;
+          order_id?: string | null;
+          buyer_id?: string;
+          vendor_id?: string;
+          rating?: number;
+          review_text?: string | null;
+          images?: Json | null;
+          is_verified_purchase?: boolean;
+          helpful_count?: number;
+          created_at?: string;
+        };
+      };
+      chat_conversations: {
+        Row: {
+          id: string;
+          buyer_id: string;
+          vendor_id: string;
+          product_id: string | null;
+          last_message: string | null;
+          last_message_at: string;
+          unread_buyer: number;
+          unread_vendor: number;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          buyer_id: string;
+          vendor_id: string;
+          product_id?: string | null;
+          last_message?: string | null;
+          last_message_at?: string;
+          unread_buyer?: number;
+          unread_vendor?: number;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          buyer_id?: string;
+          vendor_id?: string;
+          product_id?: string | null;
+          last_message?: string | null;
+          last_message_at?: string;
+          unread_buyer?: number;
+          unread_vendor?: number;
+          created_at?: string;
+        };
+      };
+      chat_messages: {
+        Row: {
+          id: string;
+          conversation_id: string;
+          sender_id: string;
+          message_text: string | null;
+          image_url: string | null;
+          is_read: boolean;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          conversation_id: string;
+          sender_id: string;
+          message_text?: string | null;
+          image_url?: string | null;
+          is_read?: boolean;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          conversation_id?: string;
+          sender_id?: string;
+          message_text?: string | null;
+          image_url?: string | null;
+          is_read?: boolean;
+          created_at?: string;
+        };
+      };
+      wishlists: {
+        Row: {
+          id: string;
+          user_id: string;
+          product_id: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          product_id: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          product_id?: string;
+          created_at?: string;
         };
       };
     };

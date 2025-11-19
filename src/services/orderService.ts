@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import { logger } from '../lib/logger';
 
 interface CreateOrderRequest {
   buyerId: string;
@@ -95,7 +96,7 @@ class OrderService {
         },
       };
     } catch (error) {
-      console.error('Failed to create order:', error);
+      logger.error('Failed to create order', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to create order',
@@ -126,7 +127,7 @@ class OrderService {
 
       return { success: true };
     } catch (error) {
-      console.error('Failed to update payment status:', error);
+      logger.error('Failed to update payment status', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to update payment status',
@@ -167,7 +168,7 @@ class OrderService {
 
       return { success: true };
     } catch (error) {
-      console.error('Failed to confirm delivery:', error);
+      logger.error('Failed to confirm delivery', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to confirm delivery',
@@ -243,7 +244,7 @@ class OrderService {
 
       return { success: true };
     } catch (error) {
-      console.error('Failed to release escrow:', error);
+      logger.error('Failed to release escrow', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to release escrow',
@@ -294,7 +295,7 @@ class OrderService {
 
       return { success: true };
     } catch (error) {
-      console.error('Failed to refund escrow:', error);
+      logger.error('Failed to refund escrow', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to refund escrow',
@@ -364,7 +365,7 @@ class OrderService {
 
       return { success: true };
     } catch (error) {
-      console.error('Failed to create dispute:', error);
+      logger.error('Failed to create dispute', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to create dispute',

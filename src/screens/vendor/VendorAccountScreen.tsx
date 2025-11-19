@@ -10,19 +10,18 @@ import {
   ChevronUp,
   Save,
   Loader2,
-  Edit2
+  Save,
+  Loader2,
+  Edit2,
+  Trash2
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
+import { Database } from '../../types/database';
+import { Modal } from '../../components/ui/modal';
 
-interface Transaction {
-  id: string;
-  date: string;
-  description: string;
-  type: 'Sale' | 'Payout' | 'Fee';
-  amount: number;
-  status: 'Completed' | 'Pending';
-}
+type Transaction = Database['public']['Tables']['wallet_transactions']['Row'];
+type Vendor = Database['public']['Tables']['vendors']['Row'];
 
 interface PayoutMethod {
   id: string;
@@ -31,78 +30,14 @@ interface PayoutMethod {
   isPrimary: boolean;
 }
 
-const mockTransactions: Transaction[] = [
-  {
-    id: '1',
-    date: '2024-07-28',
-    description: 'Sale: Handwoven Basket',
-    type: 'Sale',
-    amount: 15000,
-    status: 'Completed',
-  },
-  {
-    id: '2',
-    date: '2024-07-27',
-    description: 'Payout: Bank Transfer',
-    type: 'Payout',
-    amount: -20000,
-    status: 'Completed',
-  },
-  {
-    id: '3',
-    date: '2024-07-26',
-    description: 'Ad Fee: Featured Listing',
-    type: 'Fee',
-    amount: -5000,
-    status: 'Completed',
-  },
-  {
-    id: '4',
-    date: '2024-07-25',
-    description: 'Sale: Artisan Necklace',
-    type: 'Sale',
-    amount: 8500,
-    status: 'Completed',
-  },
-  {
-    id: '5',
-    date: '2024-07-24',
-    description: 'Payout: Mobile Money',
-    type: 'Payout',
-    amount: -5000,
-    status: 'Pending',
-  },
-  {
-    id: '6',
-    date: '2024-07-23',
-    description: 'Sale: Handmade Leather Bag',
-    type: 'Sale',
-    amount: 25000,
-    status: 'Completed',
-  },
-];
-
-const mockPayoutMethods: PayoutMethod[] = [
-  {
-    id: '1',
-    type: 'Bank Account (Zenith Bank)',
-    details: 'Account No: **** **** **** 1234',
-    isPrimary: true,
-  },
-  {
-    id: '2',
-    type: 'Mobile Money (M-Pesa)',
-    details: 'Phone: +234 801 567 8901',
-    isPrimary: false,
-  },
-];
-
 export const VendorAccountScreen: React.FC = () => {
   const { user } = useAuth();
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [transactions] = useState<Transaction[]>(mockTransactions);
-  const [payoutMethods] = useState<PayoutMethod[]>(mockPayoutMethods);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [vendor, setVendor] = useState<Vendor | null>(null);
+  const [payoutMethods, setPayoutMethods] = useState<PayoutMethod[]>([]);
+
   const [personalInfoExpanded, setPersonalInfoExpanded] = useState(false);
   const [passwordExpanded, setPasswordExpanded] = useState(false);
   const [notificationsExpanded, setNotificationsExpanded] = useState(false);
@@ -119,20 +54,37 @@ export const VendorAccountScreen: React.FC = () => {
     confirmPassword: '',
   });
 
+  // Withdrawal State
+  const [isWithdrawModalOpen, setIsWithdrawModalOpen] = useState(false);
+  const [withdrawAmount, setWithdrawAmount] = useState('');
+  const [selectedPayoutMethodId, setSelectedPayoutMethodId] = useState('');
+  const [pendingPayoutsTotal, setPendingPayoutsTotal] = useState(0);
+
   const [notifications, setNotifications] = useState({
     emailSales: true,
     smsAlerts: false,
     inAppUpdates: true,
   });
 
+  // Payout Method State
+  const [isAddPayoutModalOpen, setIsAddPayoutModalOpen] = useState(false);
+  const [newPayoutMethod, setNewPayoutMethod] = useState({
+    bankName: '',
+    accountNumber: '',
+    accountName: '',
+    isPrimary: false
+  });
+
   useEffect(() => {
     if (user) {
-      loadUserData();
+      loadData();
     }
   }, [user]);
 
-  const loadUserData = async () => {
+  const loadData = async () => {
+    setLoading(true);
     try {
+      // Load Profile
       const { data: profile } = await supabase
         .from('profiles')
         .select('*')
@@ -146,8 +98,72 @@ export const VendorAccountScreen: React.FC = () => {
           phone: profile.phone || '',
         });
       }
+
+      // Load Vendor Data
+      const { data: vendorData } = await supabase
+        .from('vendors')
+        .select('*')
+        .eq('user_id', user?.id)
+        .maybeSingle();
+
+      if (vendorData) {
+        setVendor(vendorData);
+
+        // Parse payout methods from bank_account_details
+        // Assuming it's stored as an array or single object in JSON
+        if (vendorData.bank_account_details) {
+          const details = vendorData.bank_account_details as any;
+          if (Array.isArray(details)) {
+            setPayoutMethods(details);
+          } else if (details.account_number) {
+            // Single account
+            setPayoutMethods([{
+              id: '1',
+              type: 'Bank Account',
+              details: `${details.bank_name} - ${details.account_number}`,
+              isPrimary: true
+            }]);
+          }
+        }
+
+        // Load Notification Preferences
+        if (vendorData.notification_preferences) {
+          const prefs = vendorData.notification_preferences as any;
+          setNotifications({
+            emailSales: prefs.emailSales ?? true,
+            smsAlerts: prefs.smsAlerts ?? false,
+            inAppUpdates: prefs.inAppUpdates ?? true,
+          });
+        }
+
+        // Load Transactions
+        const { data: txData } = await supabase
+          .from('wallet_transactions')
+          .select('*')
+          .eq('vendor_id', vendorData.id)
+          .order('created_at', { ascending: false });
+
+        if (txData) {
+          setTransactions(txData);
+        }
+
+        // Load Pending Payouts
+        const { data: pendingData } = await supabase
+          .from('payouts')
+          .select('amount')
+          .eq('vendor_id', vendorData.id)
+          .eq('status', 'pending');
+
+        if (pendingData) {
+          const total = pendingData.reduce((sum, item) => sum + (item.amount || 0), 0);
+          setPendingPayoutsTotal(total);
+        }
+      }
+
     } catch (error) {
-      console.error('Error loading user data:', error);
+      console.error('Error loading data:', error);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -198,9 +214,177 @@ export const VendorAccountScreen: React.FC = () => {
     }
   };
 
-  const balance = 250500;
-  const totalSales = 1500000;
-  const pendingPayouts = 50000;
+  const handleAddPayoutMethod = async () => {
+    if (!newPayoutMethod.bankName || !newPayoutMethod.accountNumber || !newPayoutMethod.accountName) {
+      alert('Please fill in all fields');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const newMethod: PayoutMethod = {
+        id: crypto.randomUUID(),
+        type: 'Bank Account',
+        details: `${newMethod.bankName} - ${newMethod.accountNumber}`, // For display
+        isPrimary: newPayoutMethod.isPrimary || payoutMethods.length === 0,
+        // Store actual details for future use if needed, though PayoutMethod interface might need updating
+        // For now, we map to the existing structure
+      };
+
+      // In a real app, we would store the full object. 
+      // Let's update the local state first to see how it looks.
+      // We need to store the full details in the DB.
+
+      const updatedMethods = [...payoutMethods, {
+        ...newMethod,
+        bank_name: newPayoutMethod.bankName,
+        account_number: newPayoutMethod.accountNumber,
+        account_name: newPayoutMethod.accountName
+      }];
+
+      // If this is primary, make others non-primary
+      if (newMethod.isPrimary) {
+        updatedMethods.forEach(m => {
+          if (m.id !== newMethod.id) m.isPrimary = false;
+        });
+      }
+
+      const { error } = await supabase
+        .from('vendors')
+        .update({
+          bank_account_details: updatedMethods
+        })
+        .eq('id', vendor?.id);
+
+      if (error) throw error;
+
+      setPayoutMethods(updatedMethods);
+      setIsAddPayoutModalOpen(false);
+      setNewPayoutMethod({
+        bankName: '',
+        accountNumber: '',
+        accountName: '',
+        isPrimary: false
+      });
+      alert('Payout method added successfully!');
+    } catch (error: any) {
+      alert('Error adding payout method: ' + error.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDeletePayoutMethod = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this payout method?')) return;
+
+    setSaving(true);
+    try {
+      const updatedMethods = payoutMethods.filter(m => m.id !== id);
+
+      const { error } = await supabase
+        .from('vendors')
+        .update({
+          bank_account_details: updatedMethods
+        })
+        .eq('id', vendor?.id);
+
+      if (error) throw error;
+
+      setPayoutMethods(updatedMethods);
+    } catch (error: any) {
+      alert('Error deleting payout method: ' + error.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleWithdraw = async () => {
+    const amount = parseFloat(withdrawAmount);
+    if (isNaN(amount) || amount <= 0) {
+      alert('Please enter a valid amount');
+      return;
+    }
+
+    if (amount > (vendor?.wallet_balance || 0)) {
+      alert('Insufficient funds');
+      return;
+    }
+
+    if (!selectedPayoutMethodId) {
+      alert('Please select a payout method');
+      return;
+    }
+
+    const selectedMethod = payoutMethods.find(m => m.id === selectedPayoutMethodId);
+    if (!selectedMethod) return;
+
+    setSaving(true);
+    try {
+      // 1. Create Payout Record
+      const { data: payoutData, error: payoutError } = await supabase
+        .from('payouts')
+        .insert({
+          vendor_id: vendor!.id,
+          amount: amount,
+          bank_name: (selectedMethod as any).bank_name || 'Bank', // Fallback if not in object
+          account_number: (selectedMethod as any).account_number || '0000',
+          account_name: (selectedMethod as any).account_name || 'Vendor',
+          status: 'pending',
+          reference: `PAY-${Date.now()}`
+        })
+        .select()
+        .single();
+
+      if (payoutError) throw payoutError;
+
+      // 2. Create Wallet Transaction
+      const { error: txError } = await supabase
+        .from('wallet_transactions')
+        .insert({
+          vendor_id: vendor!.id,
+          type: 'payout',
+          amount: -amount,
+          balance_after: (vendor?.wallet_balance || 0) - amount,
+          description: `Withdrawal to ${selectedMethod.details}`,
+          status: 'pending',
+          reference: payoutData.id
+        });
+
+      if (txError) throw txError;
+
+      // 3. Update Vendor Balance
+      const { error: vendorError } = await supabase
+        .from('vendors')
+        .update({
+          wallet_balance: (vendor?.wallet_balance || 0) - amount
+        })
+        .eq('id', vendor!.id);
+
+      if (vendorError) throw vendorError;
+
+      // Success
+      alert('Withdrawal request submitted successfully!');
+      setIsWithdrawModalOpen(false);
+      setWithdrawAmount('');
+      loadData(); // Reload all data
+    } catch (error: any) {
+      alert('Error processing withdrawal: ' + error.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const balance = vendor?.wallet_balance || 0;
+  const totalSales = vendor?.total_sales || 0;
+  const pendingPayouts = pendingPayoutsTotal;
+
+  if (loading) {
+    return (
+      <div className="w-full min-h-screen flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-green-700" />
+      </div>
+    );
+  }
 
   return (
     <div className="w-full min-h-screen bg-neutral-50">
@@ -235,7 +419,10 @@ export const VendorAccountScreen: React.FC = () => {
                     </div>
 
                     <div className="flex gap-2 md:gap-3">
-                      <Button className="flex-1 h-10 md:h-12 bg-green-700 hover:bg-green-800 text-white font-sans font-semibold text-xs md:text-sm">
+                      <Button
+                        onClick={() => setIsWithdrawModalOpen(true)}
+                        className="flex-1 h-10 md:h-12 bg-green-700 hover:bg-green-800 text-white font-sans font-semibold text-xs md:text-sm"
+                      >
                         Withdraw Funds
                       </Button>
                       <Button className="flex-1 h-10 md:h-12 bg-white hover:bg-neutral-50 text-neutral-900 border border-neutral-200 font-sans font-semibold text-xs md:text-sm">
@@ -255,7 +442,7 @@ export const VendorAccountScreen: React.FC = () => {
                 <div className="space-y-3 md:space-y-4">
                   <div>
                     <p className="font-sans text-xs md:text-sm text-neutral-600">
-                      Total Sales this Month
+                      Total Sales
                     </p>
                     <p className="font-heading font-bold text-lg md:text-2xl text-neutral-900">
                       ₦{totalSales.toLocaleString()}.00
@@ -311,76 +498,86 @@ export const VendorAccountScreen: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {transactions.map((transaction) => (
-                      <tr
-                        key={transaction.id}
-                        className="border-b border-neutral-100 hover:bg-neutral-50 transition-colors"
-                      >
-                        <td className="px-4 py-3 font-sans text-sm text-neutral-700">
-                          {transaction.date}
-                        </td>
-                        <td className="px-4 py-3 font-sans text-sm text-neutral-900">
-                          {transaction.description}
-                        </td>
-                        <td className="px-4 py-3 font-sans text-sm text-neutral-700">
-                          {transaction.type}
-                        </td>
-                        <td className={`px-4 py-3 font-sans text-sm font-semibold text-right ${
-                          transaction.amount > 0 ? 'text-green-600' : 'text-red-600'
-                        }`}>
-                          {transaction.amount > 0 ? '+' : ''}₦{Math.abs(transaction.amount).toLocaleString()}.00
-                        </td>
-                        <td className="px-4 py-3 text-center">
-                          <span
-                            className={`inline-block px-3 py-1 rounded-full text-xs font-semibold ${
-                              transaction.status === 'Completed'
-                                ? 'bg-yellow-400 text-neutral-900'
-                                : 'bg-neutral-200 text-neutral-700'
-                            }`}
-                          >
-                            {transaction.status}
-                          </span>
+                    {transactions.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className="px-4 py-8 text-center text-neutral-500">
+                          No transactions found
                         </td>
                       </tr>
-                    ))}
+                    ) : (
+                      transactions.map((transaction) => (
+                        <tr
+                          key={transaction.id}
+                          className="border-b border-neutral-100 hover:bg-neutral-50 transition-colors"
+                        >
+                          <td className="px-4 py-3 font-sans text-sm text-neutral-700">
+                            {new Date(transaction.created_at).toLocaleDateString()}
+                          </td>
+                          <td className="px-4 py-3 font-sans text-sm text-neutral-900">
+                            {transaction.description || transaction.type}
+                          </td>
+                          <td className="px-4 py-3 font-sans text-sm text-neutral-700 capitalize">
+                            {transaction.type}
+                          </td>
+                          <td className={`px-4 py-3 font-sans text-sm font-semibold text-right ${transaction.amount > 0 ? 'text-green-600' : 'text-red-600'
+                            }`}>
+                            {transaction.amount > 0 ? '+' : ''}₦{Math.abs(transaction.amount).toLocaleString()}.00
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            <span
+                              className={`inline-block px-3 py-1 rounded-full text-xs font-semibold ${transaction.status === 'completed'
+                                ? 'bg-yellow-400 text-neutral-900'
+                                : 'bg-neutral-200 text-neutral-700'
+                                }`}
+                            >
+                              {transaction.status}
+                            </span>
+                          </td>
+                        </tr>
+                      ))
+                    )}
                   </tbody>
                 </table>
               </div>
 
               <div className="md:hidden space-y-3">
-                {transactions.map((transaction) => (
-                  <div
-                    key={transaction.id}
-                    className="p-3 border border-neutral-200 rounded-lg bg-white"
-                  >
-                    <div className="flex items-start justify-between mb-2">
-                      <div className="flex-1">
-                        <p className="font-sans text-sm font-semibold text-neutral-900">
-                          {transaction.description}
-                        </p>
-                        <p className="font-sans text-xs text-neutral-600 mt-1">
-                          {transaction.date} • {transaction.type}
-                        </p>
-                      </div>
-                      <span
-                        className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold ml-2 ${
-                          transaction.status === 'Completed'
+                {transactions.length === 0 ? (
+                  <div className="p-4 text-center text-neutral-500">
+                    No transactions found
+                  </div>
+                ) : (
+                  transactions.map((transaction) => (
+                    <div
+                      key={transaction.id}
+                      className="p-3 border border-neutral-200 rounded-lg bg-white"
+                    >
+                      <div className="flex items-start justify-between mb-2">
+                        <div className="flex-1">
+                          <p className="font-sans text-sm font-semibold text-neutral-900">
+                            {transaction.description || transaction.type}
+                          </p>
+                          <p className="font-sans text-xs text-neutral-600 mt-1">
+                            {new Date(transaction.created_at).toLocaleDateString()} • {transaction.type}
+                          </p>
+                        </div>
+                        <span
+                          className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold ml-2 ${transaction.status === 'completed'
                             ? 'bg-yellow-400 text-neutral-900'
                             : 'bg-neutral-200 text-neutral-700'
-                        }`}
+                            }`}
+                        >
+                          {transaction.status}
+                        </span>
+                      </div>
+                      <p
+                        className={`font-sans text-base font-bold ${transaction.amount > 0 ? 'text-green-600' : 'text-red-600'
+                          }`}
                       >
-                        {transaction.status}
-                      </span>
+                        {transaction.amount > 0 ? '+' : ''}₦{Math.abs(transaction.amount).toLocaleString()}.00
+                      </p>
                     </div>
-                    <p
-                      className={`font-sans text-base font-bold ${
-                        transaction.amount > 0 ? 'text-green-600' : 'text-red-600'
-                      }`}
-                    >
-                      {transaction.amount > 0 ? '+' : ''}₦{Math.abs(transaction.amount).toLocaleString()}.00
-                    </p>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
             </CardContent>
           </Card>
@@ -392,7 +589,10 @@ export const VendorAccountScreen: React.FC = () => {
                   <h2 className="font-heading font-bold text-base md:text-xl text-neutral-900">
                     Payout Methods
                   </h2>
-                  <Button className="h-8 md:h-9 px-3 md:px-4 bg-green-700 hover:bg-green-800 text-white font-sans text-xs md:text-sm flex items-center gap-1 md:gap-2">
+                  <Button
+                    onClick={() => setIsAddPayoutModalOpen(true)}
+                    className="h-8 md:h-9 px-3 md:px-4 bg-green-700 hover:bg-green-800 text-white font-sans text-xs md:text-sm flex items-center gap-1 md:gap-2"
+                  >
                     <Plus className="w-3 h-3 md:w-4 md:h-4" />
                     <span className="hidden sm:inline">Add New Method</span>
                     <span className="sm:hidden">Add</span>
@@ -400,33 +600,43 @@ export const VendorAccountScreen: React.FC = () => {
                 </div>
 
                 <div className="space-y-3 md:space-y-4">
-                  {payoutMethods.map((method) => (
-                    <div
-                      key={method.id}
-                      className="p-3 md:p-4 border border-neutral-200 rounded-lg hover:bg-neutral-50 transition-colors"
-                    >
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2">
-                            <p className="font-sans font-semibold text-sm md:text-base text-neutral-900">
-                              {method.type}
-                            </p>
-                            {method.isPrimary && (
-                              <span className="px-2 py-0.5 bg-yellow-400 text-neutral-900 rounded text-xs font-semibold">
-                                Primary
-                              </span>
-                            )}
-                          </div>
-                          <p className="font-sans text-xs md:text-sm text-neutral-600 mt-1">
-                            {method.details}
-                          </p>
-                        </div>
-                        <button className="font-sans text-xs md:text-sm text-neutral-600 hover:text-neutral-900 underline">
-                          Edit
-                        </button>
-                      </div>
+                  {payoutMethods.length === 0 ? (
+                    <div className="text-center py-4 text-neutral-500 text-sm">
+                      No payout methods added yet.
                     </div>
-                  ))}
+                  ) : (
+                    payoutMethods.map((method) => (
+                      <div
+                        key={method.id}
+                        className="p-3 md:p-4 border border-neutral-200 rounded-lg hover:bg-neutral-50 transition-colors"
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2">
+                              <p className="font-sans font-semibold text-sm md:text-base text-neutral-900">
+                                {method.type}
+                              </p>
+                              {method.isPrimary && (
+                                <span className="px-2 py-0.5 bg-yellow-400 text-neutral-900 rounded text-xs font-semibold">
+                                  Primary
+                                </span>
+                              )}
+                            </div>
+                            <p className="font-sans text-xs md:text-sm text-neutral-600 mt-1">
+                              {method.details}
+                            </p>
+                          </div>
+                          <button
+                            onClick={() => handleDeletePayoutMethod(method.id)}
+                            className="font-sans text-xs md:text-sm text-red-600 hover:text-red-700 flex items-center gap-1"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                            Delete
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -655,10 +865,35 @@ export const VendorAccountScreen: React.FC = () => {
                         </label>
 
                         <Button
-                          onClick={() => alert('Preferences saved!')}
+                          onClick={async () => {
+                            setSaving(true);
+                            try {
+                              const { error } = await supabase
+                                .from('vendors')
+                                .update({
+                                  notification_preferences: notifications
+                                })
+                                .eq('id', vendor?.id);
+
+                              if (error) throw error;
+                              alert('Preferences saved!');
+                            } catch (error: any) {
+                              alert('Error saving preferences: ' + error.message);
+                            } finally {
+                              setSaving(false);
+                            }
+                          }}
+                          disabled={saving}
                           className="w-full h-9 md:h-10 bg-green-700 hover:bg-green-800 text-white font-sans font-semibold text-xs md:text-sm"
                         >
-                          Save Preferences
+                          {saving ? (
+                            <>
+                              <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                              Saving...
+                            </>
+                          ) : (
+                            'Save Preferences'
+                          )}
                         </Button>
                       </div>
                     )}
@@ -669,6 +904,164 @@ export const VendorAccountScreen: React.FC = () => {
           </div>
         </div>
       </div>
+      {/* Add Payout Method Modal */}
+      <Modal
+        isOpen={isAddPayoutModalOpen}
+        onClose={() => setIsAddPayoutModalOpen(false)}
+        title="Add Payout Method"
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="block font-sans font-medium text-sm text-neutral-700 mb-1">
+              Bank Name
+            </label>
+            <input
+              type="text"
+              value={newPayoutMethod.bankName}
+              onChange={(e) => setNewPayoutMethod({ ...newPayoutMethod, bankName: e.target.value })}
+              className="w-full h-10 px-3 rounded-lg border border-neutral-200 font-sans text-sm focus:outline-none focus:ring-2 focus:ring-green-700 focus:border-transparent"
+              placeholder="e.g. Zenith Bank"
+            />
+          </div>
+          <div>
+            <label className="block font-sans font-medium text-sm text-neutral-700 mb-1">
+              Account Number
+            </label>
+            <input
+              type="text"
+              value={newPayoutMethod.accountNumber}
+              onChange={(e) => setNewPayoutMethod({ ...newPayoutMethod, accountNumber: e.target.value })}
+              className="w-full h-10 px-3 rounded-lg border border-neutral-200 font-sans text-sm focus:outline-none focus:ring-2 focus:ring-green-700 focus:border-transparent"
+              placeholder="e.g. 0123456789"
+            />
+          </div>
+          <div>
+            <label className="block font-sans font-medium text-sm text-neutral-700 mb-1">
+              Account Name
+            </label>
+            <input
+              type="text"
+              value={newPayoutMethod.accountName}
+              onChange={(e) => setNewPayoutMethod({ ...newPayoutMethod, accountName: e.target.value })}
+              className="w-full h-10 px-3 rounded-lg border border-neutral-200 font-sans text-sm focus:outline-none focus:ring-2 focus:ring-green-700 focus:border-transparent"
+              placeholder="e.g. John Doe"
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="isPrimary"
+              checked={newPayoutMethod.isPrimary}
+              onChange={(e) => setNewPayoutMethod({ ...newPayoutMethod, isPrimary: e.target.checked })}
+              className="w-4 h-4 rounded border-neutral-300 text-green-700 focus:ring-green-700"
+            />
+            <label htmlFor="isPrimary" className="font-sans text-sm text-neutral-700">
+              Set as primary payout method
+            </label>
+          </div>
+          <div className="flex gap-3 pt-2">
+            <Button
+              onClick={() => setIsAddPayoutModalOpen(false)}
+              className="flex-1 bg-white hover:bg-neutral-50 text-neutral-900 border border-neutral-200"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleAddPayoutMethod}
+              disabled={saving}
+              className="flex-1 bg-green-700 hover:bg-green-800 text-white"
+            >
+              {saving ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                  Saving...
+                </>
+              ) : (
+                'Save Method'
+              )}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+      {/* Withdrawal Modal */}
+      <Modal
+        isOpen={isWithdrawModalOpen}
+        onClose={() => setIsWithdrawModalOpen(false)}
+        title="Withdraw Funds"
+      >
+        <div className="space-y-4">
+          <div className="p-4 bg-neutral-50 rounded-lg border border-neutral-100">
+            <p className="text-sm text-neutral-600 mb-1">Available Balance</p>
+            <p className="font-heading font-bold text-2xl text-neutral-900">
+              ₦{balance.toLocaleString()}.00
+            </p>
+          </div>
+
+          <div>
+            <label className="block font-sans font-medium text-sm text-neutral-700 mb-1">
+              Amount to Withdraw
+            </label>
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500">₦</span>
+              <input
+                type="number"
+                value={withdrawAmount}
+                onChange={(e) => setWithdrawAmount(e.target.value)}
+                className="w-full h-10 pl-8 pr-3 rounded-lg border border-neutral-200 font-sans text-sm focus:outline-none focus:ring-2 focus:ring-green-700 focus:border-transparent"
+                placeholder="0.00"
+                min="0"
+                max={balance}
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block font-sans font-medium text-sm text-neutral-700 mb-1">
+              Select Payout Method
+            </label>
+            <select
+              value={selectedPayoutMethodId}
+              onChange={(e) => setSelectedPayoutMethodId(e.target.value)}
+              className="w-full h-10 px-3 rounded-lg border border-neutral-200 font-sans text-sm focus:outline-none focus:ring-2 focus:ring-green-700 focus:border-transparent"
+            >
+              <option value="">Select a bank account</option>
+              {payoutMethods.map((method) => (
+                <option key={method.id} value={method.id}>
+                  {method.details}
+                </option>
+              ))}
+            </select>
+            {payoutMethods.length === 0 && (
+              <p className="text-xs text-red-500 mt-1">
+                Please add a payout method first.
+              </p>
+            )}
+          </div>
+
+          <div className="flex gap-3 pt-2">
+            <Button
+              onClick={() => setIsWithdrawModalOpen(false)}
+              className="flex-1 bg-white hover:bg-neutral-50 text-neutral-900 border border-neutral-200"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleWithdraw}
+              disabled={saving || !selectedPayoutMethodId || !withdrawAmount}
+              className="flex-1 bg-green-700 hover:bg-green-800 text-white"
+            >
+              {saving ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                  Processing...
+                </>
+              ) : (
+                'Withdraw'
+              )}
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 };

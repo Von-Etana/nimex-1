@@ -1,62 +1,98 @@
 import React, { Component, ErrorInfo, ReactNode } from 'react';
+import { logger } from '../lib/logger';
 
 interface Props {
   children: ReactNode;
+  fallback?: ReactNode;
+  onError?: (error: Error, errorInfo: ErrorInfo) => void;
 }
 
 interface State {
   hasError: boolean;
-  error: Error | null;
+  error?: Error;
 }
 
 export class ErrorBoundary extends Component<Props, State> {
-  public state: State = {
-    hasError: false,
-    error: null,
-  };
+  constructor(props: Props) {
+    super(props);
+    this.state = { hasError: false };
+  }
 
-  public static getDerivedStateFromError(error: Error): State {
+  static getDerivedStateFromError(error: Error): State {
     return { hasError: true, error };
   }
 
-  public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    console.error('Uncaught error:', error, errorInfo);
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    // Log the error
+    logger.error('Error boundary caught an error', error, {
+      componentStack: errorInfo.componentStack,
+      errorBoundary: 'ErrorBoundary'
+    });
+
+    // Call custom error handler if provided
+    if (this.props.onError) {
+      this.props.onError(error, errorInfo);
+    }
+
+    // In production, you might want to send this to an error reporting service
+    // Example: Sentry.captureException(error, { contexts: { react: errorInfo } });
   }
 
-  public render() {
+  render() {
     if (this.state.hasError) {
+      // Render fallback UI
+      if (this.props.fallback) {
+        return this.props.fallback;
+      }
+
       return (
-        <div className="min-h-screen bg-white flex items-center justify-center p-6">
-          <div className="max-w-md w-full text-center">
-            <div className="mb-6">
-              <div className="w-20 h-20 bg-error/10 rounded-full flex items-center justify-center mx-auto mb-4">
-                <svg className="w-10 h-10 text-error" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                </svg>
-              </div>
-              <h1 className="font-heading font-bold text-2xl text-neutral-900 mb-2">
-                Something went wrong
-              </h1>
-              <p className="font-sans text-neutral-600 mb-4">
-                An unexpected error occurred. Please try refreshing the page.
-              </p>
-              {this.state.error && (
-                <details className="mt-4 p-4 bg-neutral-100 rounded-lg text-left">
-                  <summary className="font-sans font-medium text-sm cursor-pointer">
-                    Error Details
-                  </summary>
-                  <pre className="font-mono text-xs text-neutral-700 mt-2 overflow-auto">
-                    {this.state.error.toString()}
-                  </pre>
-                </details>
-              )}
+        <div className="min-h-screen bg-neutral-50 flex items-center justify-center p-4">
+          <div className="max-w-md w-full bg-white rounded-lg shadow-lg p-6 text-center">
+            <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <svg
+                className="w-8 h-8 text-red-600"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z"
+                />
+              </svg>
             </div>
-            <button
-              onClick={() => window.location.href = '/'}
-              className="w-full h-12 bg-primary-500 hover:bg-primary-600 text-white font-sans font-semibold rounded-lg transition-colors"
-            >
-              Go to Home
-            </button>
+            <h2 className="text-xl font-heading font-bold text-neutral-900 mb-2">
+              Something went wrong
+            </h2>
+            <p className="text-neutral-600 mb-6">
+              We apologize for the inconvenience. Please try refreshing the page or contact support if the problem persists.
+            </p>
+            <div className="space-y-3">
+              <button
+                onClick={() => window.location.reload()}
+                className="w-full bg-primary-500 hover:bg-primary-600 text-white font-medium py-2 px-4 rounded-lg transition-colors"
+              >
+                Refresh Page
+              </button>
+              <button
+                onClick={() => this.setState({ hasError: false, error: undefined })}
+                className="w-full bg-neutral-200 hover:bg-neutral-300 text-neutral-800 font-medium py-2 px-4 rounded-lg transition-colors"
+              >
+                Try Again
+              </button>
+            </div>
+            {process.env.NODE_ENV === 'development' && this.state.error && (
+              <details className="mt-4 text-left">
+                <summary className="cursor-pointer text-sm text-neutral-500 hover:text-neutral-700">
+                  Error Details (Development)
+                </summary>
+                <pre className="mt-2 text-xs bg-neutral-100 p-2 rounded overflow-auto">
+                  {this.state.error.toString()}
+                </pre>
+              </details>
+            )}
           </div>
         </div>
       );
@@ -65,3 +101,11 @@ export class ErrorBoundary extends Component<Props, State> {
     return this.props.children;
   }
 }
+
+// Hook for functional components to report errors
+export const useErrorHandler = () => {
+  return (error: Error, errorInfo?: { componentStack?: string }) => {
+    logger.error('Error reported via useErrorHandler', error, errorInfo);
+    // Could also send to error reporting service
+  };
+};

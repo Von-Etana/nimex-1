@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { useAuth } from '../contexts/AuthContext';
 import {
   LayoutDashboard,
   Users,
@@ -8,7 +7,6 @@ import {
   CreditCard,
   FileCheck,
   Settings,
-  LogOut,
   Menu,
   X,
   ShieldCheck,
@@ -24,7 +22,6 @@ interface MenuItem {
 export const AdminLayout: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { profile, signOut, hasPermission } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const menuItems: MenuItem[] = [
@@ -37,42 +34,41 @@ export const AdminLayout: React.FC = () => {
       icon: Users,
       label: 'Users',
       path: '/admin/users',
-      permission: 'users.view',
     },
     {
       icon: Package,
       label: 'Listings',
       path: '/admin/listings',
-      permission: 'products.view',
     },
     {
       icon: CreditCard,
       label: 'Transactions',
       path: '/admin/transactions',
-      permission: 'transactions.view',
     },
     {
       icon: FileCheck,
       label: 'KYC Approvals',
       path: '/admin/kyc',
-      permission: 'kyc.view',
     },
     {
       icon: Settings,
       label: 'Settings',
       path: '/admin/settings',
-      permission: 'settings.view',
+    },
+    {
+      icon: ShieldCheck,
+      label: 'Marketers',
+      path: '/admin/marketers',
+    },
+    {
+      icon: CreditCard,
+      label: 'Commissions',
+      path: '/admin/commissions',
     },
   ];
 
-  const visibleMenuItems = menuItems.filter(
-    (item) => !item.permission || hasPermission(item.permission)
-  );
-
-  const handleSignOut = async () => {
-    await signOut();
-    navigate('/signin');
-  };
+  // Show all menu items since there's no authentication
+  const visibleMenuItems = menuItems;
 
   const isActive = (path: string) => {
     if (path === '/admin') {
@@ -115,16 +111,14 @@ export const AdminLayout: React.FC = () => {
           <div className="p-4 border-b border-neutral-200">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 bg-primary-100 rounded-full flex items-center justify-center">
-                <span className="font-heading font-bold text-primary-700">
-                  {profile?.full_name?.charAt(0) || 'A'}
-                </span>
+                <ShieldCheck className="w-6 h-6 text-primary-700" />
               </div>
               <div className="flex-1 min-w-0">
                 <p className="font-sans font-medium text-sm text-neutral-900 truncate">
-                  {profile?.full_name || 'Admin'}
+                  Admin Panel
                 </p>
                 <p className="font-sans text-xs text-neutral-500 truncate">
-                  {profile?.adminRoles?.[0]?.display_name || 'Administrator'}
+                  System Administration
                 </p>
               </div>
             </div>
@@ -158,15 +152,6 @@ export const AdminLayout: React.FC = () => {
             </ul>
           </nav>
 
-          <div className="p-4 border-t border-neutral-200">
-            <button
-              onClick={handleSignOut}
-              className="w-full flex items-center gap-3 px-4 py-3 rounded-lg font-sans text-sm text-red-600 hover:bg-red-50 transition-colors"
-            >
-              <LogOut className="w-5 h-5" />
-              <span>Sign Out</span>
-            </button>
-          </div>
         </div>
       </aside>
 

@@ -7,6 +7,8 @@ import { Badge } from '../components/ui/badge';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
+import { sanitizeText } from '../lib/sanitization';
+import { logger } from '../lib/logger';
 
 import { triggerCartUpdate } from '../hooks/useCart';
 interface ProductDetail {
@@ -82,7 +84,7 @@ export const ProductDetailScreen: React.FC = () => {
         }
       }
     } catch (error) {
-      console.error('Error fetching product:', error);
+      logger.error('Error fetching product', error);
     } finally {
       setLoading(false);
     }
@@ -101,7 +103,7 @@ export const ProductDetailScreen: React.FC = () => {
 
       setIsFavorite(!!data);
     } catch (error) {
-      console.error('Error checking favorite:', error);
+      logger.error('Error checking favorite', error);
     }
   };
 
@@ -129,7 +131,7 @@ export const ProductDetailScreen: React.FC = () => {
         setIsFavorite(true);
       }
     } catch (error) {
-      console.error('Error toggling favorite:', error);
+      logger.error('Error toggling favorite', error);
     }
   };
 
@@ -375,7 +377,7 @@ export const ProductDetailScreen: React.FC = () => {
                 Description
               </h2>
               <p className="font-sans text-neutral-700 leading-body whitespace-pre-line">
-                {product.description}
+                {sanitizeText(product.description)}
               </p>
             </div>
 

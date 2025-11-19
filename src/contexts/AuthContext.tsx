@@ -136,6 +136,159 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => subscription.unsubscribe();
   }, []);
 
+  // Real-time subscription for KYC status changes
+  useEffect(() => {
+    if (!state.user?.id) return;
+
+    const kycSubscription = supabase
+      .channel('kyc_status_changes')
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'kyc_submissions',
+          filter: `user_id=eq.${state.user.id}`,
+        },
+        (payload) => {
+          logger.info('KYC status changed, refreshing profile');
+          fetchProfile(state.user!.id);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      kycSubscription.unsubscribe();
+    };
+  }, [state.user?.id]);
+
+  // Real-time subscription for vendor subscription status changes
+  useEffect(() => {
+    if (!state.user?.id) return;
+
+    const vendorSubscription = supabase
+      .channel('vendor_status_changes')
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'vendors',
+          filter: `user_id=eq.${state.user.id}`,
+        },
+        (payload) => {
+          logger.info('Vendor status changed, refreshing profile');
+          fetchProfile(state.user!.id);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      vendorSubscription.unsubscribe();
+    };
+  }, [state.user?.id]);
+
+  // Real-time subscription for product status changes (for vendors to see their product approvals)
+  useEffect(() => {
+    if (!state.user?.id) return;
+
+    const productSubscription = supabase
+      .channel('product_status_changes')
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'products',
+          filter: `vendor_id=eq.${state.user.id}`,
+        },
+        (payload) => {
+          logger.info('Product status changed, vendor may need to refresh product list');
+          // Vendors can refresh their product listings when status changes
+        }
+      )
+      .subscribe();
+
+    return () => {
+      productSubscription.unsubscribe();
+    };
+  }, [state.user?.id]);
+
+  // Real-time subscription for admin role assignment changes
+  useEffect(() => {
+    if (!state.user?.id) return;
+
+    const roleSubscription = supabase
+      .channel('role_assignment_changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'admin_role_assignments',
+          filter: `user_id=eq.${state.user.id}`,
+        },
+        (payload) => {
+          logger.info('Admin role assignment changed, refreshing profile');
+          fetchProfile(state.user!.id);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      roleSubscription.unsubscribe();
+    };
+  }, [state.user?.id]);
+
+  // Real-time subscription for commission/marketer changes
+  useEffect(() => {
+    if (!state.user?.id) return;
+
+    const commissionSubscription = supabase
+      .channel('commission_changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'commission_payments',
+          filter: `user_id=eq.${state.user.id}`,
+        },
+        (payload) => {
+          logger.info('Commission payment changed, user may need to refresh commission data');
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'vendor_referrals',
+          filter: `referrer_id=eq.${state.user.id}`,
+        },
+        (payload) => {
+          logger.info('Vendor referral changed, user may need to refresh referral data');
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'marketer_referrals',
+          filter: `referrer_id=eq.${state.user.id}`,
+        },
+        (payload) => {
+          logger.info('Marketer referral changed, user may need to refresh referral data');
+        }
+      )
+      .subscribe();
+
+    return () => {
+      commissionSubscription.unsubscribe();
+    };
+  }, [state.user?.id]);
+
   const fetchBasicProfile = async (userId: string): Promise<Profile | null> => {
     logger.info(`Fetching basic profile for user: ${userId}`);
     const { data, error } = await supabase
@@ -224,7 +377,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     const businessName = (vendorData as VendorOnboardingCheck).business_name || '';
-    return !businessName || businessName.trim() === '';
+    const hasBusinessName = businessName && businessName.trim() !== '';
+
+    // Also check KYC status
+    const { data: kycData, error: kycError } = await (supabase
+      .from('kyc_submissions') as any)
+      .select('status')
+      .eq('user_id', userId)
+      .eq('status', 'approved')
+      .maybeSingle();
+
+    const isKycApproved = !kycError && kycData !== null;
+
+    logger.info(`Vendor onboarding check: businessName=${hasBusinessName}, kycApproved=${isKycApproved}`);
+    return !hasBusinessName || !isKycApproved;
   };
 
   /**

@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { logger } from './logger';
 import type { Database } from '../types/database';
 
 // Check if we're in Node.js environment (for testing)
@@ -17,7 +18,7 @@ const getEnvVar = (name: string): string => {
 
   // For testing purposes, allow empty values but log warning
   if (!value) {
-    console.warn(`⚠️  Missing environment variable: ${name} - using empty string for testing`);
+    logger.warn(`Missing environment variable: ${name} - using empty string for testing`);
     return '';
   }
   return value;

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import { ToastProvider } from './contexts/ToastContext';
@@ -9,39 +9,77 @@ import { VendorLayout } from './components/vendor';
 import { AdminLayout } from './layouts/AdminLayout';
 import { FrameScreen } from './screens/FrameScreen';
 import { LoginScreen, SignupScreen } from './screens/auth';
-import { AdminDashboardScreen, AdminUsersScreen, AdminListingsScreen, AdminTransactionsScreen, AdminKYCApprovalsScreen, AdminSettingsScreen, AdminMarketersScreen, AdminCommissionsScreen } from './screens/admin';
-import { ProductSearchScreen } from './screens/ProductSearchScreen';
-import { ProductDetailScreen } from './screens/ProductDetailScreen';
-import { CartScreen } from './screens/CartScreen';
-import { CategoriesScreen } from './screens/CategoriesScreen';
-import { VendorsScreen } from './screens/VendorsScreen';
-import { VendorProfileScreen } from './screens/VendorProfileScreen';
-import { ProductsScreen } from './screens/ProductsScreen';
-import { ChatScreen } from './screens/ChatScreen';
-import { BlogScreen } from './screens/BlogScreen';
-import { FAQScreen } from './screens/FAQScreen';
-import { AboutScreen } from './screens/AboutScreen';
-import { TermsScreen } from './screens/TermsScreen';
-import { PrivacyScreen } from './screens/PrivacyScreen';
-import { ContactScreen } from './screens/ContactScreen';
-import { AdsManagementScreen, VendorDashboardScreen, OrdersManagementScreen, VendorProfileSettingsScreen, ProductsManagementScreen, CreateProductScreen, VendorAccountScreen, AnalyticsScreen, CustomersScreen, MessagesScreen, WalletScreen, ReferralsScreen, VendorOnboardingScreen } from './screens/vendor';
-import { CheckoutScreen } from './screens/CheckoutScreen';
-import { OrderTrackingScreen } from './screens/OrderTrackingScreen';
-import { DeliveryManagementScreen } from './screens/vendor/DeliveryManagementScreen';
-import { EscrowDashboardScreen } from './screens/vendor/EscrowDashboardScreen';
-import { ProfileScreen } from './screens/ProfileScreen';
-import { OrdersScreen } from './screens/OrdersScreen';
-import { NotificationsScreen } from './screens/NotificationsScreen';
-import { MarketerRegistrationScreen } from './screens/MarketerRegistrationScreen';
-import { NotFoundScreen } from './screens/NotFoundScreen';
 import { configValidator } from './services/configValidator';
+import { ErrorBoundary } from './components/ErrorBoundary';
+import { logger } from './lib/logger';
+import { Loader2 } from 'lucide-react';
+
+// Lazy load screens
+const AdminDashboardScreen = React.lazy(() => import('./screens/admin').then(module => ({ default: module.AdminDashboardScreen })));
+const AdminUsersScreen = React.lazy(() => import('./screens/admin').then(module => ({ default: module.AdminUsersScreen })));
+const AdminListingsScreen = React.lazy(() => import('./screens/admin').then(module => ({ default: module.AdminListingsScreen })));
+const AdminTransactionsScreen = React.lazy(() => import('./screens/admin').then(module => ({ default: module.AdminTransactionsScreen })));
+const AdminDisputesScreen = React.lazy(() => import('./screens/admin').then(module => ({ default: module.AdminDisputesScreen })));
+const AdminEscrowScreen = React.lazy(() => import('./screens/admin').then(module => ({ default: module.AdminEscrowScreen })));
+const AdminSupportScreen = React.lazy(() => import('./screens/admin').then(module => ({ default: module.AdminSupportScreen })));
+const AdminKYCApprovalsScreen = React.lazy(() => import('./screens/admin').then(module => ({ default: module.AdminKYCApprovalsScreen })));
+const AdminSettingsScreen = React.lazy(() => import('./screens/admin').then(module => ({ default: module.AdminSettingsScreen })));
+const AdminMarketersScreen = React.lazy(() => import('./screens/admin').then(module => ({ default: module.AdminMarketersScreen })));
+const AdminCommissionsScreen = React.lazy(() => import('./screens/admin').then(module => ({ default: module.AdminCommissionsScreen })));
+
+const ProductSearchScreen = React.lazy(() => import('./screens/ProductSearchScreen').then(module => ({ default: module.ProductSearchScreen })));
+const ProductDetailScreen = React.lazy(() => import('./screens/ProductDetailScreen').then(module => ({ default: module.ProductDetailScreen })));
+const CartScreen = React.lazy(() => import('./screens/CartScreen').then(module => ({ default: module.CartScreen })));
+const CategoriesScreen = React.lazy(() => import('./screens/CategoriesScreen').then(module => ({ default: module.CategoriesScreen })));
+const VendorsScreen = React.lazy(() => import('./screens/VendorsScreen').then(module => ({ default: module.VendorsScreen })));
+const VendorProfileScreen = React.lazy(() => import('./screens/VendorProfileScreen').then(module => ({ default: module.VendorProfileScreen })));
+const ProductsScreen = React.lazy(() => import('./screens/ProductsScreen').then(module => ({ default: module.ProductsScreen })));
+const ChatScreen = React.lazy(() => import('./screens/ChatScreen').then(module => ({ default: module.ChatScreen })));
+const SupportScreen = React.lazy(() => import('./screens/SupportScreen').then(module => ({ default: module.SupportScreen })));
+const BlogScreen = React.lazy(() => import('./screens/BlogScreen').then(module => ({ default: module.BlogScreen })));
+const FAQScreen = React.lazy(() => import('./screens/FAQScreen').then(module => ({ default: module.FAQScreen })));
+const AboutScreen = React.lazy(() => import('./screens/AboutScreen').then(module => ({ default: module.AboutScreen })));
+const TermsScreen = React.lazy(() => import('./screens/TermsScreen').then(module => ({ default: module.TermsScreen })));
+const PrivacyScreen = React.lazy(() => import('./screens/PrivacyScreen').then(module => ({ default: module.PrivacyScreen })));
+const ContactScreen = React.lazy(() => import('./screens/ContactScreen').then(module => ({ default: module.ContactScreen })));
+
+// Vendor screens
+const AdsManagementScreen = React.lazy(() => import('./screens/vendor').then(module => ({ default: module.AdsManagementScreen })));
+const VendorDashboardScreen = React.lazy(() => import('./screens/vendor').then(module => ({ default: module.VendorDashboardScreen })));
+const OrdersManagementScreen = React.lazy(() => import('./screens/vendor').then(module => ({ default: module.OrdersManagementScreen })));
+const VendorProfileSettingsScreen = React.lazy(() => import('./screens/vendor').then(module => ({ default: module.VendorProfileSettingsScreen })));
+const ProductsManagementScreen = React.lazy(() => import('./screens/vendor').then(module => ({ default: module.ProductsManagementScreen })));
+const CreateProductScreen = React.lazy(() => import('./screens/vendor').then(module => ({ default: module.CreateProductScreen })));
+const VendorAccountScreen = React.lazy(() => import('./screens/vendor').then(module => ({ default: module.VendorAccountScreen })));
+const AnalyticsScreen = React.lazy(() => import('./screens/vendor').then(module => ({ default: module.AnalyticsScreen })));
+const CustomersScreen = React.lazy(() => import('./screens/vendor').then(module => ({ default: module.CustomersScreen })));
+const MessagesScreen = React.lazy(() => import('./screens/vendor').then(module => ({ default: module.MessagesScreen })));
+const WalletScreen = React.lazy(() => import('./screens/vendor').then(module => ({ default: module.WalletScreen })));
+const ReferralsScreen = React.lazy(() => import('./screens/vendor').then(module => ({ default: module.ReferralsScreen })));
+const VendorOnboardingScreen = React.lazy(() => import('./screens/vendor').then(module => ({ default: module.VendorOnboardingScreen })));
+const DeliveryManagementScreen = React.lazy(() => import('./screens/vendor/DeliveryManagementScreen').then(module => ({ default: module.DeliveryManagementScreen })));
+const EscrowDashboardScreen = React.lazy(() => import('./screens/vendor/EscrowDashboardScreen').then(module => ({ default: module.EscrowDashboardScreen })));
+
+const CheckoutScreen = React.lazy(() => import('./screens/CheckoutScreen').then(module => ({ default: module.CheckoutScreen })));
+const OrderTrackingScreen = React.lazy(() => import('./screens/OrderTrackingScreen').then(module => ({ default: module.OrderTrackingScreen })));
+const ProfileScreen = React.lazy(() => import('./screens/ProfileScreen').then(module => ({ default: module.ProfileScreen })));
+const OrdersScreen = React.lazy(() => import('./screens/OrdersScreen').then(module => ({ default: module.OrdersScreen })));
+const NotificationsScreen = React.lazy(() => import('./screens/NotificationsScreen').then(module => ({ default: module.NotificationsScreen })));
+const MarketerRegistrationScreen = React.lazy(() => import('./screens/MarketerRegistrationScreen').then(module => ({ default: module.MarketerRegistrationScreen })));
+const NotFoundScreen = React.lazy(() => import('./screens/NotFoundScreen').then(module => ({ default: module.NotFoundScreen })));
+
+const PageLoader = () => (
+  <div className="min-h-screen flex items-center justify-center bg-neutral-50">
+    <Loader2 className="w-8 h-8 animate-spin text-primary-600" />
+  </div>
+);
 
 const App: React.FC = () => {
   // Validate configuration at startup (non-blocking)
   React.useEffect(() => {
     const result = configValidator.validate();
     if (!result.isValid) {
-      console.warn('Configuration validation warnings:', {
+      logger.warn('Configuration validation warnings', {
         missingVars: result.missingVars,
         errors: result.errors,
       });
@@ -54,7 +92,7 @@ const App: React.FC = () => {
         const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
         if (!supabaseUrl || !supabaseKey) {
-          console.warn('Supabase configuration missing, skipping demo account creation');
+          logger.warn('Supabase configuration missing, skipping demo account creation');
           return;
         }
 
@@ -69,12 +107,12 @@ const App: React.FC = () => {
 
         if (response.ok) {
           const result = await response.json();
-          console.log('Demo accounts setup:', result);
+          logger.info('Demo accounts setup completed', result);
         } else {
-          console.warn('Failed to create demo accounts:', response.statusText);
+          logger.warn('Failed to create demo accounts', { statusText: response.statusText });
         }
       } catch (error) {
-        console.warn('Error creating demo accounts:', error);
+        logger.error('Error creating demo accounts', error);
       }
     };
 
@@ -85,462 +123,427 @@ const App: React.FC = () => {
   }, []);
 
   return (
-    <BrowserRouter>
-      <AuthProvider>
-        <ToastProvider>
-          <Routes>
-            <Route path="/login" element={<LoginScreen />} />
-            <Route path="/signin" element={<LoginScreen />} />
-            <Route path="/signup" element={<SignupScreen />} />
-            <Route path="/marketer/register" element={<MarketerRegistrationScreen />} />
+    <ErrorBoundary>
+      <BrowserRouter>
+        <AuthProvider>
+          <ToastProvider>
+            <Suspense fallback={<PageLoader />}>
+              <Routes>
+                <Route path="/login" element={<LoginScreen />} />
+                <Route path="/signin" element={<LoginScreen />} />
+                <Route path="/signup" element={<SignupScreen />} />
+                <Route path="/marketer/register" element={<MarketerRegistrationScreen />} />
 
-          <Route
-            path="/"
-            element={
-              <MainLayout>
-                <FrameScreen />
-              </MainLayout>
-            }
-          />
+                <Route
+                  path="/"
+                  element={
+                    <MainLayout>
+                      <FrameScreen />
+                    </MainLayout>
+                  }
+                />
 
-          <Route
-            path="/categories"
-            element={
-              <MainLayout>
-                <CategoriesScreen />
-              </MainLayout>
-            }
-          />
+                <Route
+                  path="/categories"
+                  element={
+                    <MainLayout>
+                      <CategoriesScreen />
+                    </MainLayout>
+                  }
+                />
 
-          <Route
-            path="/products"
-            element={
-              <MainLayout>
-                <ProductsScreen />
-              </MainLayout>
-            }
-          />
+                <Route
+                  path="/products"
+                  element={
+                    <MainLayout>
+                      <ProductsScreen />
+                    </MainLayout>
+                  }
+                />
 
-          <Route
-            path="/vendors"
-            element={
-              <MainLayout>
-                <VendorsScreen />
-              </MainLayout>
-            }
-          />
+                <Route
+                  path="/vendors"
+                  element={
+                    <MainLayout>
+                      <VendorsScreen />
+                    </MainLayout>
+                  }
+                />
 
-          <Route
-            path="/vendor/:id"
-            element={
-              <MainLayout>
-                <VendorProfileScreen />
-              </MainLayout>
-            }
-          />
+                <Route
+                  path="/vendor/:id"
+                  element={
+                    <MainLayout>
+                      <VendorProfileScreen />
+                    </MainLayout>
+                  }
+                />
 
-          <Route
-            path="/search"
-            element={
-              <MainLayout>
-                <ProductSearchScreen />
-              </MainLayout>
-            }
-          />
+                <Route
+                  path="/search"
+                  element={
+                    <MainLayout>
+                      <ProductSearchScreen />
+                    </MainLayout>
+                  }
+                />
 
-          <Route
-            path="/product/:id"
-            element={
-              <MainLayout>
-                <ProductDetailScreen />
-              </MainLayout>
-            }
-          />
+                <Route
+                  path="/product/:id"
+                  element={
+                    <MainLayout>
+                      <ProductDetailScreen />
+                    </MainLayout>
+                  }
+                />
 
-          <Route
-            path="/cart"
-            element={
-              <MainLayout>
-                <CartScreen />
-              </MainLayout>
-            }
-          />
+                <Route
+                  path="/cart"
+                  element={
+                    <MainLayout>
+                      <CartScreen />
+                    </MainLayout>
+                  }
+                />
 
-          <Route
-            path="/checkout"
-            element={
-              <ProtectedRoute>
-                <MainLayout>
-                  <CheckoutScreen />
-                </MainLayout>
-              </ProtectedRoute>
-            }
-          />
+                <Route
+                  path="/checkout"
+                  element={
+                    <ProtectedRoute>
+                      <MainLayout>
+                        <CheckoutScreen />
+                      </MainLayout>
+                    </ProtectedRoute>
+                  }
+                />
 
-          <Route
-            path="/orders/:orderId"
-            element={
-              <ProtectedRoute>
-                <MainLayout>
-                  <OrderTrackingScreen />
-                </MainLayout>
-              </ProtectedRoute>
-            }
-          />
+                <Route
+                  path="/orders/:orderId"
+                  element={
+                    <ProtectedRoute>
+                      <MainLayout>
+                        <OrderTrackingScreen />
+                      </MainLayout>
+                    </ProtectedRoute>
+                  }
+                />
 
-          <Route
-            path="/chat"
-            element={
-              <ProtectedRoute>
-                <MainLayout>
-                  <ChatScreen />
-                </MainLayout>
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/chat/:vendorId"
-            element={
-              <ProtectedRoute>
-                <MainLayout>
-                  <ChatScreen />
-                </MainLayout>
-              </ProtectedRoute>
-            }
-          />
+                <Route
+                  path="/chat"
+                  element={
+                    <ProtectedRoute>
+                      <MainLayout>
+                        <ChatScreen />
+                      </MainLayout>
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/chat/:vendorId"
+                  element={
+                    <ProtectedRoute>
+                      <MainLayout>
+                        <ChatScreen />
+                      </MainLayout>
+                    </ProtectedRoute>
+                  }
+                />
 
-          <Route
-            path="/profile"
-            element={
-              <ProtectedRoute>
-                <MainLayout>
-                  <ProfileScreen />
-                </MainLayout>
-              </ProtectedRoute>
-            }
-          />
+                <Route
+                  path="/support"
+                  element={
+                    <ProtectedRoute>
+                      <MainLayout>
+                        <SupportScreen />
+                      </MainLayout>
+                    </ProtectedRoute>
+                  }
+                />
 
-          <Route
-            path="/orders"
-            element={
-              <ProtectedRoute>
-                <MainLayout>
-                  <OrdersScreen />
-                </MainLayout>
-              </ProtectedRoute>
-            }
-          />
+                <Route
+                  path="/profile"
+                  element={
+                    <ProtectedRoute>
+                      <MainLayout>
+                        <ProfileScreen />
+                      </MainLayout>
+                    </ProtectedRoute>
+                  }
+                />
 
-          <Route
-            path="/notifications"
-            element={
-              <ProtectedRoute>
-                <MainLayout>
-                  <NotificationsScreen />
-                </MainLayout>
-              </ProtectedRoute>
-            }
-          />
+                <Route
+                  path="/orders"
+                  element={
+                    <ProtectedRoute>
+                      <MainLayout>
+                        <OrdersScreen />
+                      </MainLayout>
+                    </ProtectedRoute>
+                  }
+                />
 
-          <Route
-            path="/vendor/onboarding"
-            element={
-              <ProtectedRoute>
-                <VendorOnboardingScreen />
-              </ProtectedRoute>
-            }
-          />
+                <Route
+                  path="/notifications"
+                  element={
+                    <ProtectedRoute>
+                      <MainLayout>
+                        <NotificationsScreen />
+                      </MainLayout>
+                    </ProtectedRoute>
+                  }
+                />
 
-          <Route
-            path="/vendor/dashboard"
-            element={
-              <ProtectedRoute>
-                <VendorLayout>
-                  <VendorDashboardScreen />
-                </VendorLayout>
-              </ProtectedRoute>
-            }
-          />
+                <Route
+                  path="/vendor/onboarding"
+                  element={
+                    <ProtectedRoute>
+                      <VendorOnboardingScreen />
+                    </ProtectedRoute>
+                  }
+                />
 
-          <Route
-            path="/vendor/ads"
-            element={
-              <ProtectedRoute>
-                <VendorLayout>
-                  <AdsManagementScreen />
-                </VendorLayout>
-              </ProtectedRoute>
-            }
-          />
+                <Route
+                  path="/vendor/dashboard"
+                  element={
+                    <ProtectedRoute>
+                      <VendorLayout>
+                        <VendorDashboardScreen />
+                      </VendorLayout>
+                    </ProtectedRoute>
+                  }
+                />
 
-          <Route
-            path="/vendor/products"
-            element={
-              <ProtectedRoute>
-                <VendorLayout>
-                  <ProductsManagementScreen />
-                </VendorLayout>
-              </ProtectedRoute>
-            }
-          />
+                <Route
+                  path="/vendor/ads"
+                  element={
+                    <ProtectedRoute>
+                      <VendorLayout>
+                        <AdsManagementScreen />
+                      </VendorLayout>
+                    </ProtectedRoute>
+                  }
+                />
 
-          <Route
-            path="/vendor/products/create"
-            element={
-              <ProtectedRoute>
-                <VendorLayout>
-                  <CreateProductScreen />
-                </VendorLayout>
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/vendor/products/:id/edit"
-            element={
-              <ProtectedRoute>
-                <VendorLayout>
-                  <CreateProductScreen />
-                </VendorLayout>
-              </ProtectedRoute>
-            }
-          />
+                <Route
+                  path="/vendor/products"
+                  element={
+                    <ProtectedRoute>
+                      <VendorLayout>
+                        <ProductsManagementScreen />
+                      </VendorLayout>
+                    </ProtectedRoute>
+                  }
+                />
 
-          <Route
-            path="/vendor/orders"
-            element={
-              <ProtectedRoute>
-                <VendorLayout>
-                  <OrdersManagementScreen />
-                </VendorLayout>
-              </ProtectedRoute>
-            }
-          />
+                <Route
+                  path="/vendor/products/create"
+                  element={
+                    <ProtectedRoute>
+                      <VendorLayout>
+                        <CreateProductScreen />
+                      </VendorLayout>
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/vendor/products/:id/edit"
+                  element={
+                    <ProtectedRoute>
+                      <VendorLayout>
+                        <CreateProductScreen />
+                      </VendorLayout>
+                    </ProtectedRoute>
+                  }
+                />
 
-          <Route
-            path="/vendor/deliveries"
-            element={
-              <ProtectedRoute>
-                <VendorLayout>
-                  <DeliveryManagementScreen />
-                </VendorLayout>
-              </ProtectedRoute>
-            }
-          />
+                <Route
+                  path="/vendor/orders"
+                  element={
+                    <ProtectedRoute>
+                      <VendorLayout>
+                        <OrdersManagementScreen />
+                      </VendorLayout>
+                    </ProtectedRoute>
+                  }
+                />
 
-          <Route
-            path="/vendor/escrow"
-            element={
-              <ProtectedRoute>
-                <VendorLayout>
-                  <EscrowDashboardScreen />
-                </VendorLayout>
-              </ProtectedRoute>
-            }
-          />
+                <Route
+                  path="/vendor/deliveries"
+                  element={
+                    <ProtectedRoute>
+                      <VendorLayout>
+                        <DeliveryManagementScreen />
+                      </VendorLayout>
+                    </ProtectedRoute>
+                  }
+                />
 
-          <Route
-            path="/vendor/account"
-            element={
-              <ProtectedRoute>
-                <VendorLayout>
-                  <VendorAccountScreen />
-                </VendorLayout>
-              </ProtectedRoute>
-            }
-          />
+                <Route
+                  path="/vendor/escrow"
+                  element={
+                    <ProtectedRoute>
+                      <VendorLayout>
+                        <EscrowDashboardScreen />
+                      </VendorLayout>
+                    </ProtectedRoute>
+                  }
+                />
 
-          <Route
-            path="/vendor/settings"
-            element={
-              <ProtectedRoute>
-                <VendorLayout>
-                  <VendorProfileSettingsScreen />
-                </VendorLayout>
-              </ProtectedRoute>
-            }
-          />
+                <Route
+                  path="/vendor/account"
+                  element={
+                    <ProtectedRoute>
+                      <VendorLayout>
+                        <VendorAccountScreen />
+                      </VendorLayout>
+                    </ProtectedRoute>
+                  }
+                />
 
-          <Route
-            path="/vendor/analytics"
-            element={
-              <ProtectedRoute>
-                <VendorLayout>
-                  <AnalyticsScreen />
-                </VendorLayout>
-              </ProtectedRoute>
-            }
-          />
+                <Route
+                  path="/vendor/settings"
+                  element={
+                    <ProtectedRoute>
+                      <VendorLayout>
+                        <VendorProfileSettingsScreen />
+                      </VendorLayout>
+                    </ProtectedRoute>
+                  }
+                />
 
-          <Route
-            path="/vendor/customers"
-            element={
-              <ProtectedRoute>
-                <VendorLayout>
-                  <CustomersScreen />
-                </VendorLayout>
-              </ProtectedRoute>
-            }
-          />
+                <Route
+                  path="/vendor/analytics"
+                  element={
+                    <ProtectedRoute>
+                      <VendorLayout>
+                        <AnalyticsScreen />
+                      </VendorLayout>
+                    </ProtectedRoute>
+                  }
+                />
 
-          <Route
-            path="/vendor/messages"
-            element={
-              <ProtectedRoute>
-                <VendorLayout>
-                  <MessagesScreen />
-                </VendorLayout>
-              </ProtectedRoute>
-            }
-          />
+                <Route
+                  path="/vendor/customers"
+                  element={
+                    <ProtectedRoute>
+                      <VendorLayout>
+                        <CustomersScreen />
+                      </VendorLayout>
+                    </ProtectedRoute>
+                  }
+                />
 
-          <Route
-            path="/vendor/wallet"
-            element={
-              <ProtectedRoute>
-                <VendorLayout>
-                  <WalletScreen />
-                </VendorLayout>
-              </ProtectedRoute>
-            }
-          />
+                <Route
+                  path="/vendor/messages"
+                  element={
+                    <ProtectedRoute>
+                      <VendorLayout>
+                        <MessagesScreen />
+                      </VendorLayout>
+                    </ProtectedRoute>
+                  }
+                />
 
-          <Route
-            path="/vendor/referrals"
-            element={
-              <ProtectedRoute>
-                <VendorLayout>
-                  <ReferralsScreen />
-                </VendorLayout>
-              </ProtectedRoute>
-            }
-          />
+                <Route
+                  path="/vendor/wallet"
+                  element={
+                    <ProtectedRoute>
+                      <VendorLayout>
+                        <WalletScreen />
+                      </VendorLayout>
+                    </ProtectedRoute>
+                  }
+                />
 
-          <Route
-            path="/blog"
-            element={
-              <MainLayout>
-                <BlogScreen />
-              </MainLayout>
-            }
-          />
+                <Route
+                  path="/vendor/referrals"
+                  element={
+                    <ProtectedRoute>
+                      <VendorLayout>
+                        <ReferralsScreen />
+                      </VendorLayout>
+                    </ProtectedRoute>
+                  }
+                />
 
-          <Route
-            path="/faq"
-            element={
-              <MainLayout>
-                <FAQScreen />
-              </MainLayout>
-            }
-          />
+                <Route
+                  path="/blog"
+                  element={
+                    <MainLayout>
+                      <BlogScreen />
+                    </MainLayout>
+                  }
+                />
 
-          <Route
-            path="/about"
-            element={
-              <MainLayout>
-                <AboutScreen />
-              </MainLayout>
-            }
-          />
+                <Route
+                  path="/faq"
+                  element={
+                    <MainLayout>
+                      <FAQScreen />
+                    </MainLayout>
+                  }
+                />
 
-          <Route
-            path="/terms"
-            element={
-              <MainLayout>
-                <TermsScreen />
-              </MainLayout>
-            }
-          />
+                <Route
+                  path="/about"
+                  element={
+                    <MainLayout>
+                      <AboutScreen />
+                    </MainLayout>
+                  }
+                />
 
-          <Route
-            path="/privacy"
-            element={
-              <MainLayout>
-                <PrivacyScreen />
-              </MainLayout>
-            }
-          />
+                <Route
+                  path="/terms"
+                  element={
+                    <MainLayout>
+                      <TermsScreen />
+                    </MainLayout>
+                  }
+                />
 
-          <Route
-            path="/contact"
-            element={
-              <MainLayout>
-                <ContactScreen />
-              </MainLayout>
-            }
-          />
+                <Route
+                  path="/privacy"
+                  element={
+                    <MainLayout>
+                      <PrivacyScreen />
+                    </MainLayout>
+                  }
+                />
 
-          <Route
-            path="/admin"
-            element={
-              <ProtectedAdminRoute>
-                <AdminLayout />
-              </ProtectedAdminRoute>
-            }
-          >
-            <Route index element={<AdminDashboardScreen />} />
-            <Route
-              path="users"
-              element={
-                <ProtectedAdminRoute requiredPermission="users.view">
-                  <AdminUsersScreen />
-                </ProtectedAdminRoute>
-              }
-            />
-            <Route
-              path="listings"
-              element={
-                <ProtectedAdminRoute requiredPermission="products.view">
-                  <AdminListingsScreen />
-                </ProtectedAdminRoute>
-              }
-            />
-            <Route
-              path="transactions"
-              element={
-                <ProtectedAdminRoute requiredPermission="transactions.view">
-                  <AdminTransactionsScreen />
-                </ProtectedAdminRoute>
-              }
-            />
-            <Route
-              path="kyc"
-              element={
-                <ProtectedAdminRoute requiredPermission="kyc.view">
-                  <AdminKYCApprovalsScreen />
-                </ProtectedAdminRoute>
-              }
-            />
-            <Route
-              path="settings"
-              element={
-                <ProtectedAdminRoute requiredPermission="settings.view">
-                  <AdminSettingsScreen />
-                </ProtectedAdminRoute>
-              }
-            />
-            <Route
-              path="marketers"
-              element={
-                <ProtectedAdminRoute>
-                  <AdminMarketersScreen />
-                </ProtectedAdminRoute>
-              }
-            />
-            <Route
-              path="commissions"
-              element={
-                <ProtectedAdminRoute>
-                  <AdminCommissionsScreen />
-                </ProtectedAdminRoute>
-              }
-            />
-          </Route>
+                <Route
+                  path="/contact"
+                  element={
+                    <MainLayout>
+                      <ContactScreen />
+                    </MainLayout>
+                  }
+                />
 
-          <Route path="*" element={<NotFoundScreen />} />
-          </Routes>
-        </ToastProvider>
-      </AuthProvider>
-    </BrowserRouter>
+                <Route
+                  path="/admin"
+                  element={<AdminLayout />}
+                >
+                  <Route index element={<AdminDashboardScreen />} />
+                  <Route path="users" element={<AdminUsersScreen />} />
+                  <Route path="listings" element={<AdminListingsScreen />} />
+                  <Route path="transactions" element={<AdminTransactionsScreen />} />
+                  <Route path="disputes" element={<AdminDisputesScreen />} />
+                  <Route path="escrow" element={<AdminEscrowScreen />} />
+                  <Route path="support" element={<AdminSupportScreen />} />
+                  <Route path="kyc" element={<AdminKYCApprovalsScreen />} />
+                  <Route path="settings" element={<AdminSettingsScreen />} />
+                  <Route path="marketers" element={<AdminMarketersScreen />} />
+                  <Route path="commissions" element={<AdminCommissionsScreen />} />
+                </Route>
+
+                <Route path="*" element={<NotFoundScreen />} />
+              </Routes>
+            </Suspense>
+          </ToastProvider>
+        </AuthProvider>
+      </BrowserRouter>
+    </ErrorBoundary>
   );
 };
 

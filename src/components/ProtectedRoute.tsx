@@ -1,6 +1,7 @@
 import React from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { logger } from '../lib/logger';
 import type { UserRole } from '../types/database';
 
 interface ProtectedRouteProps {
@@ -36,7 +37,7 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
 
   // Check if vendor needs onboarding (but allow access to onboarding page itself)
   if (user && profile?.role === 'vendor' && profile.needsOnboarding && location.pathname !== '/vendor/onboarding') {
-    console.log('ProtectedRoute: Vendor needs onboarding, redirecting to /vendor/onboarding', {
+    logger.info('Vendor needs onboarding, redirecting to /vendor/onboarding', {
       userId: user.id,
       role: profile.role,
       needsOnboarding: profile.needsOnboarding,
@@ -46,7 +47,7 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   }
 
   if (user && profile?.role === 'vendor' && !profile.needsOnboarding && location.pathname === '/vendor/onboarding') {
-    console.log('ProtectedRoute: Vendor onboarding complete, redirecting to dashboard', {
+    logger.info('Vendor onboarding complete, redirecting to dashboard', {
       userId: user.id,
       role: profile.role,
       needsOnboarding: profile.needsOnboarding,
