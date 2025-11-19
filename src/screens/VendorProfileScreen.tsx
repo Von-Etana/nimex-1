@@ -9,7 +9,6 @@ import {
   ShoppingBag,
   Clock,
   Package,
-  TrendingUp,
   Users,
   MapPin,
   CheckCircle,
@@ -79,7 +78,7 @@ export const VendorProfileScreen: React.FC = () => {
       }
 
       // Fetch recent reviews
-      const { data: reviewsData, error: reviewsError } = await supabase
+      const { data: reviewsData } = await supabase
         .from('reviews')
         .select(`
           id,

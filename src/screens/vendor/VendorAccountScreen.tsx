@@ -28,6 +28,9 @@ interface PayoutMethod {
   type: string;
   details: string;
   isPrimary: boolean;
+  bank_name?: string;
+  account_number?: string;
+  account_name?: string;
 }
 
 export const VendorAccountScreen: React.FC = () => {
@@ -68,6 +71,7 @@ export const VendorAccountScreen: React.FC = () => {
 
   // Payout Method State
   const [isAddPayoutModalOpen, setIsAddPayoutModalOpen] = useState(false);
+  const [editingPayoutMethodId, setEditingPayoutMethodId] = useState<string | null>(null);
   const [newPayoutMethod, setNewPayoutMethod] = useState({
     bankName: '',
     accountNumber: '',
@@ -222,30 +226,44 @@ export const VendorAccountScreen: React.FC = () => {
 
     setSaving(true);
     try {
-      const newMethod: PayoutMethod = {
-        id: crypto.randomUUID(),
-        type: 'Bank Account',
-        details: `${newMethod.bankName} - ${newMethod.accountNumber}`, // For display
-        isPrimary: newPayoutMethod.isPrimary || payoutMethods.length === 0,
-        // Store actual details for future use if needed, though PayoutMethod interface might need updating
-        // For now, we map to the existing structure
-      };
+      let updatedMethods: PayoutMethod[];
 
-      // In a real app, we would store the full object. 
-      // Let's update the local state first to see how it looks.
-      // We need to store the full details in the DB.
+      if (editingPayoutMethodId) {
+        // Update existing method
+        updatedMethods = payoutMethods.map(m => {
+          if (m.id === editingPayoutMethodId) {
+            return {
+              ...m,
+              details: `${newPayoutMethod.bankName} - ${newPayoutMethod.accountNumber}`,
+              isPrimary: newPayoutMethod.isPrimary,
+              bank_name: newPayoutMethod.bankName,
+              account_number: newPayoutMethod.accountNumber,
+              account_name: newPayoutMethod.accountName
+            };
+          }
+          return m;
+        });
+      } else {
+        // Add new method
+        const newMethod: PayoutMethod = {
+          id: crypto.randomUUID(),
+          type: 'Bank Account',
+          details: `${newPayoutMethod.bankName} - ${newPayoutMethod.accountNumber}`,
+          isPrimary: newPayoutMethod.isPrimary || payoutMethods.length === 0,
+          bank_name: newPayoutMethod.bankName,
+          account_number: newPayoutMethod.accountNumber,
+          account_name: newPayoutMethod.accountName
+        };
+        updatedMethods = [...payoutMethods, newMethod];
+      }
 
-      const updatedMethods = [...payoutMethods, {
-        ...newMethod,
-        bank_name: newPayoutMethod.bankName,
-        account_number: newPayoutMethod.accountNumber,
-        account_name: newPayoutMethod.accountName
-      }];
-
-      // If this is primary, make others non-primary
-      if (newMethod.isPrimary) {
-        updatedMethods.forEach(m => {
-          if (m.id !== newMethod.id) m.isPrimary = false;
+      // If the new/updated method is primary, make others non-primary
+      if (newPayoutMethod.isPrimary) {
+        updatedMethods = updatedMethods.map(m => {
+          if (m.id !== (editingPayoutMethodId || updatedMethods[updatedMethods.length - 1].id)) {
+            return { ...m, isPrimary: false };
+          }
+          return m;
         });
       }
 
@@ -259,19 +277,35 @@ export const VendorAccountScreen: React.FC = () => {
       if (error) throw error;
 
       setPayoutMethods(updatedMethods);
-      setIsAddPayoutModalOpen(false);
-      setNewPayoutMethod({
-        bankName: '',
-        accountNumber: '',
-        accountName: '',
-        isPrimary: false
-      });
-      alert('Payout method added successfully!');
+      handleClosePayoutModal();
+      alert(`Payout method ${editingPayoutMethodId ? 'updated' : 'added'} successfully!`);
     } catch (error: any) {
-      alert('Error adding payout method: ' + error.message);
+      alert(`Error ${editingPayoutMethodId ? 'updating' : 'adding'} payout method: ` + error.message);
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleEditPayoutMethod = (method: PayoutMethod) => {
+    setEditingPayoutMethodId(method.id);
+    setNewPayoutMethod({
+      bankName: method.bank_name || '',
+      accountNumber: method.account_number || '',
+      accountName: method.account_name || '',
+      isPrimary: method.isPrimary
+    });
+    setIsAddPayoutModalOpen(true);
+  };
+
+  const handleClosePayoutModal = () => {
+    setIsAddPayoutModalOpen(false);
+    setEditingPayoutMethodId(null);
+    setNewPayoutMethod({
+      bankName: '',
+      accountNumber: '',
+      accountName: '',
+      isPrimary: false
+    });
   };
 
   const handleDeletePayoutMethod = async (id: string) => {
@@ -626,13 +660,22 @@ export const VendorAccountScreen: React.FC = () => {
                               {method.details}
                             </p>
                           </div>
-                          <button
-                            onClick={() => handleDeletePayoutMethod(method.id)}
-                            className="font-sans text-xs md:text-sm text-red-600 hover:text-red-700 flex items-center gap-1"
-                          >
-                            <Trash2 className="w-3 h-3" />
-                            Delete
-                          </button>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => handleEditPayoutMethod(method)}
+                              className="font-sans text-xs md:text-sm text-neutral-600 hover:text-neutral-900 flex items-center gap-1"
+                            >
+                              <Edit2 className="w-3 h-3" />
+                              Edit
+                            </button>
+                            <button
+                              onClick={() => handleDeletePayoutMethod(method.id)}
+                              className="font-sans text-xs md:text-sm text-red-600 hover:text-red-700 flex items-center gap-1"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                              Delete
+                            </button>
+                          </div>
                         </div>
                       </div>
                     ))
@@ -907,8 +950,8 @@ export const VendorAccountScreen: React.FC = () => {
       {/* Add Payout Method Modal */}
       <Modal
         isOpen={isAddPayoutModalOpen}
-        onClose={() => setIsAddPayoutModalOpen(false)}
-        title="Add Payout Method"
+        onClose={handleClosePayoutModal}
+        title={editingPayoutMethodId ? "Edit Payout Method" : "Add Payout Method"}
       >
         <div className="space-y-4">
           <div>
@@ -961,7 +1004,7 @@ export const VendorAccountScreen: React.FC = () => {
           </div>
           <div className="flex gap-3 pt-2">
             <Button
-              onClick={() => setIsAddPayoutModalOpen(false)}
+              onClick={handleClosePayoutModal}
               className="flex-1 bg-white hover:bg-neutral-50 text-neutral-900 border border-neutral-200"
             >
               Cancel

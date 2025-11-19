@@ -104,20 +104,6 @@ All essential pages for a production-ready marketplace have been created with co
 
 ### 4. **Vendor Account Management**
 105: 
-106: ✅ **AccountScreen Re-implemented (`VendorAccountScreen.tsx`)**
-107: - ✅ Virtual account balance display with real data
-108: - ✅ Transaction history table (fetching from `wallet_transactions`)
-109: - ✅ Payout methods management (Add/Delete Bank Accounts)
-110: - ✅ Withdraw Funds functionality (updates balance, creates transaction & payout request)
-111: - ✅ Account settings (Personal Info, Password, Notification Preferences)
-112: - ✅ Financial statistics (Total Sales, Pending Payouts)
-
-### 5. **Build & Production Readiness**
-
-✅ **Build Status:** SUCCESSFUL
-- All pages compile without errors
-- **Code Splitting Implemented:** Lazy loading added for all major routes to optimize bundle size.
-- CSS: 40.90 kB
 - All routes properly configured
 - TypeScript type checking passed
 
@@ -188,6 +174,13 @@ All essential pages for a production-ready marketplace have been created with co
 - `vendor_transactions` - Transaction history
 - `vendor_payout_methods` - Payment withdrawal methods
 - `demo_account_info` - Demo account credentials (public read)
+
+### Referral System Tables
+- `marketers` - Marketer profiles and status
+- `vendor_referrals` - Vendor-to-vendor referral tracking
+- `marketer_referrals` - Marketer-to-vendor referral tracking
+- `commission_settings` - Global commission configuration
+- `commission_payments` - Commission payout records
 
 ## 🔒 Security Features
 

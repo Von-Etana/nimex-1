@@ -2,7 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { Card, CardContent } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { supabase } from '../../lib/supabase';
-import { DollarSign, Settings, Check } from 'lucide-react';
+import { DollarSign, Settings, Check, Loader2 } from 'lucide-react';
+import { Modal } from '../../components/ui/modal';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface CommissionSetting {
   type: string;
@@ -19,11 +21,20 @@ interface PendingCommission {
 }
 
 export const AdminCommissionsScreen: React.FC = () => {
+  const { user } = useAuth();
   const [loading, setLoading] = useState(true);
+  const [processing, setProcessing] = useState(false);
   const [settings, setSettings] = useState<CommissionSetting[]>([]);
   const [vendorAmount, setVendorAmount] = useState(5000);
   const [marketerAmount, setMarketerAmount] = useState(10000);
   const [pendingCommissions, setPendingCommissions] = useState<PendingCommission[]>([]);
+
+  // Payment Modal State
+  const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+  const [selectedCommission, setSelectedCommission] = useState<PendingCommission | null>(null);
+  const [paymentMethod, setPaymentMethod] = useState('');
+  const [referenceNumber, setReferenceNumber] = useState('');
+  const [paymentNotes, setPaymentNotes] = useState('');
 
   useEffect(() => {
     loadData();
@@ -123,16 +134,49 @@ export const AdminCommissionsScreen: React.FC = () => {
     }
   };
 
-  const handleMarkAsPaid = async (commission: PendingCommission) => {
+  const handleOpenPaymentModal = (commission: PendingCommission) => {
+    setSelectedCommission(commission);
+    setPaymentMethod('');
+    setReferenceNumber('');
+    setPaymentNotes('');
+    setIsPaymentModalOpen(true);
+  };
+
+  const handleConfirmPayment = async () => {
+    if (!selectedCommission || !paymentMethod) {
+      alert('Please select a payment method');
+      return;
+    }
+
+    setProcessing(true);
     try {
-      if (commission.referrer_type === 'vendor') {
+      // 1. Record the payment
+      const { error: paymentError } = await supabase
+        .from('commission_payments')
+        .insert({
+          recipient_type: selectedCommission.referrer_type,
+          recipient_id: selectedCommission.referrer_id,
+          amount: selectedCommission.commission_amount,
+          payment_method: paymentMethod,
+          reference_number: referenceNumber || null,
+          status: 'completed',
+          referral_ids: [selectedCommission.id], // Storing as array for potential batch payments
+          notes: paymentNotes || null,
+          processed_by: user?.id,
+          processed_at: new Date().toISOString(),
+        });
+
+      if (paymentError) throw paymentError;
+
+      // 2. Update the referral status
+      if (selectedCommission.referrer_type === 'vendor') {
         await supabase
           .from('vendor_referrals')
           .update({
             commission_paid: true,
             commission_paid_at: new Date().toISOString(),
           })
-          .eq('id', commission.id);
+          .eq('id', selectedCommission.id);
       } else {
         await supabase
           .from('marketer_referrals')
@@ -140,12 +184,17 @@ export const AdminCommissionsScreen: React.FC = () => {
             commission_paid: true,
             commission_paid_at: new Date().toISOString(),
           })
-          .eq('id', commission.id);
+          .eq('id', selectedCommission.id);
       }
 
+      setIsPaymentModalOpen(false);
       loadData();
-    } catch (error) {
-      console.error('Error marking as paid:', error);
+      alert('Commission marked as paid successfully');
+    } catch (error: any) {
+      console.error('Error processing payment:', error);
+      alert('Failed to process payment: ' + error.message);
+    } finally {
+      setProcessing(false);
     }
   };
 
@@ -299,11 +348,10 @@ export const AdminCommissionsScreen: React.FC = () => {
                         </td>
                         <td className="px-4 py-3">
                           <span
-                            className={`inline-block px-2 py-1 rounded-full text-xs font-semibold ${
-                              commission.referrer_type === 'vendor'
+                            className={`inline-block px-2 py-1 rounded-full text-xs font-semibold ${commission.referrer_type === 'vendor'
                                 ? 'bg-blue-100 text-blue-800'
                                 : 'bg-green-100 text-green-800'
-                            }`}
+                              }`}
                           >
                             {commission.referrer_type === 'vendor' ? 'Vendor' : 'Marketer'}
                           </span>
@@ -316,7 +364,7 @@ export const AdminCommissionsScreen: React.FC = () => {
                         </td>
                         <td className="px-4 py-3">
                           <Button
-                            onClick={() => handleMarkAsPaid(commission)}
+                            onClick={() => handleOpenPaymentModal(commission)}
                             size="sm"
                             className="bg-green-600 hover:bg-green-700 text-white flex items-center gap-2"
                           >
@@ -333,6 +381,97 @@ export const AdminCommissionsScreen: React.FC = () => {
           </CardContent>
         </Card>
       </div>
+      {/* Payment Modal */}
+      <Modal
+        isOpen={isPaymentModalOpen}
+        onClose={() => setIsPaymentModalOpen(false)}
+        title="Process Commission Payment"
+      >
+        <div className="space-y-4">
+          <div className="p-4 bg-neutral-50 rounded-lg border border-neutral-100">
+            <div className="flex justify-between items-center mb-2">
+              <span className="text-sm text-neutral-600">Recipient:</span>
+              <span className="font-semibold text-neutral-900">{selectedCommission?.referrer_name}</span>
+            </div>
+            <div className="flex justify-between items-center mb-2">
+              <span className="text-sm text-neutral-600">Type:</span>
+              <span className="capitalize text-neutral-900">{selectedCommission?.referrer_type}</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-neutral-600">Amount:</span>
+              <span className="font-heading font-bold text-xl text-green-600">
+                ₦{selectedCommission?.commission_amount.toLocaleString()}
+              </span>
+            </div>
+          </div>
+
+          <div>
+            <label className="block font-sans font-medium text-sm text-neutral-700 mb-1">
+              Payment Method <span className="text-red-500">*</span>
+            </label>
+            <select
+              value={paymentMethod}
+              onChange={(e) => setPaymentMethod(e.target.value)}
+              className="w-full h-10 px-3 rounded-lg border border-neutral-200 font-sans text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+            >
+              <option value="">Select method</option>
+              <option value="Bank Transfer">Bank Transfer</option>
+              <option value="Cash">Cash</option>
+              <option value="Cheque">Cheque</option>
+              <option value="Wallet Transfer">Wallet Transfer</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block font-sans font-medium text-sm text-neutral-700 mb-1">
+              Reference Number (Optional)
+            </label>
+            <input
+              type="text"
+              value={referenceNumber}
+              onChange={(e) => setReferenceNumber(e.target.value)}
+              placeholder="e.g., TRX-123456789"
+              className="w-full h-10 px-3 rounded-lg border border-neutral-200 font-sans text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+            />
+          </div>
+
+          <div>
+            <label className="block font-sans font-medium text-sm text-neutral-700 mb-1">
+              Notes (Optional)
+            </label>
+            <textarea
+              value={paymentNotes}
+              onChange={(e) => setPaymentNotes(e.target.value)}
+              placeholder="Any additional details..."
+              className="w-full h-24 px-3 py-2 rounded-lg border border-neutral-200 font-sans text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none"
+            />
+          </div>
+
+          <div className="flex gap-3 pt-2">
+            <Button
+              onClick={() => setIsPaymentModalOpen(false)}
+              className="flex-1 bg-white hover:bg-neutral-50 text-neutral-900 border border-neutral-200"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleConfirmPayment}
+              disabled={processing || !paymentMethod}
+              className="flex-1 bg-green-600 hover:bg-green-700 text-white"
+            >
+              {processing ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                  Processing...
+                </>
+              ) : (
+                'Confirm Payment'
+              )}
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 };

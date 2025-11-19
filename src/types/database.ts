@@ -82,6 +82,10 @@ export interface Database {
           wallet_balance: number;
           notification_preferences: Json | null;
           is_active: boolean;
+          referral_code: string | null;
+          total_referrals: number;
+          referred_by_vendor_id: string | null;
+          referred_by_marketer_id: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -106,6 +110,10 @@ export interface Database {
           wallet_balance?: number;
           notification_preferences?: Json | null;
           is_active?: boolean;
+          referral_code?: string | null;
+          total_referrals?: number;
+          referred_by_vendor_id?: string | null;
+          referred_by_marketer_id?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -134,6 +142,10 @@ export interface Database {
           wallet_balance?: number;
           notification_preferences?: Json | null;
           is_active?: boolean;
+          referral_code?: string | null;
+          total_referrals?: number;
+          referred_by_vendor_id?: string | null;
+          referred_by_marketer_id?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -632,6 +644,208 @@ export interface Database {
           id?: string;
           user_id?: string;
           product_id?: string;
+          created_at?: string;
+        };
+      };
+      marketers: {
+        Row: {
+          id: string;
+          user_id: string | null;
+          full_name: string;
+          email: string;
+          phone: string;
+          business_name: string | null;
+          referral_code: string;
+          status: 'pending' | 'active' | 'suspended' | 'inactive';
+          total_referrals: number;
+          total_commission_earned: number;
+          bank_account_details: Json | null;
+          approved_by: string | null;
+          approved_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id?: string | null;
+          full_name: string;
+          email: string;
+          phone: string;
+          business_name?: string | null;
+          referral_code?: string;
+          status?: 'pending' | 'active' | 'suspended' | 'inactive';
+          total_referrals?: number;
+          total_commission_earned?: number;
+          bank_account_details?: Json | null;
+          approved_by?: string | null;
+          approved_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string | null;
+          full_name?: string;
+          email?: string;
+          phone?: string;
+          business_name?: string | null;
+          referral_code?: string;
+          status?: 'pending' | 'active' | 'suspended' | 'inactive';
+          total_referrals?: number;
+          total_commission_earned?: number;
+          bank_account_details?: Json | null;
+          approved_by?: string | null;
+          approved_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
+      vendor_referrals: {
+        Row: {
+          id: string;
+          referrer_vendor_id: string;
+          referred_vendor_id: string;
+          referral_code: string;
+          status: 'pending' | 'completed' | 'rejected';
+          commission_amount: number;
+          commission_paid: boolean;
+          commission_paid_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          referrer_vendor_id: string;
+          referred_vendor_id: string;
+          referral_code: string;
+          status?: 'pending' | 'completed' | 'rejected';
+          commission_amount?: number;
+          commission_paid?: boolean;
+          commission_paid_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          referrer_vendor_id?: string;
+          referred_vendor_id?: string;
+          referral_code?: string;
+          status?: 'pending' | 'completed' | 'rejected';
+          commission_amount?: number;
+          commission_paid?: boolean;
+          commission_paid_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
+      marketer_referrals: {
+        Row: {
+          id: string;
+          marketer_id: string;
+          vendor_id: string;
+          referral_code: string;
+          status: 'pending' | 'completed' | 'rejected';
+          commission_amount: number;
+          commission_paid: boolean;
+          commission_paid_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          marketer_id: string;
+          vendor_id: string;
+          referral_code: string;
+          status?: 'pending' | 'completed' | 'rejected';
+          commission_amount?: number;
+          commission_paid?: boolean;
+          commission_paid_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          marketer_id?: string;
+          vendor_id?: string;
+          referral_code?: string;
+          status?: 'pending' | 'completed' | 'rejected';
+          commission_amount?: number;
+          commission_paid?: boolean;
+          commission_paid_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
+      commission_settings: {
+        Row: {
+          id: string;
+          type: string;
+          commission_amount: number;
+          is_active: boolean;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          type: string;
+          commission_amount: number;
+          is_active?: boolean;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          type?: string;
+          commission_amount?: number;
+          is_active?: boolean;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
+      commission_payments: {
+        Row: {
+          id: string;
+          recipient_type: 'vendor' | 'marketer';
+          recipient_id: string;
+          amount: number;
+          payment_method: string | null;
+          reference_number: string | null;
+          status: 'pending' | 'processing' | 'completed' | 'failed';
+          referral_ids: Json | null;
+          notes: string | null;
+          processed_by: string | null;
+          processed_at: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          recipient_type: 'vendor' | 'marketer';
+          recipient_id: string;
+          amount: number;
+          payment_method?: string | null;
+          reference_number?: string | null;
+          status?: 'pending' | 'processing' | 'completed' | 'failed';
+          referral_ids?: Json | null;
+          notes?: string | null;
+          processed_by?: string | null;
+          processed_at?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          recipient_type?: 'vendor' | 'marketer';
+          recipient_id?: string;
+          amount?: number;
+          payment_method?: string | null;
+          reference_number?: string | null;
+          status?: 'pending' | 'processing' | 'completed' | 'failed';
+          referral_ids?: Json | null;
+          notes?: string | null;
+          processed_by?: string | null;
+          processed_at?: string | null;
           created_at?: string;
         };
       };
