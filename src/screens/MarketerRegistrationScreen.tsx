@@ -22,15 +22,20 @@ export const MarketerRegistrationScreen: React.FC = () => {
     setError('');
     setLoading(true);
 
-    const result = await referralService.registerMarketer(formData);
+    try {
+      const result = await referralService.registerMarketer(formData);
 
-    if (result.success) {
-      setSuccess(true);
-    } else {
-      setError(result.error || 'Registration failed. Please try again.');
+      if (result.success) {
+        setSuccess(true);
+      } else {
+        setError(result.error || 'Registration failed. Please try again.');
+      }
+    } catch (err: any) {
+      console.error('Error during marketer registration:', err);
+      setError(err.message || 'An unexpected error occurred. Please try again.');
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   };
 
   if (success) {

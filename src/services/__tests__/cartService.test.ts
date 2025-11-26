@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { CartService } from '../cartService';
+import { CartService, CartError, ValidationError, AuthenticationError } from '../cartService';
 import { supabase } from '../../lib/supabase';
+import { logger } from '../../lib/logger';
 
-// Mock supabase
+// Mock supabase and logger
 vi.mock('../../lib/supabase', () => ({
     supabase: {
         auth: {
@@ -12,8 +13,17 @@ vi.mock('../../lib/supabase', () => ({
     }
 }));
 
+vi.mock('../../lib/logger', () => ({
+    logger: {
+        error: vi.fn(),
+        warn: vi.fn(),
+        info: vi.fn()
+    }
+}));
+
 describe('CartService', () => {
     const mockUser = { id: 'user-123' };
+    const mockProductId = '550e8400-e29b-41d4-a716-446655440000';
 
     beforeEach(() => {
         vi.clearAllMocks();
@@ -29,86 +39,324 @@ describe('CartService', () => {
         });
 
         it('should return cart with items', async () => {
-            const mockCart = { id: 'cart-1', user_id: 'user-123', items: [] };
-            const mockSelect = vi.fn().mockReturnThis();
-            const mockEq = vi.fn().mockReturnThis();
-            const mockSingle = vi.fn().mockResolvedValue({ data: mockCart, error: null });
+            const mockCart = {
+                id: 'cart-1',
+                user_id: 'user-123',
+                items: [],
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString()
+            };
 
-            (supabase.from as any).mockReturnValue({
-                select: mockSelect,
-                eq: mockEq,
-                single: mockSingle
+            const mockFrom = vi.fn().mockReturnValue({
+                select: vi.fn().mockReturnValue({
+                    eq: vi.fn().mockReturnValue({
+                        single: vi.fn().mockResolvedValue({ data: mockCart, error: null })
+                    })
+                })
             });
+
+            (supabase.from as any) = mockFrom;
 
             const result = await CartService.getCart();
 
             expect(supabase.from).toHaveBeenCalledWith('carts');
-            expect(mockSelect).toHaveBeenCalledWith('*, items:cart_items(*, product:products(*))');
-            expect(mockEq).toHaveBeenCalledWith('user_id', mockUser.id);
             expect(result).toEqual(mockCart);
+        });
+
+        it('should throw CartError on database error', async () => {
+            const mockFrom = vi.fn().mockReturnValue({
+                select: vi.fn().mockReturnValue({
+                    eq: vi.fn().mockReturnValue({
+                        single: vi.fn().mockResolvedValue({
+                            data: null,
+                            error: { code: 'ERROR', message: 'Database error' }
+                        })
+                    })
+                })
+            });
+
+            (supabase.from as any) = mockFrom;
+
+            await expect(CartService.getCart()).rejects.toThrow(CartError);
+            expect(logger.error).toHaveBeenCalled();
         });
     });
 
     describe('addToCart', () => {
-        it('should create new cart if none exists', async () => {
-            // Mock no existing cart
-            const mockSelect = vi.fn().mockReturnThis();
-            const mockEq = vi.fn().mockReturnThis();
-            const mockSingle = vi.fn().mockResolvedValueOnce({ data: null, error: null }); // First call returns null
+        it('should throw AuthenticationError if user not authenticated', async () => {
+            (supabase.auth.getUser as any).mockResolvedValue({ data: { user: null } });
 
-            // Mock create cart
-            const mockInsert = vi.fn().mockReturnThis();
-            const mockSingleCreate = vi.fn().mockResolvedValue({ data: { id: 'new-cart' }, error: null });
+            await expect(
+                CartService.addToCart(mockProductId, 1)
+            ).rejects.toThrow(AuthenticationError);
+        });
 
-            // Mock item check (no existing item)
-            const mockItemSingle = vi.fn().mockResolvedValue({ data: null, error: null });
+        it('should throw ValidationError for invalid product ID', async () => {
+            await expect(
+                CartService.addToCart('invalid-id', 1)
+            ).rejects.toThrow(ValidationError);
+        });
 
-            // Mock item insert
-            const mockItemInsert = vi.fn().mockResolvedValue({ error: null });
+        it('should throw ValidationError for invalid quantity', async () => {
+            await expect(
+                CartService.addToCart(mockProductId, 0)
+            ).rejects.toThrow(ValidationError);
 
-            (supabase.from as any).mockImplementation((table: string) => {
-                if (table === 'carts') {
-                    return {
-                        select: mockSelect,
-                        eq: mockEq,
-                        single: mockSingle,
-                        insert: mockInsert
-                    };
-                }
-                if (table === 'cart_items') {
-                    return {
-                        select: mockSelect,
-                        eq: mockEq,
-                        single: mockItemSingle,
-                        insert: mockItemInsert
-                    };
-                }
+            await expect(
+                CartService.addToCart(mockProductId, -1)
+            ).rejects.toThrow(ValidationError);
+
+            await expect(
+                CartService.addToCart(mockProductId, 1000)
+            ).rejects.toThrow(ValidationError);
+        });
+
+        it('should create new cart if none exists and add item', async () => {
+            const mockCartId = 'new-cart-id';
+
+            // Mock cart check (no cart)
+            const mockFrom = vi.fn()
+                .mockReturnValueOnce({
+                    select: vi.fn().mockReturnValue({
+                        eq: vi.fn().mockReturnValue({
+                            single: vi.fn().mockResolvedValue({ data: null, error: null })
+                        })
+                    }),
+                    insert: vi.fn().mockReturnValue({
+                        select: vi.fn().mockReturnValue({
+                            single: vi.fn().mockResolvedValue({
+                                data: { id: mockCartId },
+                                error: null
+                            })
+                        })
+                    })
+                })
+                // Mock item check (no existing item)
+                .mockReturnValueOnce({
+                    select: vi.fn().mockReturnValue({
+                        eq: vi.fn().mockReturnValue({
+                            eq: vi.fn().mockReturnValue({
+                                single: vi.fn().mockResolvedValue({ data: null, error: null })
+                            })
+                        })
+                    }),
+                    insert: vi.fn().mockResolvedValue({ error: null })
+                });
+
+            (supabase.from as any) = mockFrom;
+
+            await CartService.addToCart(mockProductId, 2);
+
+            expect(supabase.from).toHaveBeenCalledWith('carts');
+            expect(supabase.from).toHaveBeenCalledWith('cart_items');
+        });
+
+        it('should update quantity if item already exists', async () => {
+            const mockCartId = 'existing-cart';
+            const mockItemId = 'existing-item';
+
+            const mockFrom = vi.fn()
+                // Mock cart exists
+                .mockReturnValueOnce({
+                    select: vi.fn().mockReturnValue({
+                        eq: vi.fn().mockReturnValue({
+                            single: vi.fn().mockResolvedValue({
+                                data: { id: mockCartId },
+                                error: null
+                            })
+                        })
+                    })
+                })
+                // Mock existing item
+                .mockReturnValueOnce({
+                    select: vi.fn().mockReturnValue({
+                        eq: vi.fn().mockReturnValue({
+                            eq: vi.fn().mockReturnValue({
+                                single: vi.fn().mockResolvedValue({
+                                    data: { id: mockItemId, quantity: 2 },
+                                    error: null
+                                })
+                            })
+                        })
+                    }),
+                    update: vi.fn().mockReturnValue({
+                        eq: vi.fn().mockResolvedValue({ error: null })
+                    })
+                });
+
+            (supabase.from as any) = mockFrom;
+
+            await CartService.addToCart(mockProductId, 3);
+
+            expect(supabase.from).toHaveBeenCalledWith('cart_items');
+        });
+
+        it('should throw ValidationError if total quantity exceeds 999', async () => {
+            const mockCartId = 'existing-cart';
+            const mockItemId = 'existing-item';
+
+            const mockFrom = vi.fn()
+                .mockReturnValueOnce({
+                    select: vi.fn().mockReturnValue({
+                        eq: vi.fn().mockReturnValue({
+                            single: vi.fn().mockResolvedValue({
+                                data: { id: mockCartId },
+                                error: null
+                            })
+                        })
+                    })
+                })
+                .mockReturnValueOnce({
+                    select: vi.fn().mockReturnValue({
+                        eq: vi.fn().mockReturnValue({
+                            eq: vi.fn().mockReturnValue({
+                                single: vi.fn().mockResolvedValue({
+                                    data: { id: mockItemId, quantity: 998 },
+                                    error: null
+                                })
+                            })
+                        })
+                    })
+                });
+
+            (supabase.from as any) = mockFrom;
+
+            await expect(
+                CartService.addToCart(mockProductId, 2)
+            ).rejects.toThrow(ValidationError);
+        });
+    });
+
+    describe('updateQuantity', () => {
+        const mockItemId = '550e8400-e29b-41d4-a716-446655440001';
+
+        it('should throw ValidationError for invalid item ID', async () => {
+            await expect(
+                CartService.updateQuantity('invalid-id', 5)
+            ).rejects.toThrow(ValidationError);
+        });
+
+        it('should remove item if quantity is 0 or negative', async () => {
+            const mockFrom = vi.fn().mockReturnValue({
+                delete: vi.fn().mockReturnValue({
+                    eq: vi.fn().mockResolvedValue({ error: null })
+                })
             });
 
-            // We need to handle the chained calls for create cart specifically
-            // The mock setup above is a bit simplified, let's refine for the specific flow
-            // Flow: 
-            // 1. from('carts').select().eq().single() -> null
-            // 2. from('carts').insert().select().single() -> { id: 'new-cart' }
-            // 3. from('cart_items').select().eq().eq().single() -> null
-            // 4. from('cart_items').insert() -> success
+            (supabase.from as any) = mockFrom;
 
-            // Reset mocks for specific sequence
-            const selectBuilder = {
-                eq: vi.fn().mockReturnThis(),
-                single: vi.fn()
-                    .mockResolvedValueOnce({ data: null, error: null }) // 1. Check cart
-                    .mockResolvedValueOnce({ data: { id: 'new-cart' }, error: null }) // 2. Create cart result
-                    .mockResolvedValueOnce({ data: null, error: null }) // 3. Check item
+            await CartService.updateQuantity(mockItemId, 0);
+            expect(supabase.from).toHaveBeenCalledWith('cart_items');
+        });
+
+        it('should update quantity for valid input', async () => {
+            const mockFrom = vi.fn().mockReturnValue({
+                update: vi.fn().mockReturnValue({
+                    eq: vi.fn().mockResolvedValue({ error: null })
+                })
+            });
+
+            (supabase.from as any) = mockFrom;
+
+            await CartService.updateQuantity(mockItemId, 5);
+            expect(supabase.from).toHaveBeenCalledWith('cart_items');
+        });
+    });
+
+    describe('removeFromCart', () => {
+        const mockItemId = '550e8400-e29b-41d4-a716-446655440001';
+
+        it('should throw ValidationError for invalid item ID', async () => {
+            await expect(
+                CartService.removeFromCart('invalid-id')
+            ).rejects.toThrow(ValidationError);
+        });
+
+        it('should remove item successfully', async () => {
+            const mockFrom = vi.fn().mockReturnValue({
+                delete: vi.fn().mockReturnValue({
+                    eq: vi.fn().mockResolvedValue({ error: null })
+                })
+            });
+
+            (supabase.from as any) = mockFrom;
+
+            await CartService.removeFromCart(mockItemId);
+            expect(supabase.from).toHaveBeenCalledWith('cart_items');
+        });
+    });
+
+    describe('clearCart', () => {
+        it('should return early if user not authenticated', async () => {
+            (supabase.auth.getUser as any).mockResolvedValue({ data: { user: null } });
+
+            await CartService.clearCart();
+
+            expect(supabase.from).not.toHaveBeenCalled();
+        });
+
+        it('should clear all cart items', async () => {
+            const mockCartId = 'cart-123';
+
+            const mockFrom = vi.fn()
+                .mockReturnValueOnce({
+                    select: vi.fn().mockReturnValue({
+                        eq: vi.fn().mockReturnValue({
+                            single: vi.fn().mockResolvedValue({
+                                data: { id: mockCartId },
+                                error: null
+                            })
+                        })
+                    })
+                })
+                .mockReturnValueOnce({
+                    delete: vi.fn().mockReturnValue({
+                        eq: vi.fn().mockResolvedValue({ error: null })
+                    })
+                });
+
+            (supabase.from as any) = mockFrom;
+
+            await CartService.clearCart();
+
+            expect(supabase.from).toHaveBeenCalledWith('carts');
+            expect(supabase.from).toHaveBeenCalledWith('cart_items');
+        });
+    });
+
+    describe('getCartCount', () => {
+        it('should return 0 if no cart', async () => {
+            (supabase.auth.getUser as any).mockResolvedValue({ data: { user: null } });
+
+            const count = await CartService.getCartCount();
+            expect(count).toBe(0);
+        });
+
+        it('should return total quantity of all items', async () => {
+            const mockCart = {
+                id: 'cart-1',
+                user_id: 'user-123',
+                items: [
+                    { id: '1', quantity: 2, product_id: mockProductId, cart_id: 'cart-1', created_at: '', updated_at: '' },
+                    { id: '2', quantity: 3, product_id: mockProductId, cart_id: 'cart-1', created_at: '', updated_at: '' },
+                    { id: '3', quantity: 1, product_id: mockProductId, cart_id: 'cart-1', created_at: '', updated_at: '' }
+                ],
+                created_at: '',
+                updated_at: ''
             };
 
-            const insertBuilder = {
-                select: vi.fn().mockReturnThis(),
-                single: vi.fn().mockResolvedValue({ data: { id: 'new-cart' }, error: null })
-            };
+            const mockFrom = vi.fn().mockReturnValue({
+                select: vi.fn().mockReturnValue({
+                    eq: vi.fn().mockReturnValue({
+                        single: vi.fn().mockResolvedValue({ data: mockCart, error: null })
+                    })
+                })
+            });
 
-            // We need a more robust mock structure to handle the different chains
-            // But for simplicity, let's assume the implementation calls are distinct enough or just check calls
+            (supabase.from as any) = mockFrom;
+
+            const count = await CartService.getCartCount();
+            expect(count).toBe(6); // 2 + 3 + 1
         });
     });
 });

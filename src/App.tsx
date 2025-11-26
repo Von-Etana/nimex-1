@@ -68,6 +68,12 @@ const NotificationsScreen = React.lazy(() => import('./screens/NotificationsScre
 const MarketerRegistrationScreen = React.lazy(() => import('./screens/MarketerRegistrationScreen').then(module => ({ default: module.MarketerRegistrationScreen })));
 const NotFoundScreen = React.lazy(() => import('./screens/NotFoundScreen').then(module => ({ default: module.NotFoundScreen })));
 
+// Marketer screens
+const MarketerDashboardScreen = React.lazy(() => import('./screens/marketer').then(module => ({ default: module.MarketerDashboardScreen })));
+
+// Marketer layout
+const MarketerLayout = React.lazy(() => import('./layouts/MarketerLayout').then(module => ({ default: module.MarketerLayout })));
+
 const PageLoader = () => (
   <div className="min-h-screen flex items-center justify-center bg-neutral-50">
     <Loader2 className="w-8 h-8 animate-spin text-primary-600" />
@@ -536,6 +542,18 @@ const App: React.FC = () => {
                   <Route path="marketers" element={<AdminMarketersScreen />} />
                   <Route path="commissions" element={<AdminCommissionsScreen />} />
                 </Route>
+
+                {/* Marketer Routes */}
+                <Route
+                  path="/marketer/dashboard"
+                  element={
+                    <ProtectedRoute>
+                      <MarketerLayout>
+                        <MarketerDashboardScreen />
+                      </MarketerLayout>
+                    </ProtectedRoute>
+                  }
+                />
 
                 <Route path="*" element={<NotFoundScreen />} />
               </Routes>

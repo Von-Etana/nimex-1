@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import { logger } from '../lib/logger';
 
 export interface ReferralStats {
   totalReferrals: number;
@@ -40,7 +41,7 @@ class ReferralService {
       .maybeSingle();
 
     if (error) {
-      console.error('Error fetching vendor referral code:', error);
+      logger.error('Error fetching vendor referral code:', error);
       return null;
     }
 
@@ -54,7 +55,7 @@ class ReferralService {
       .eq('referrer_vendor_id', vendorId);
 
     if (error) {
-      console.error('Error fetching referral stats:', error);
+      logger.error('Error fetching referral stats:', error);
       return {
         totalReferrals: 0,
         completedReferrals: 0,
@@ -110,12 +111,12 @@ class ReferralService {
       .order('created_at', { ascending: false });
 
     if (error) {
-      console.error('Error fetching vendor referrals:', error);
+      logger.error('Error fetching vendor referrals:', error);
       return [];
     }
 
     const referralsWithDetails = await Promise.all(
-      (data || []).map(async (ref: any) => {
+      (data || []).map(async (ref) => {
         const vendor = ref.vendors;
         let email = '';
 
@@ -190,7 +191,7 @@ class ReferralService {
     });
 
     if (error) {
-      console.error('Error creating vendor referral:', error);
+      logger.error('Error creating vendor referral:', error);
       return { success: false, error: error.message };
     }
 
@@ -212,7 +213,7 @@ class ReferralService {
     });
 
     if (error) {
-      console.error('Error creating marketer referral:', error);
+      logger.error('Error creating marketer referral:', error);
       return { success: false, error: error.message };
     }
 
@@ -229,7 +230,7 @@ class ReferralService {
       .eq('is_active', true);
 
     if (error) {
-      console.error('Error fetching commission settings:', error);
+      logger.error('Error fetching commission settings:', error);
       return { vendorReferralAmount: 5000, marketerReferralAmount: 10000 };
     }
 
@@ -238,7 +239,7 @@ class ReferralService {
       marketerReferralAmount: 10000,
     };
 
-    data?.forEach((setting: any) => {
+    data?.forEach((setting) => {
       if (setting.type === 'vendor_referral') {
         settings.vendorReferralAmount = Number(setting.commission_amount);
       } else if (setting.type === 'marketer_referral') {
@@ -256,25 +257,47 @@ class ReferralService {
     businessName?: string;
     bankAccountDetails?: any;
   }): Promise<{ success: boolean; error?: string; marketerId?: string }> {
-    const { data: marketer, error } = await supabase
-      .from('marketers')
-      .insert({
-        full_name: data.fullName,
-        email: data.email,
-        phone: data.phone,
-        business_name: data.businessName || null,
-        bank_account_details: data.bankAccountDetails || null,
-        status: 'pending',
-      })
-      .select('id')
-      .single();
+    try {
+      // Check if marketer with this email already exists
+      const { data: existing } = await supabase
+        .from('marketers')
+        .select('id')
+        .eq('email', data.email)
+        .maybeSingle();
 
-    if (error) {
-      console.error('Error registering marketer:', error);
-      return { success: false, error: error.message };
+      if (existing) {
+        return {
+          success: false,
+          error: 'A marketer account with this email already exists.'
+        };
+      }
+
+      const { data: marketer, error } = await supabase
+        .from('marketers')
+        .insert({
+          full_name: data.fullName,
+          email: data.email,
+          phone: data.phone,
+          business_name: data.businessName || null,
+          bank_account_details: data.bankAccountDetails || null,
+          status: 'pending',
+        })
+        .select('id')
+        .single();
+
+      if (error) {
+        logger.error('Error registering marketer:', error);
+        return { success: false, error: error.message };
+      }
+
+      return { success: true, marketerId: marketer.id };
+    } catch (err: any) {
+      logger.error('Unexpected error in registerMarketer:', err);
+      return {
+        success: false,
+        error: 'An unexpected error occurred. Please try again later.'
+      };
     }
-
-    return { success: true, marketerId: marketer.id };
   }
 
   async getMarketerByEmail(email: string): Promise<MarketerInfo | null> {
@@ -320,7 +343,7 @@ class ReferralService {
       .order('created_at', { ascending: false });
 
     if (error) {
-      console.error('Error fetching marketer referrals:', error);
+      logger.error('Error fetching marketer referrals:', error);
       return [];
     }
 
@@ -338,7 +361,7 @@ class ReferralService {
       await navigator.clipboard.writeText(link);
       return true;
     } catch (error) {
-      console.error('Error copying to clipboard:', error);
+      logger.error('Error copying to clipboard:', error);
       return false;
     }
   }

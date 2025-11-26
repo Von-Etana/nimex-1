@@ -33,6 +33,19 @@ interface PayoutMethod {
   account_name?: string;
 }
 
+// Type definitions for JSON fields
+interface BankAccountDetails {
+  bank_name?: string;
+  account_number?: string;
+  account_name?: string;
+}
+
+interface NotificationPreferences {
+  emailSales?: boolean;
+  smsAlerts?: boolean;
+  inAppUpdates?: boolean;
+}
+
 export const VendorAccountScreen: React.FC = () => {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
@@ -116,23 +129,29 @@ export const VendorAccountScreen: React.FC = () => {
         // Parse payout methods from bank_account_details
         // Assuming it's stored as an array or single object in JSON
         if (vendorData.bank_account_details) {
-          const details = vendorData.bank_account_details as any;
+          const details = vendorData.bank_account_details as unknown;
           if (Array.isArray(details)) {
-            setPayoutMethods(details);
-          } else if (details.account_number) {
-            // Single account
-            setPayoutMethods([{
-              id: '1',
-              type: 'Bank Account',
-              details: `${details.bank_name} - ${details.account_number}`,
-              isPrimary: true
-            }]);
+            setPayoutMethods(details as PayoutMethod[]);
+          } else if (typeof details === 'object' && details !== null) {
+            const bankDetails = details as BankAccountDetails;
+            if (bankDetails.account_number) {
+              // Single account
+              setPayoutMethods([{
+                id: '1',
+                type: 'Bank Account',
+                details: `${bankDetails.bank_name || 'Bank'} - ${bankDetails.account_number}`,
+                isPrimary: true,
+                bank_name: bankDetails.bank_name,
+                account_number: bankDetails.account_number,
+                account_name: bankDetails.account_name
+              }]);
+            }
           }
         }
 
         // Load Notification Preferences
         if (vendorData.notification_preferences) {
-          const prefs = vendorData.notification_preferences as any;
+          const prefs = vendorData.notification_preferences as unknown as NotificationPreferences;
           setNotifications({
             emailSales: prefs.emailSales ?? true,
             smsAlerts: prefs.smsAlerts ?? false,
@@ -360,9 +379,9 @@ export const VendorAccountScreen: React.FC = () => {
         .insert({
           vendor_id: vendor!.id,
           amount: amount,
-          bank_name: (selectedMethod as any).bank_name || 'Bank', // Fallback if not in object
-          account_number: (selectedMethod as any).account_number || '0000',
-          account_name: (selectedMethod as any).account_name || 'Vendor',
+          bank_name: selectedMethod.bank_name || 'Bank',
+          account_number: selectedMethod.account_number || '0000',
+          account_name: selectedMethod.account_name || 'Vendor',
           status: 'pending',
           reference: `PAY-${Date.now()}`
         })
