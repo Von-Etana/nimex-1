@@ -28,7 +28,7 @@ export default defineConfig(({ mode }) => ({
           // Vendor chunks for better caching
           vendor: ['react', 'react-dom', 'react-router-dom'],
           ui: ['lucide-react'],
-          supabase: ['@supabase/supabase-js'],
+          firebase: ['firebase/app', 'firebase/auth', 'firebase/firestore', 'firebase/storage'],
           utils: ['zod', 'dompurify'],
         },
       },
