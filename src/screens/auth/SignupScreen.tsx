@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { PackageIcon, Eye, EyeOff, ShoppingBag, UserIcon, CheckCircle } from 'lucide-react';
-import { Button } from '../../components/ui/button';
+import { PackageIcon, ShoppingBag, UserIcon, Eye, EyeOff, CheckCircle } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { referralService } from '../../services/referralService';
+import { Button } from '../../components/ui/button';
 import type { UserRole } from '../../types/database';
+import { getFriendlyErrorMessage } from '../../utils/errorHandling';
 
 export const SignupScreen: React.FC = () => {
   const navigate = useNavigate();
@@ -66,8 +67,22 @@ export const SignupScreen: React.FC = () => {
       return;
     }
 
-    if (formData.password.length < 6) {
-      setError('Password must be at least 6 characters');
+    // Password validation matching Zod schema
+    const password = formData.password;
+    if (password.length < 8) {
+      setError('Password must be at least 8 characters');
+      return;
+    }
+    if (!/[A-Z]/.test(password)) {
+      setError('Password must contain at least one uppercase letter');
+      return;
+    }
+    if (!/[a-z]/.test(password)) {
+      setError('Password must contain at least one lowercase letter');
+      return;
+    }
+    if (!/[0-9]/.test(password)) {
+      setError('Password must contain at least one number');
       return;
     }
 
@@ -86,7 +101,7 @@ export const SignupScreen: React.FC = () => {
     });
 
     if (signUpError) {
-      setError(signUpError.message);
+      setError(getFriendlyErrorMessage(signUpError));
       setLoading(false);
     } else {
       setLoading(false);
@@ -292,7 +307,7 @@ export const SignupScreen: React.FC = () => {
                   required
                   minLength={6}
                   className="w-full h-12 px-4 pr-12 rounded-lg border border-neutral-200 font-sans text-neutral-900 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                  placeholder="At least 6 characters"
+                  placeholder="8+ chars, 1 uppercase, 1 lowercase, 1 number"
                 />
                 <button
                   type="button"

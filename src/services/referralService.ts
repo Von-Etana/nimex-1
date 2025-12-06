@@ -250,31 +250,46 @@ class ReferralService {
     phone: string;
     businessName?: string;
     bankAccountDetails?: any;
-    userId?: string;
+    userId: string;
   }): Promise<{ success: boolean; error?: string; marketerId?: string }> {
     try {
       // Check if marketer with this email already exists
-      const existing = await FirestoreService.getDocuments<any>(COLLECTIONS.MARKETERS, {
+      // We can also check if a document with userId exists now
+      const existingDoc = await FirestoreService.documentExists(COLLECTIONS.MARKETERS, data.userId);
+
+      if (existingDoc) {
+        return {
+          success: false,
+          error: 'A marketer account already exists for this user.'
+        };
+      }
+
+      // Double check email uniqueness if needed, though 1:1 user mapping usually suffices.
+      // Keeping email check for safety if multiple users try to use same email (unlikely with Auth)
+      const existingEmail = await FirestoreService.getDocuments<any>(COLLECTIONS.MARKETERS, {
         filters: [{ field: 'email', operator: '==', value: data.email }],
         limitCount: 1
       });
 
-      if (existing.length > 0) {
+      if (existingEmail.length > 0) {
         return {
           success: false,
           error: 'A marketer account with this email already exists.'
         };
       }
 
-      const id = `mkt_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      // Use userId as the document ID
+      const id = data.userId;
+
       await FirestoreService.setDocument(COLLECTIONS.MARKETERS, id, {
+        user_id: data.userId, // Keep this field for queries if needed
         full_name: data.fullName,
         email: data.email,
         phone: data.phone,
         business_name: data.businessName || null,
         bank_account_details: data.bankAccountDetails || null,
         status: 'pending',
-        user_id: data.userId || null,
+        referral_code: `MKT-${Date.now().toString(36).toUpperCase()}`, // Generate a referral code
         created_at: Timestamp.now(),
         updated_at: Timestamp.now()
       });

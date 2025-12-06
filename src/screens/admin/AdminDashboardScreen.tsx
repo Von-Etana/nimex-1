@@ -88,7 +88,7 @@ export const AdminDashboardScreen: React.FC = () => {
         usersCount,
         vendorsCount,
         productsCount,
-        orders,
+        transactions,
         pendingKYCCount,
         activeSubsCount,
         expiredSubsCount,
@@ -98,7 +98,7 @@ export const AdminDashboardScreen: React.FC = () => {
         FirestoreService.getCount('profiles'),
         FirestoreService.getCount('vendors'),
         FirestoreService.getCount('products'),
-        FirestoreService.getDocuments('orders'), // Need total_amount, so fetch docs
+        FirestoreService.getDocuments('payment_transactions'), // Use payment_transactions for accurate financial metrics
         FirestoreService.getCount('kyc_submissions', { filters: [{ field: 'status', operator: '==', value: 'pending' }] }),
         FirestoreService.getCount('vendors', { filters: [{ field: 'subscription_status', operator: '==', value: 'active' }] }),
         FirestoreService.getCount('vendors', { filters: [{ field: 'subscription_status', operator: '==', value: 'expired' }] }),
@@ -106,10 +106,15 @@ export const AdminDashboardScreen: React.FC = () => {
         FirestoreService.getDocuments('profiles', { filters: [{ field: 'updated_at', operator: '>', value: twentyFourHoursAgo.toISOString() }] }),
       ]);
 
-      const totalRevenue = orders.reduce((sum: number, order: any) => sum + (order.total_amount || 0), 0) || 0;
+      const totalRevenue = (transactions as any[]).reduce((sum: number, tx: any) => {
+        if (tx.payment_status === 'paid' && tx.type !== 'withdrawal') {
+          return sum + (tx.amount || 0);
+        }
+        return sum;
+      }, 0) || 0;
 
-      // Calculate monthly revenue from subscriptions
-      const monthlyRevenue = activeSubsCount * 1200; // Assuming average monthly subscription
+      // Calculate monthly revenue from subscriptions (This is an estimate, can be replaced by actuals if needed)
+      const monthlyRevenue = activeSubsCount * 1200;
 
       // Calculate new listings from last 30 days
       const thirtyDaysAgo = new Date();
@@ -124,7 +129,7 @@ export const AdminDashboardScreen: React.FC = () => {
         activeVendors: vendorsCount,
         totalListings: productsCount,
         pendingKYC: pendingKYCCount,
-        totalTransactions: orders.length,
+        totalTransactions: (transactions as any[]).length,
         newListings: newListingsCount,
         uptimeStatus: '99.9%',
         totalRevenue: totalRevenue,

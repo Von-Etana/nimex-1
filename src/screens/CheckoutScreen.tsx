@@ -8,7 +8,7 @@ import { where, orderBy } from 'firebase/firestore';
 import { FirestoreService } from '../services/firestore.service';
 import { COLLECTIONS } from '../lib/collections';
 import { orderService } from '../services/orderService';
-import { paystackService } from '../services/paystackService';
+import { flutterwaveService } from '../services/flutterwaveService';
 import { deliveryService } from '../services/deliveryService';
 
 interface CartItem {
@@ -214,12 +214,13 @@ export const CheckoutScreen: React.FC = () => {
       const subtotal = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
       const totalAmount = subtotal + deliveryCost;
 
-      await paystackService.loadPaystackScript();
+      await flutterwaveService.loadFlutterwaveScript();
 
-      const paymentResult = await paystackService.initializePayment({
+      const paymentResult = await flutterwaveService.initializePayment({
         email: user.email || '',
         amount: totalAmount,
         orderId: firstOrder.data.orderId,
+        name: user.displayName || 'Customer',
         metadata: {
           order_ids: orderResults.map((r) => r.data?.orderId).filter(Boolean),
           buyer_id: user.uid,
@@ -230,21 +231,20 @@ export const CheckoutScreen: React.FC = () => {
         throw new Error(paymentResult.error || 'Failed to initialize payment');
       }
 
-      paystackService.openPaymentModal(
-        user.email || '',
-        totalAmount,
-        paymentResult.data.reference,
-        async (reference) => {
-          const verifyResult = await paystackService.verifyPayment(reference);
+      flutterwaveService.openPaymentModal(
+        paymentResult.data,
+        async (response) => {
+          // Verify
+          const verifyResult = await flutterwaveService.verifyPayment(response.transaction_id || response.tx_ref);
 
-          if (verifyResult.success && verifyResult.data?.status === 'success') {
+          if (verifyResult.success) {
             for (const orderResult of orderResults) {
               if (orderResult.data) {
                 await orderService.updateOrderPaymentStatus(
                   orderResult.data.orderId,
                   'paid',
-                  reference,
-                  verifyResult.data.channel
+                  response.tx_ref,
+                  'flutterwave'
                 );
               }
             }

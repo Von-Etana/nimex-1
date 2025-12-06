@@ -27,6 +27,10 @@ interface VendorProfile {
   market_location_details: string | null;
   business_lat: number | null;
   business_lng: number | null;
+  cac_number: string | null;
+  cac_certificate_url: string | null;
+  proof_of_address_url: string | null;
+  avatar_url: string | null;
 }
 
 export const VendorProfileSettingsScreen: React.FC = () => {
@@ -48,6 +52,10 @@ export const VendorProfileSettingsScreen: React.FC = () => {
     marketLocationDetails: '',
     businessLat: null as number | null,
     businessLng: null as number | null,
+    cacNumber: '',
+    cacCertificateUrl: '',
+    proofOfAddressUrl: '',
+    avatarUrl: '',
   });
   const [showLocationPicker, setShowLocationPicker] = useState(false);
 
@@ -80,6 +88,10 @@ export const VendorProfileSettingsScreen: React.FC = () => {
             marketLocationDetails: vendorData.market_location_details || '',
             businessLat: vendorData.business_lat || null,
             businessLng: vendorData.business_lng || null,
+            cacNumber: vendorData.cac_number || '',
+            cacCertificateUrl: vendorData.cac_certificate_url || '',
+            proofOfAddressUrl: vendorData.proof_of_address_url || '',
+            avatarUrl: vendorData.avatar_url || '',
           });
 
           if (vendorData.market_id) {
@@ -114,6 +126,10 @@ export const VendorProfileSettingsScreen: React.FC = () => {
         market_location_details: formData.marketLocationDetails || null,
         business_lat: formData.businessLat,
         business_lng: formData.businessLng,
+        avatar_url: formData.avatarUrl,
+        cac_certificate_url: formData.cacCertificateUrl,
+        proof_of_address_url: formData.proofOfAddressUrl,
+        // No CA number update here for now unless added to form input
         updated_at: Timestamp.now(),
       };
 
@@ -276,6 +292,84 @@ export const VendorProfileSettingsScreen: React.FC = () => {
                   />
                 )}
               </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-4 md:p-6 space-y-4 md:space-y-6">
+            <div className="flex items-center gap-2 md:gap-3 pb-3 md:pb-4 border-b border-neutral-100">
+              <Building2 className="w-4 h-4 md:w-6 md:h-6 text-primary-500" />
+              <h2 className="font-heading font-semibold text-sm md:text-xl text-neutral-900">
+                Documents & Branding
+              </h2>
+            </div>
+
+            <div>
+              <label className="block font-sans font-medium text-xs md:text-sm text-neutral-700 mb-1 md:mb-2">
+                Profile Picture / Logo
+              </label>
+              <div className="flex items-center gap-4">
+                {formData.avatarUrl && (
+                  <img src={formData.avatarUrl} alt="Avatar" className="w-16 h-16 rounded-full object-cover border border-neutral-200" />
+                )}
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (file && user) {
+                      try {
+                        setSaving(true);
+                        const { FirebaseStorageService } = await import('../../services/firebaseStorage.service');
+                        const result = await FirebaseStorageService.uploadFile(file, `vendors/${user.uid}/avatars/${Date.now()}_${file.name}`);
+                        if (result.url) {
+                          setFormData(prev => ({ ...prev, avatarUrl: result.url || '' }));
+                        }
+                      } catch (err) {
+                        console.error(err);
+                        setError('Failed to upload avatar');
+                      } finally {
+                        setSaving(false);
+                      }
+                    }
+                  }}
+                  className="block w-full text-sm text-neutral-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block font-sans font-medium text-xs md:text-sm text-neutral-700 mb-1 md:mb-2">
+                CAC Certificate (Optional)
+              </label>
+              {formData.cacCertificateUrl && (
+                <p className="text-xs text-green-600 mb-2">Current file uploaded.</p>
+              )}
+              <input
+                type="file"
+                accept=".pdf,.jpg,.jpeg,.png"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (file && user) {
+                    try {
+                      setSaving(true);
+                      const { FirebaseStorageService } = await import('../../services/firebaseStorage.service');
+                      const result = await FirebaseStorageService.uploadFile(file, `vendors/${user.uid}/cac-certificates/${Date.now()}_${file.name}`);
+                      if (result.url) {
+                        setFormData(prev => ({ ...prev, cacCertificateUrl: result.url || '' }));
+                      }
+                    } catch (err) {
+                      console.error(err);
+                      setError('Failed to upload CAC certificate');
+                    } finally {
+                      setSaving(false);
+                    }
+                  }
+                }}
+                className="block w-full text-sm text-neutral-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100"
+              />
+              <p className="text-xs text-neutral-500 mt-1">Upload via PDF or Image to request Verified Badge.</p>
             </div>
           </CardContent>
         </Card>

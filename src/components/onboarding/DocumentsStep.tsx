@@ -34,9 +34,12 @@ export const DocumentsStep: React.FC<DocumentsStepProps> = ({
   const calculateVerificationBadge = () => {
     let badge = 'none';
 
-    if (documents.cacCertificate) badge = 'basic';
-    if (documents.proofOfAddress) badge = 'verified';
-    if (profileData.bankAccountDetails?.bankName) badge = 'premium'; // Now checks for ID type
+    // Per user request: verification badge requires CAC + Admin Approval.
+    // Here we can only preview what *might* happen. 
+    // Actual badge logic will be handled by the backend/admin.
+    if (documents.cacCertificate) {
+      badge = 'basic'; // Indicates documents uploaded, pending approval
+    }
 
     return badge;
   };
@@ -68,20 +71,22 @@ export const DocumentsStep: React.FC<DocumentsStepProps> = ({
           Verification Documents (Optional)
         </CardTitle>
         <p className="text-sm text-neutral-600">
-          Upload documents to get verification badges and build trust with customers
+          Upload CAC to request "Verified" badge. You can skip this and upload later in settings.
         </p>
       </CardHeader>
       <CardContent className="space-y-6">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className={`p-4 rounded-lg border-2 ${
-            documents.cacCertificate ? 'border-green-300 bg-green-50' : 'border-neutral-200'
-          }`}>
+          <div className={`p-4 rounded-lg border-2 ${documents.cacCertificate ? 'border-green-300 bg-green-50' : 'border-neutral-200'
+            }`}>
             <div className="flex items-center gap-2 mb-2">
               <FileText className="w-4 h-4 text-neutral-600" />
-              <span className="font-semibold text-sm">CAC Certificate</span>
+              <div className="flex flex-col">
+                <span className="font-semibold text-sm">CAC Certificate</span>
+                <span className="text-[10px] text-neutral-500 uppercase font-bold tracking-wider">Optional</span>
+              </div>
             </div>
             <p className="text-xs text-neutral-600 mb-3">
-              Business registration certificate
+              Required for "Verified" badge
             </p>
             <input
               type="file"
@@ -106,9 +111,8 @@ export const DocumentsStep: React.FC<DocumentsStepProps> = ({
             )}
           </div>
 
-          <div className={`p-4 rounded-lg border-2 ${
-            documents.proofOfAddress ? 'border-green-300 bg-green-50' : 'border-neutral-200'
-          }`}>
+          <div className={`p-4 rounded-lg border-2 ${documents.proofOfAddress ? 'border-green-300 bg-green-50' : 'border-neutral-200'
+            }`}>
             <div className="flex items-center gap-2 mb-2">
               <Building2 className="w-4 h-4 text-neutral-600" />
               <span className="font-semibold text-sm">Proof of Address</span>
@@ -139,9 +143,8 @@ export const DocumentsStep: React.FC<DocumentsStepProps> = ({
             )}
           </div>
 
-          <div className={`p-4 rounded-lg border-2 ${
-            profileData.bankAccountDetails?.bankName ? 'border-green-300 bg-green-50' : 'border-neutral-200'
-          }`}>
+          <div className={`p-4 rounded-lg border-2 ${profileData.bankAccountDetails?.bankName ? 'border-green-300 bg-green-50' : 'border-neutral-200'
+            }`}>
             <div className="flex items-center gap-2 mb-2">
               <CreditCard className="w-4 h-4 text-neutral-600" />
               <span className="font-semibold text-sm">Means of Identification</span>

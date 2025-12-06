@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { PackageIcon, TrendingUp, DollarSign, Users, CheckCircle, Megaphone, Eye, EyeOff } from 'lucide-react';
+import { PackageIcon, TrendingUp, DollarSign, Users, Megaphone, Eye, EyeOff } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Card, CardContent } from '../components/ui/card';
 import { referralService } from '../services/referralService';
 import { useAuth } from '../contexts/AuthContext';
+import { getFriendlyErrorMessage } from '../utils/errorHandling';
 
 export const MarketerRegistrationScreen: React.FC = () => {
   const navigate = useNavigate();
@@ -47,7 +48,7 @@ export const MarketerRegistrationScreen: React.FC = () => {
       });
 
       if (authError) {
-        throw new Error(authError.message);
+        throw authError; // Throw full error object for utility
       }
 
       // Get the user ID from the auth context (it might take a moment to update, 
@@ -69,13 +70,17 @@ export const MarketerRegistrationScreen: React.FC = () => {
       const { auth } = await import('../lib/firebase.config');
       const userId = auth.currentUser?.uid;
 
+      if (!userId) {
+        throw new Error('Authentication failed. Please try again.');
+      }
+
       // 2. Create Marketer Profile
       const result = await referralService.registerMarketer({
         fullName: formData.fullName,
         email: formData.email,
         phone: formData.phone,
         businessName: formData.businessName,
-        userId: userId
+        userId: userId!, // We can safely assume userId exists if auth succeeded, but handling null is good practice
       });
 
       if (result.success) {
@@ -86,7 +91,7 @@ export const MarketerRegistrationScreen: React.FC = () => {
       }
     } catch (err: any) {
       console.error('Error during marketer registration:', err);
-      setError(err.message || 'An unexpected error occurred. Please try again.');
+      setError(getFriendlyErrorMessage(err));
     } finally {
       setLoading(false);
     }

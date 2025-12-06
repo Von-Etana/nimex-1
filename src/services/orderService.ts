@@ -4,6 +4,9 @@ import { logger } from '../lib/logger';
 import { Timestamp } from 'firebase/firestore';
 import type { Order, OrderItem, Vendor } from '../types/firestore';
 
+const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:5001/anima-project/us-central1'; // Default to local emulator for dev, or cloud url
+
+
 interface CreateOrderRequest {
   buyerId: string;
   vendorId: string;
@@ -176,54 +179,24 @@ class OrderService {
 
   async releaseEscrow(request: ReleaseEscrowRequest): Promise<{ success: boolean; error?: string }> {
     try {
-      // Get escrow transaction
-      const escrowTransactions = await FirestoreService.getDocuments(COLLECTIONS.ESCROW_TRANSACTIONS, {
-        filters: [{ field: 'order_id', operator: '==', value: request.orderId }],
-        limitCount: 1
+      const response = await fetch(`${API_URL}/releaseEscrow`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          orderId: request.orderId,
+          releaseType: request.releaseType,
+          notes: request.notes,
+          performedByUserId: request.releaseBy,
+        }),
       });
 
-      if (escrowTransactions.length === 0) {
-        throw new Error('Escrow transaction not found');
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to release escrow');
       }
-
-      const escrowTransaction: any = escrowTransactions[0];
-
-      if (escrowTransaction.status !== 'held') {
-        throw new Error('Escrow already released or refunded');
-      }
-
-      await FirestoreService.runTransaction(async (transaction) => {
-        // 1. Update escrow transaction
-        await FirestoreService.updateDocument(COLLECTIONS.ESCROW_TRANSACTIONS, escrowTransaction.id, {
-          status: 'released',
-          released_at: Timestamp.now(),
-          release_reason: request.notes || 'Delivery confirmed',
-        });
-
-        // 2. Get vendor
-        const vendor = await FirestoreService.getDocument<Vendor>(COLLECTIONS.VENDORS, escrowTransaction.vendor_id);
-        if (!vendor) throw new Error('Vendor not found');
-
-        const newBalance = (vendor.wallet_balance || 0) + escrowTransaction.vendor_amount;
-
-        // 3. Update vendor wallet
-        await FirestoreService.updateDocument(COLLECTIONS.VENDORS, vendor.id, {
-          wallet_balance: newBalance
-        });
-
-        // 4. Create wallet transaction
-        const txId = `tx_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-        await FirestoreService.setDocument(COLLECTIONS.WALLET_TRANSACTIONS, txId, {
-          vendor_id: escrowTransaction.vendor_id,
-          type: 'sale',
-          amount: escrowTransaction.vendor_amount,
-          balance_after: newBalance,
-          reference: `ESCROW-${escrowTransaction.id}`,
-          description: `Sale payment for order ${request.orderId}`,
-          status: 'completed',
-          created_at: Timestamp.now(),
-        });
-      });
 
       return { success: true };
     } catch (error) {
@@ -237,35 +210,22 @@ class OrderService {
 
   async refundEscrow(orderId: string, reason: string): Promise<{ success: boolean; error?: string }> {
     try {
-      const escrowTransactions = await FirestoreService.getDocuments(COLLECTIONS.ESCROW_TRANSACTIONS, {
-        filters: [{ field: 'order_id', operator: '==', value: orderId }],
-        limitCount: 1
+      const response = await fetch(`${API_URL}/refundEscrow`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          orderId,
+          reason,
+        }),
       });
 
-      if (escrowTransactions.length === 0) {
-        throw new Error('Escrow transaction not found');
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to refund escrow');
       }
-
-      const escrowTransaction = escrowTransactions[0];
-
-      if ((escrowTransaction as any).status !== 'held') {
-        throw new Error('Escrow already released or refunded');
-      }
-
-      await FirestoreService.runTransaction(async (transaction) => {
-        // Update escrow
-        await FirestoreService.updateDocument(COLLECTIONS.ESCROW_TRANSACTIONS, escrowTransaction.id, {
-          status: 'refunded',
-          released_at: Timestamp.now(),
-          release_reason: reason,
-        });
-
-        // Update order
-        await FirestoreService.updateDocument(COLLECTIONS.ORDERS, orderId, {
-          status: 'cancelled',
-          payment_status: 'refunded',
-        });
-      });
 
       return { success: true };
     } catch (error) {

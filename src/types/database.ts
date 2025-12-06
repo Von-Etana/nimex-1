@@ -67,7 +67,9 @@ export interface Database {
           market_location: string | null;
           sub_category_tags: string[] | null;
           cac_number: string | null;
+          cac_certificate_url: string | null;
           proof_of_address_url: string | null;
+          avatar_url: string | null;
           bank_account_details: Json | null;
           verification_badge: VerificationBadge;
           verification_status: VerificationStatus;
@@ -99,7 +101,9 @@ export interface Database {
           market_location?: string | null;
           sub_category_tags?: string[] | null;
           cac_number?: string | null;
+          cac_certificate_url?: string | null;
           proof_of_address_url?: string | null;
+          avatar_url?: string | null;
           bank_account_details?: Json | null;
           verification_badge?: VerificationBadge;
           verification_status?: VerificationStatus;
@@ -127,7 +131,9 @@ export interface Database {
           market_location?: string | null;
           sub_category_tags?: string[] | null;
           cac_number?: string | null;
+          cac_certificate_url?: string | null;
           proof_of_address_url?: string | null;
+          avatar_url?: string | null;
           bank_account_details?: Json | null;
           verification_badge?: VerificationBadge;
           verification_status?: VerificationStatus;

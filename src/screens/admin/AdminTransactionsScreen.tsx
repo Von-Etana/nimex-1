@@ -15,6 +15,8 @@ interface Transaction {
   payment_method?: string;
   payment_reference?: string;
   created_at: string;
+  type?: 'order' | 'subscription' | 'withdrawal';
+  description?: string;
   order?: {
     order_number: string;
     status: string;
@@ -287,15 +289,25 @@ export const AdminTransactionsScreen: React.FC = () => {
                           className="border-b border-neutral-100 hover:bg-neutral-50 transition-colors"
                         >
                           <td className="px-6 py-4 font-sans text-sm text-neutral-900 font-medium">
-                            {transaction.order?.order_number || 'N/A'}
+                            {transaction.order?.order_number ||
+                              (transaction.type ? transaction.type.charAt(0).toUpperCase() + transaction.type.slice(1) : 'N/A')}
+                            {transaction.description && !transaction.order?.order_number && (
+                              <span className="block text-xs text-neutral-500 font-normal truncate max-w-[150px]">
+                                {transaction.description}
+                              </span>
+                            )}
                           </td>
                           <td className="px-6 py-4">
                             <div className="flex flex-col">
                               <span className="font-sans text-sm text-neutral-900 font-medium">
-                                {transaction.buyer?.full_name || 'Unknown'}
+                                {transaction.type === 'withdrawal' ? 'Nimex Platform' :
+                                  transaction.type === 'subscription' ? (transaction.vendor?.business_name || 'Unknown Vendor') :
+                                    (transaction.buyer?.full_name || 'Unknown')}
                               </span>
                               <span className="font-sans text-xs text-neutral-600">
-                                {transaction.buyer?.email}
+                                {transaction.type === 'withdrawal' ? 'Payout' :
+                                  transaction.type === 'subscription' ? 'Vendor Subscription' :
+                                    transaction.buyer?.email}
                               </span>
                             </div>
                           </td>

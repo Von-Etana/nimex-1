@@ -16,6 +16,7 @@ interface VendorProfile {
   businessCategory?: string;
   cacNumber?: string;
   proofOfAddressUrl?: string;
+  avatarUrl?: string | null;
   bankAccountDetails?: {
     bankName: string;
     accountNumber: string;
@@ -56,6 +57,7 @@ interface BusinessInfoStepProps {
   onSelectMarketLocation: (location: MarketLocation) => void;
   onToggleSubCategoryTag: (tagId: string) => void;
   onAddCustomSubCategory: (customTag: string) => void;
+  onAvatarSelect?: (file: File) => void;
 }
 
 export const BusinessInfoStep: React.FC<BusinessInfoStepProps> = ({
@@ -68,7 +70,8 @@ export const BusinessInfoStep: React.FC<BusinessInfoStepProps> = ({
   onProfileDataChange,
   onMarketLocationSearch,
   onSelectMarketLocation,
-  onToggleSubCategoryTag
+  onToggleSubCategoryTag,
+  onAvatarSelect
 }) => {
   if (loading) {
     return (
@@ -104,9 +107,8 @@ export const BusinessInfoStep: React.FC<BusinessInfoStepProps> = ({
             value={profileData.businessName}
             onChange={(e) => onProfileDataChange('businessName', e.target.value)}
             placeholder="Enter your business name"
-            className={`w-full h-10 px-3 rounded-lg border font-sans text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 ${
-              formErrors.businessName ? 'border-red-500' : 'border-neutral-200'
-            }`}
+            className={`w-full h-10 px-3 rounded-lg border font-sans text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 ${formErrors.businessName ? 'border-red-500' : 'border-neutral-200'
+              }`}
             aria-describedby={formErrors.businessName ? "business-name-error" : undefined}
             aria-invalid={!!formErrors.businessName}
           />
@@ -119,6 +121,31 @@ export const BusinessInfoStep: React.FC<BusinessInfoStepProps> = ({
 
         <div>
           <label className="block font-sans font-medium text-sm text-neutral-700 mb-2">
+            Profile Picture / Logo (Optional)
+          </label>
+          <input
+            type="file"
+            accept="image/*"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file && onAvatarSelect) {
+                onAvatarSelect(file);
+              }
+            }}
+            className="block w-full text-sm text-neutral-500
+               file:mr-4 file:py-2 file:px-4
+               file:rounded-full file:border-0
+               file:text-sm file:font-semibold
+               file:bg-primary-50 file:text-primary-700
+               hover:file:bg-primary-100"
+          />
+          <p className="text-xs text-neutral-500 mt-1">
+            Upload your business logo or a profile picture.
+          </p>
+        </div>
+
+        <div>
+          <label className="block font-sans font-medium text-sm text-neutral-700 mb-2">
             Business Description *
           </label>
           <textarea
@@ -126,9 +153,8 @@ export const BusinessInfoStep: React.FC<BusinessInfoStepProps> = ({
             onChange={(e) => onProfileDataChange('businessDescription', e.target.value)}
             placeholder="Describe your business..."
             rows={3}
-            className={`w-full px-3 py-2 rounded-lg border font-sans text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 ${
-              formErrors.businessDescription ? 'border-red-500' : 'border-neutral-200'
-            }`}
+            className={`w-full px-3 py-2 rounded-lg border font-sans text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 ${formErrors.businessDescription ? 'border-red-500' : 'border-neutral-200'
+              }`}
             aria-describedby={formErrors.businessDescription ? "business-description-error" : undefined}
             aria-invalid={!!formErrors.businessDescription}
           />
@@ -146,9 +172,8 @@ export const BusinessInfoStep: React.FC<BusinessInfoStepProps> = ({
           <select
             value={profileData.businessCategory || ''}
             onChange={(e) => onProfileDataChange('businessCategory', e.target.value)}
-            className={`w-full h-10 px-3 rounded-lg border font-sans text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 ${
-              formErrors.businessCategory ? 'border-red-500' : 'border-neutral-200'
-            }`}
+            className={`w-full h-10 px-3 rounded-lg border font-sans text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 ${formErrors.businessCategory ? 'border-red-500' : 'border-neutral-200'
+              }`}
             aria-describedby={formErrors.businessCategory ? "business-category-error" : undefined}
             aria-invalid={!!formErrors.businessCategory}
           >
@@ -180,9 +205,8 @@ export const BusinessInfoStep: React.FC<BusinessInfoStepProps> = ({
             value={profileData.businessAddress}
             onChange={(e) => onProfileDataChange('businessAddress', e.target.value)}
             placeholder="Enter your business address"
-            className={`w-full h-10 px-3 rounded-lg border font-sans text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 ${
-              formErrors.businessAddress ? 'border-red-500' : 'border-neutral-200'
-            }`}
+            className={`w-full h-10 px-3 rounded-lg border font-sans text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 ${formErrors.businessAddress ? 'border-red-500' : 'border-neutral-200'
+              }`}
             aria-describedby={formErrors.businessAddress ? "business-address-error" : undefined}
             aria-invalid={!!formErrors.businessAddress}
           />
@@ -202,9 +226,8 @@ export const BusinessInfoStep: React.FC<BusinessInfoStepProps> = ({
             value={profileData.businessPhone}
             onChange={(e) => onProfileDataChange('businessPhone', e.target.value)}
             placeholder="+234 xxx xxx xxxx"
-            className={`w-full h-10 px-3 rounded-lg border font-sans text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 ${
-              formErrors.businessPhone ? 'border-red-500' : 'border-neutral-200'
-            }`}
+            className={`w-full h-10 px-3 rounded-lg border font-sans text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 ${formErrors.businessPhone ? 'border-red-500' : 'border-neutral-200'
+              }`}
             aria-describedby={formErrors.businessPhone ? "business-phone-error" : undefined}
             aria-invalid={!!formErrors.businessPhone}
           />
@@ -229,9 +252,8 @@ export const BusinessInfoStep: React.FC<BusinessInfoStepProps> = ({
                 onMarketLocationSearch(e.target.value);
               }}
               placeholder="Select your market location"
-              className={`w-full h-10 pl-10 pr-3 rounded-lg border font-sans text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 ${
-                formErrors.marketLocation ? 'border-red-500' : 'border-neutral-200'
-              }`}
+              className={`w-full h-10 pl-10 pr-3 rounded-lg border font-sans text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 ${formErrors.marketLocation ? 'border-red-500' : 'border-neutral-200'
+                }`}
               aria-describedby={formErrors.marketLocation ? "market-location-error" : undefined}
               aria-invalid={!!formErrors.marketLocation}
             />
@@ -299,13 +321,12 @@ export const BusinessInfoStep: React.FC<BusinessInfoStepProps> = ({
                 key={tag.id}
                 onClick={() => onToggleSubCategoryTag(tag.id)}
                 disabled={profileData.subCategoryTags.length >= MAX_SUB_CATEGORY_TAGS && !profileData.subCategoryTags.includes(tag.id)}
-                className={`p-2 text-left rounded border font-sans text-xs ${
-                  profileData.subCategoryTags.includes(tag.id)
-                    ? 'bg-primary-100 border-primary-300 text-primary-700'
-                    : profileData.subCategoryTags.length >= MAX_SUB_CATEGORY_TAGS
+                className={`p-2 text-left rounded border font-sans text-xs ${profileData.subCategoryTags.includes(tag.id)
+                  ? 'bg-primary-100 border-primary-300 text-primary-700'
+                  : profileData.subCategoryTags.length >= MAX_SUB_CATEGORY_TAGS
                     ? 'bg-neutral-50 border-neutral-200 text-neutral-400 cursor-not-allowed'
                     : 'bg-white border-neutral-200 text-neutral-700 hover:bg-neutral-50'
-                }`}
+                  }`}
                 aria-pressed={profileData.subCategoryTags.includes(tag.id)}
                 aria-label={`${profileData.subCategoryTags.includes(tag.id) ? 'Remove' : 'Add'} ${tag.name} tag`}
               >

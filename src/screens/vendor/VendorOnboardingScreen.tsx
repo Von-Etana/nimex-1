@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { FirestoreService } from '../../services/firestore.service';
 import { FirebaseStorageService } from '../../services/firebaseStorage.service';
-import { COLLECTIONS, STORAGE_PATHS } from '../../lib/collections';
+import { COLLECTIONS } from '../../lib/collections';
 import { subscriptionService } from '../../services/subscriptionService';
 import { referralService } from '../../services/referralService';
 import { MARKET_LOCATIONS, type MarketLocation } from '../../data/marketLocations';
@@ -15,6 +15,7 @@ import { DocumentsStep } from '../../components/onboarding/DocumentsStep';
 import { BankDetailsStep } from '../../components/onboarding/BankDetailsStep';
 import { SubscriptionStep } from '../../components/onboarding/SubscriptionStep';
 import { Timestamp } from 'firebase/firestore';
+import { getFriendlyErrorMessage } from '../../utils/errorHandling';
 
 // Constants
 const MAX_SUB_CATEGORY_TAGS = 3;
@@ -31,6 +32,7 @@ interface VendorProfile {
   subCategoryTags: string[];
   cacNumber?: string;
   proofOfAddressUrl?: string;
+  avatarUrl?: string | null;
   bankAccountDetails?: {
     bankName: string;
     accountNumber: string;
@@ -92,7 +94,8 @@ export const VendorOnboardingScreen: React.FC = () => {
 
   const [documents, setDocuments] = useState({
     cacCertificate: null as File | null,
-    proofOfAddress: null as File | null
+    proofOfAddress: null as File | null,
+    avatar: null as File | null
   });
 
   useEffect(() => {
@@ -181,6 +184,31 @@ export const VendorOnboardingScreen: React.FC = () => {
       }
     }
 
+    if (currentStep === 2) {
+      // Require at least one document for basic verification, or specific ones?
+      // Let's enforce CAC for 'basic' and Proof of Address for 'verified'.
+      // For now, let's require at least CAC certificate to ensure legitimate businesses.
+      // If the user hasn't uploaded CAC, we show an error.
+      // if (!documents.cacCertificate) {
+      //   errors.cacCertificate = 'CAC Certificate is required';
+      // }
+      if (!documents.proofOfAddress) {
+        errors.proofOfAddress = 'Proof of Address is required';
+      }
+    }
+
+    if (currentStep === 3) {
+      if (!profileData.bankAccountDetails?.bankName) {
+        errors.bankAccountDetails = { ...errors.bankAccountDetails, bankName: 'Bank name is required' };
+      }
+      if (!profileData.bankAccountDetails?.accountNumber) {
+        errors.bankAccountDetails = { ...errors.bankAccountDetails, accountNumber: 'Account number is required' };
+      }
+      if (!profileData.bankAccountDetails?.accountName) {
+        errors.bankAccountDetails = { ...errors.bankAccountDetails, accountName: 'Account name is required' };
+      }
+    }
+
     return {
       isStepValid: Object.keys(errors).length === 0,
       stepErrors: errors
@@ -241,23 +269,29 @@ export const VendorOnboardingScreen: React.FC = () => {
   }, [showNotification]);
 
   const uploadFile = useCallback(async (file: File, path: string): Promise<string> => {
+    if (!user?.uid) throw new Error('User not authenticated');
+
     const fileExt = file.name.split('.').pop();
     const fileName = `${Math.random()}.${fileExt}`;
-    // Use STORAGE_PATHS if available, or just construct path
-    const fullPath = `vendor-documents/${path}/${fileName}`;
+    // Use path matching storage.rules: vendors/{vendorId}/...
+    const fullPath = `vendors/${user.uid}/${path}/${fileName}`;
 
     setUploadingFiles(prev => ({ ...prev, [path]: true }));
 
     try {
-      const downloadUrl = await FirebaseStorageService.uploadFile(file, fullPath);
-      return downloadUrl;
+      const result = await FirebaseStorageService.uploadFile(file, fullPath);
+
+      if (result.error) throw result.error;
+      if (!result.url) throw new Error('Upload failed: No URL returned');
+
+      return result.url;
     } catch (error) {
       console.error('Upload error:', error);
       throw error;
     } finally {
       setUploadingFiles(prev => ({ ...prev, [path]: false }));
     }
-  }, []);
+  }, [user?.uid]);
 
   const calculateVerificationBadge = (): string => {
     let badge = 'none';
@@ -279,6 +313,11 @@ export const VendorOnboardingScreen: React.FC = () => {
     }
 
     setLoading(true);
+
+    // ... imports ...
+
+    // ... (inside component)
+
     try {
       // Upload documents in parallel for better performance
       const uploadPromises: Promise<string | undefined>[] = [];
@@ -295,7 +334,13 @@ export const VendorOnboardingScreen: React.FC = () => {
         uploadPromises.push(Promise.resolve(undefined));
       }
 
-      const [cacUrl, proofOfAddressUrl] = await Promise.allSettled(uploadPromises).then(results =>
+      if (documents.avatar) {
+        uploadPromises.push(uploadFile(documents.avatar, 'avatars'));
+      } else {
+        uploadPromises.push(Promise.resolve(undefined));
+      }
+
+      const [cacUrl, proofOfAddressUrl, avatarUrl] = await Promise.allSettled(uploadPromises).then(results =>
         results.map(result => result.status === 'fulfilled' ? result.value : undefined)
       );
 
@@ -309,7 +354,9 @@ export const VendorOnboardingScreen: React.FC = () => {
         market_location: profileData.marketLocation,
         sub_category_tags: profileData.subCategoryTags,
         cac_number: profileData.cacNumber || null,
+        cac_certificate_url: cacUrl || null,
         proof_of_address_url: proofOfAddressUrl || null,
+        avatar_url: avatarUrl || null,
         bank_account_details: profileData.bankAccountDetails ? JSON.stringify(profileData.bankAccountDetails) : null,
         verification_badge: calculateVerificationBadge(),
         subscription_plan: selectedSubscription as any,
@@ -349,11 +396,10 @@ export const VendorOnboardingScreen: React.FC = () => {
         }
       }
 
-      // Navigate to subscription selection if not free
+      // Initialize payment with Paystack
       if (selectedSubscription === 'free') {
         navigate('/vendor/dashboard');
       } else {
-        // Initialize payment with Paystack
         const { paystackService } = await import('../../services/paystackService');
         const paymentResult = await paystackService.initializeSubscriptionPayment(
           profile.email,
@@ -388,7 +434,7 @@ export const VendorOnboardingScreen: React.FC = () => {
       }
     } catch (error) {
       console.error('Error completing onboarding:', error);
-      showNotification('error', 'Error completing onboarding. Please try again.');
+      showNotification('error', getFriendlyErrorMessage(error));
     } finally {
       setLoading(false);
     }
@@ -399,8 +445,8 @@ export const VendorOnboardingScreen: React.FC = () => {
       {[1, 2, 3, 4].map((step) => (
         <div key={step} className="flex items-center">
           <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold ${step <= currentStep
-              ? 'bg-primary-500 text-white'
-              : 'bg-neutral-200 text-neutral-600'
+            ? 'bg-primary-500 text-white'
+            : 'bg-neutral-200 text-neutral-600'
             }`}>
             {step}
           </div>
@@ -423,7 +469,7 @@ export const VendorOnboardingScreen: React.FC = () => {
       <div className="min-h-screen bg-neutral-50 py-8">
         <div className="max-w-6xl mx-auto px-4">
           <div className="text-center mb-8">
-            <h1 className="text-3xl font-bold text-neutral-900 mb-2">
+            <h1 className="text-3xl font-heading font-bold text-neutral-900 mb-2">
               Complete Your Vendor Profile
             </h1>
             <p className="text-neutral-600">
@@ -441,6 +487,7 @@ export const VendorOnboardingScreen: React.FC = () => {
               showMarketSuggestions={showMarketSuggestions}
               availableTags={availableTags}
               onProfileDataChange={(field, value) => setProfileData(prev => ({ ...prev, [field]: value }))}
+              onAvatarSelect={(file) => setDocuments(prev => ({ ...prev, avatar: file }))}
               onMarketLocationSearch={handleMarketLocationSearch}
               onSelectMarketLocation={selectMarketLocation}
               onToggleSubCategoryTag={toggleSubCategoryTag}

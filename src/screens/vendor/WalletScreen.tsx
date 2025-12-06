@@ -171,6 +171,53 @@ export const WalletScreen: React.FC = () => {
     }
   };
 
+  // Withdrawal State
+  const [showWithdrawModal, setShowWithdrawModal] = useState(false);
+  const [withdrawAmount, setWithdrawAmount] = useState('');
+  const [selectedAccountForWithdrawal, setSelectedAccountForWithdrawal] = useState('');
+  const [isProcessingWithdrawal, setIsProcessingWithdrawal] = useState(false);
+
+  const handleWithdrawal = async () => {
+    if (!withdrawAmount || !selectedAccountForWithdrawal || !vendorData) return;
+
+    const amount = parseFloat(withdrawAmount);
+    if (amount > vendorData.wallet_balance) {
+      setError('Insufficient funds');
+      return;
+    }
+
+    const account = payoutAccounts.find(a => a.id === selectedAccountForWithdrawal);
+    if (!account) return;
+
+    setIsProcessingWithdrawal(true);
+    setError('');
+
+    try {
+      const result = await flutterwaveService.transferToVendor(
+        user!.uid,
+        amount,
+        account.bank_code,
+        account.account_number,
+        'Withdrawal from Nimex'
+      );
+
+      if (result.success) {
+        setSuccess('Withdrawal initiated successfully');
+        setShowWithdrawModal(false);
+        setWithdrawAmount('');
+        // Update balance locally (optimistic) or reload
+        // In a real app, listen for webhook, but here we can just deduct locally for UI
+        setVendorData(prev => prev ? ({ ...prev, wallet_balance: prev.wallet_balance - amount }) : null);
+      } else {
+        setError(result.error || 'Withdrawal failed');
+      }
+    } catch (err) {
+      setError('An error occurred during withdrawal');
+    } finally {
+      setIsProcessingWithdrawal(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="w-full min-h-screen bg-neutral-50 flex items-center justify-center">
@@ -240,6 +287,7 @@ export const WalletScreen: React.FC = () => {
                 </div>
               </div>
               <Button
+                onClick={() => setShowWithdrawModal(true)}
                 variant="outline"
                 className="w-full bg-white text-primary-700 hover:bg-primary-50"
               >
@@ -455,6 +503,74 @@ export const WalletScreen: React.FC = () => {
           </CardContent>
         </Card>
       </div>
+      {/* Withdrawal Modal */}
+      {showWithdrawModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <Card className="w-full max-w-md">
+            <CardContent className="p-6">
+              <h3 className="font-heading font-semibold text-lg text-neutral-900 mb-4">
+                Withdraw Funds
+              </h3>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="font-sans text-sm text-neutral-700 mb-2 block">
+                    Amount to Withdraw
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500">₦</span>
+                    <input
+                      type="number"
+                      value={withdrawAmount}
+                      onChange={(e) => setWithdrawAmount(e.target.value)}
+                      className="w-full pl-8 pr-4 py-2 border border-neutral-300 rounded-lg font-sans text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      placeholder="0.00"
+                    />
+                  </div>
+                  <p className="text-xs text-neutral-500 mt-1">
+                    Available: ₦{vendorData.wallet_balance.toLocaleString()}
+                  </p>
+                </div>
+
+                <div>
+                  <label className="font-sans text-sm text-neutral-700 mb-2 block">
+                    Select Payout Account
+                  </label>
+                  <select
+                    value={selectedAccountForWithdrawal}
+                    onChange={(e) => setSelectedAccountForWithdrawal(e.target.value)}
+                    className="w-full px-4 py-2 border border-neutral-300 rounded-lg font-sans text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  >
+                    <option value="">Select Account</option>
+                    {payoutAccounts.map(acc => (
+                      <option key={acc.id} value={acc.id}>
+                        {acc.bank_name} - {acc.account_number}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="flex gap-3 pt-2">
+                  <Button
+                    onClick={handleWithdrawal}
+                    disabled={isProcessingWithdrawal || !withdrawAmount || !selectedAccountForWithdrawal}
+                    className="flex-1 bg-primary-500 hover:bg-primary-600"
+                  >
+                    {isProcessingWithdrawal ? 'Processing...' : 'Withdraw'}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => setShowWithdrawModal(false)}
+                    className="flex-1"
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
     </div>
   );
 };

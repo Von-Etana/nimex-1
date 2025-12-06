@@ -27,6 +27,7 @@ import {
     Unsubscribe,
     DocumentSnapshot,
     QuerySnapshot,
+    addDoc,
 } from 'firebase/firestore';
 import { db } from '../lib/firebase.config';
 import { logger } from '../lib/logger';
@@ -143,6 +144,29 @@ export class FirestoreService {
             return documents;
         } catch (error) {
             logger.error(`Error getting documents from ${collectionName}`, error);
+            throw error;
+        }
+    }
+
+    /**
+     * Add a document with auto-generated ID
+     */
+    static async addDocument<T = DocumentData>(
+        collectionName: string,
+        data: T
+    ): Promise<string> {
+        try {
+            const colRef = collection(db, collectionName);
+            const dataWithTimestamp = {
+                ...data,
+                created_at: Timestamp.now(),
+                updated_at: Timestamp.now(),
+            };
+            const docRef = await addDoc(colRef, dataWithTimestamp);
+            logger.info(`Document added to ${collectionName}/${docRef.id}`);
+            return docRef.id;
+        } catch (error) {
+            logger.error(`Error adding document to ${collectionName}`, error);
             throw error;
         }
     }

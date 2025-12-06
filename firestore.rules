@@ -13,6 +13,7 @@ service cloud.firestore {
     
     function isAdmin() {
       return isAuthenticated() && 
+        exists(/databases/$(database)/documents/profiles/$(request.auth.uid)) &&
         get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.role == 'admin';
     }
     
@@ -25,158 +26,50 @@ service cloud.firestore {
     match /profiles/{userId} {
       allow read: if isAuthenticated();
       allow create: if isAuthenticated() && request.auth.uid == userId;
-      allow update: if isOwner(userId);
-      allow delete: if isOwner(userId) || isAdmin();
+      allow update: if isAuthenticated() && request.auth.uid == userId;
+      allow delete: if isAuthenticated() && request.auth.uid == userId || isAdmin();
     }
     
-    // Vendors - public read, owner write
+    // Vendors - public read, owner write (RESTRICTED)
     match /vendors/{vendorId} {
       allow read: if true;
       allow create: if isAuthenticated() && request.auth.uid == vendorId;
-      allow update: if isAuthenticated() && 
-        (resource.data.user_id == request.auth.uid || isAdmin());
-      allow delete: if isAdmin();
-    }
-    
-    // Products - public read, vendor write
-    match /products/{productId} {
-      allow read: if true;
-      allow create: if isVendor();
-      allow update: if isAuthenticated() && 
-        (resource.data.vendor_id == request.auth.uid || isAdmin());
-      allow delete: if isAuthenticated() && 
-        (resource.data.vendor_id == request.auth.uid || isAdmin());
-    }
-    
-    // Orders - buyer and vendor can read, buyer can create
-    match /orders/{orderId} {
-      allow read: if isAuthenticated() && (
-        resource.data.user_id == request.auth.uid ||
-        resource.data.vendor_id == request.auth.uid ||
-        isAdmin()
-      );
-      allow create: if isAuthenticated();
+      // Update: Allow if owner or admin, BUT prevent modifying wallet_balance, verification_status, etc.
       allow update: if isAuthenticated() && (
-        resource.data.user_id == request.auth.uid ||
-        resource.data.vendor_id == request.auth.uid ||
-        isAdmin()
+        isAdmin() || 
+        (
+          (request.auth.uid == vendorId || resource.data.user_id == request.auth.uid) &&
+          request.resource.data.wallet_balance == resource.data.wallet_balance &&
+          request.resource.data.verification_status == resource.data.verification_status && 
+          request.resource.data.verification_badge == resource.data.verification_badge &&
+          request.resource.data.total_sales == resource.data.total_sales
+        )
       );
       allow delete: if isAdmin();
     }
     
-    // Carts - owner only
-    match /carts/{cartId} {
-      allow read, write: if isAuthenticated() && 
-        resource.data.user_id == request.auth.uid;
-    }
-    
-    match /cart_items/{itemId} {
-      allow read, write: if isAuthenticated();
-    }
-    
-    // Reviews - public read, buyer write
-    match /reviews/{reviewId} {
-      allow read: if true;
-      allow create: if isAuthenticated();
-      allow update, delete: if isAuthenticated() && 
-        resource.data.buyer_id == request.auth.uid;
-    }
-    
-    // Addresses - owner only
-    match /addresses/{addressId} {
-      allow read, write: if isAuthenticated() && 
-        resource.data.user_id == request.auth.uid;
-    }
-    
-    // Wishlists - owner only
-    match /wishlists/{wishlistId} {
-      allow read, write: if isAuthenticated() && 
-        resource.data.user_id == request.auth.uid;
-    }
-    
-    // Categories - public read, admin write
-    match /categories/{categoryId} {
-      allow read: if true;
-      allow write: if isAdmin();
-    }
-    
-    // Markets - public read, admin write
-    match /markets/{marketId} {
-      allow read: if true;
-      allow write: if isAdmin();
-    }
-    
-    // Chat conversations - participants only
-    match /chat_conversations/{conversationId} {
-      allow read, write: if isAuthenticated() && (
-        request.auth.uid in resource.data.participant_ids ||
-        !exists(/databases/$(database)/documents/chat_conversations/$(conversationId))
-      );
-    }
-    
-    match /chat_messages/{messageId} {
-      allow read, write: if isAuthenticated();
-    }
-    
-    // Notifications - owner only
-    match /notifications/{notificationId} {
-      allow read, write: if isAuthenticated() && 
-        resource.data.user_id == request.auth.uid;
-    }
-    
-    // Marketers - admin and owner
-    match /marketers/{marketerId} {
-      allow read: if true;
-      allow create: if true; // Allow unauthenticated marketer registration
-      allow update, delete: if isAuthenticated() && 
-        (resource.data.user_id == request.auth.uid || isAdmin());
-    }
-    
-    // Referrals - public read, authenticated write
-    match /referrals/{referralId} {
-      allow read: if true;
-      allow create: if isAuthenticated();
-      allow update, delete: if isAuthenticated() && 
-        resource.data.referrer_id == request.auth.uid;
-    }
-    
-    // Transactions - owner and admin
-    match /transactions/{transactionId} {
+    // ...
+
+    // Transaction & Escrow (Fixed Collection Names)
+
+    // Wallet Transactions - Read only for owner, Write only by backend (admin)
+    match /wallet_transactions/{transactionId} {
       allow read: if isAuthenticated() && (
-        resource.data.user_id == request.auth.uid ||
-        resource.data.vendor_id == request.auth.uid ||
+        resource.data.vendor_id == request.auth.uid || 
+        resource.data.user_id == request.auth.uid || // Fallback if user_id is used
         isAdmin()
       );
-      allow create: if isAuthenticated();
-      allow update, delete: if isAdmin();
+      allow write: if false; // Only backend can create/update
     }
-    
-    // Support tickets - owner and admin
-    match /support_tickets/{ticketId} {
+
+    // Escrow Transactions - Read for participants, Write only by backend (admin)
+    match /escrow_transactions/{escrowId} {
       allow read: if isAuthenticated() && (
-        resource.data.user_id == request.auth.uid || isAdmin()
-      );
-      allow create: if isAuthenticated();
-      allow update: if isAuthenticated() && (
-        resource.data.user_id == request.auth.uid || isAdmin()
-      );
-      allow delete: if isAdmin();
-    }
-    
-    // Escrow - participants and admin
-    match /escrow/{escrowId} {
-      allow read: if isAuthenticated() && (
-        resource.data.buyer_id == request.auth.uid ||
-        resource.data.vendor_id == request.auth.uid ||
+        resource.data.buyer_id == request.auth.uid || 
+        resource.data.vendor_id == request.auth.uid || 
         isAdmin()
       );
-      allow create: if isAuthenticated();
-      allow update: if isAuthenticated() && (
-        resource.data.buyer_id == request.auth.uid ||
-        resource.data.vendor_id == request.auth.uid ||
-        isAdmin()
-      );
-      allow delete: if isAdmin();
+      allow write: if false; // Only backend can create/release/refund
     }
     
     // Disputes - participants and admin
@@ -204,6 +97,36 @@ service cloud.firestore {
     // Analytics - admin only
     match /analytics/{analyticsId} {
       allow read, write: if isAdmin();
+    }
+
+    // KYC Submissions
+    match /kyc_submissions/{submissionId} {
+      allow read: if isAuthenticated() && (resource.data.user_id == request.auth.uid || isAdmin());
+      allow create: if isAuthenticated() && request.resource.data.user_id == request.auth.uid;
+      allow update: if isAuthenticated() && (resource.data.user_id == request.auth.uid || isAdmin());
+      allow delete: if isAdmin();
+    }
+
+    // Admin Role Assignments
+    match /admin_role_assignments/{assignmentId} {
+      allow read: if isAuthenticated() && (resource.data.user_id == request.auth.uid || isAdmin());
+      allow write: if isAdmin();
+    }
+
+    // Admin Roles & Permissions
+    match /admin_roles/{roleId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    match /admin_permissions/{permId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    match /role_permissions/{permId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
     }
   }
 }

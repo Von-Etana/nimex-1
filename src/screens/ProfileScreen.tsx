@@ -14,6 +14,7 @@ export const ProfileScreen: React.FC = () => {
     full_name: '',
     phone: '',
     location: '',
+    avatar_url: '',
   });
 
   useEffect(() => {
@@ -22,6 +23,7 @@ export const ProfileScreen: React.FC = () => {
         full_name: profile.full_name || '',
         phone: profile.phone || '',
         location: profile.location || '',
+        avatar_url: profile.avatar_url || '',
       });
     }
   }, [profile]);
@@ -86,6 +88,7 @@ export const ProfileScreen: React.FC = () => {
                           full_name: profile?.full_name || '',
                           phone: profile?.phone || '',
                           location: profile?.location || '',
+                          avatar_url: profile?.avatar_url || '',
                         });
                       }}
                     >
@@ -105,6 +108,50 @@ export const ProfileScreen: React.FC = () => {
                     </Button>
                   </div>
                 )}
+              </div>
+
+              <div className="flex items-center gap-6 mb-8">
+                <div className="relative">
+                  <div className="w-24 h-24 rounded-full bg-neutral-100 overflow-hidden border-2 border-neutral-200">
+                    {formData.avatar_url ? (
+                      <img src={formData.avatar_url} alt="Profile" className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-neutral-400">
+                        <User className="w-10 h-10" />
+                      </div>
+                    )}
+                  </div>
+                  {editing && (
+                    <label className="absolute bottom-0 right-0 p-1.5 bg-white rounded-full shadow-md border border-neutral-200 cursor-pointer hover:bg-neutral-50">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (file && user) {
+                            try {
+                              // setSaving(true);
+                              const { FirebaseStorageService } = await import('../services/firebaseStorage.service');
+                              const result = await FirebaseStorageService.uploadFile(file, `profiles/${user.uid}/avatar_${Date.now()}`);
+                              if (result.url) {
+                                setFormData(prev => ({ ...prev, avatar_url: result.url || '' }));
+                              }
+                            } catch (err: any) {
+                              console.error(err);
+                              alert('Failed to upload avatar: ' + err.message);
+                            }
+                          }
+                        }}
+                      />
+                      <Edit2 className="w-3 h-3 text-neutral-600" />
+                    </label>
+                  )}
+                </div>
+                <div>
+                  <h3 className="font-heading font-semibold text-lg text-neutral-900">{formData.full_name || 'User'}</h3>
+                  <p className="text-sm text-neutral-500">{user.email}</p>
+                </div>
               </div>
 
               <div className="space-y-4">
