@@ -1,8 +1,10 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Card, CardContent } from '../../components/ui/card';
 import { Settings, Shield, Bell, Database, Key, Globe } from 'lucide-react';
 
 export const AdminSettingsScreen: React.FC = () => {
+  const navigate = useNavigate();
   return (
     <div className="p-6">
       <div className="max-w-5xl mx-auto">
@@ -16,7 +18,10 @@ export const AdminSettingsScreen: React.FC = () => {
         </div>
 
         <div className="grid md:grid-cols-2 gap-6">
-          <Card className="hover:shadow-md transition-shadow cursor-pointer">
+          <Card
+            className="hover:shadow-md transition-shadow cursor-pointer"
+            onClick={() => navigate('/admin/settings/security')}
+          >
             <CardContent className="p-6">
               <div className="flex items-start gap-4">
                 <div className="w-12 h-12 bg-primary-100 rounded-lg flex items-center justify-center flex-shrink-0">
@@ -37,7 +42,10 @@ export const AdminSettingsScreen: React.FC = () => {
             </CardContent>
           </Card>
 
-          <Card className="hover:shadow-md transition-shadow cursor-pointer">
+          <Card
+            className="hover:shadow-md transition-shadow cursor-pointer"
+            onClick={() => navigate('/admin/settings/notifications')}
+          >
             <CardContent className="p-6">
               <div className="flex items-start gap-4">
                 <div className="w-12 h-12 bg-primary-100 rounded-lg flex items-center justify-center flex-shrink-0">
@@ -58,7 +66,10 @@ export const AdminSettingsScreen: React.FC = () => {
             </CardContent>
           </Card>
 
-          <Card className="hover:shadow-md transition-shadow cursor-pointer">
+          <Card
+            className="hover:shadow-md transition-shadow cursor-pointer"
+            onClick={() => navigate('/admin/settings/database')}
+          >
             <CardContent className="p-6">
               <div className="flex items-start gap-4">
                 <div className="w-12 h-12 bg-primary-100 rounded-lg flex items-center justify-center flex-shrink-0">
@@ -79,7 +90,10 @@ export const AdminSettingsScreen: React.FC = () => {
             </CardContent>
           </Card>
 
-          <Card className="hover:shadow-md transition-shadow cursor-pointer">
+          <Card
+            className="hover:shadow-md transition-shadow cursor-pointer"
+            onClick={() => navigate('/admin/settings/api-keys')}
+          >
             <CardContent className="p-6">
               <div className="flex items-start gap-4">
                 <div className="w-12 h-12 bg-primary-100 rounded-lg flex items-center justify-center flex-shrink-0">
@@ -100,7 +114,10 @@ export const AdminSettingsScreen: React.FC = () => {
             </CardContent>
           </Card>
 
-          <Card className="hover:shadow-md transition-shadow cursor-pointer">
+          <Card
+            className="hover:shadow-md transition-shadow cursor-pointer"
+            onClick={() => navigate('/admin/settings/platform')}
+          >
             <CardContent className="p-6">
               <div className="flex items-start gap-4">
                 <div className="w-12 h-12 bg-primary-100 rounded-lg flex items-center justify-center flex-shrink-0">
@@ -121,7 +138,10 @@ export const AdminSettingsScreen: React.FC = () => {
             </CardContent>
           </Card>
 
-          <Card className="hover:shadow-md transition-shadow cursor-pointer">
+          <Card
+            className="hover:shadow-md transition-shadow cursor-pointer"
+            onClick={() => navigate('/admin/settings/regional')}
+          >
             <CardContent className="p-6">
               <div className="flex items-start gap-4">
                 <div className="w-12 h-12 bg-primary-100 rounded-lg flex items-center justify-center flex-shrink-0">

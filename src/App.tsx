@@ -24,6 +24,7 @@ const AdminEscrowScreen = React.lazy(() => import('./screens/admin').then(module
 const AdminSupportScreen = React.lazy(() => import('./screens/admin').then(module => ({ default: module.AdminSupportScreen })));
 const AdminKYCApprovalsScreen = React.lazy(() => import('./screens/admin').then(module => ({ default: module.AdminKYCApprovalsScreen })));
 const AdminSettingsScreen = React.lazy(() => import('./screens/admin').then(module => ({ default: module.AdminSettingsScreen })));
+const AdminSettingsDetailScreen = React.lazy(() => import('./screens/admin').then(module => ({ default: module.AdminSettingsDetailScreen })));
 const AdminMarketersScreen = React.lazy(() => import('./screens/admin').then(module => ({ default: module.AdminMarketersScreen })));
 const AdminCommissionsScreen = React.lazy(() => import('./screens/admin').then(module => ({ default: module.AdminCommissionsScreen })));
 
@@ -505,6 +506,7 @@ const App: React.FC = () => {
                   <Route path="support" element={<AdminSupportScreen />} />
                   <Route path="kyc" element={<AdminKYCApprovalsScreen />} />
                   <Route path="settings" element={<AdminSettingsScreen />} />
+                  <Route path="settings/:section" element={<AdminSettingsDetailScreen />} />
                   <Route path="marketers" element={<AdminMarketersScreen />} />
                   <Route path="commissions" element={<AdminCommissionsScreen />} />
                 </Route>

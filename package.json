@@ -15,11 +15,13 @@
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
+    "@radix-ui/react-label": "^2.1.8",
     "@radix-ui/react-separator": "^1.1.0",
     "@radix-ui/react-slot": "^1.1.0",
+    "@radix-ui/react-switch": "^1.2.6",
     "@types/dompurify": "^3.0.5",
-    "class-variance-authority": "^0.7.0",
-    "clsx": "2.1.1",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
     "dompurify": "^3.3.0",
     "dotenv": "^17.2.3",
     "firebase": "^12.6.0",
@@ -27,8 +29,8 @@
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-router-dom": "^6.8.1",
-    "tailwind-merge": "2.5.4",
-    "tailwindcss-animate": "1.0.7",
+    "tailwind-merge": "^2.5.4",
+    "tailwindcss-animate": "^1.0.7",
     "zod": "^4.1.12"
   },
   "devDependencies": {
