@@ -50,7 +50,109 @@ service cloud.firestore {
     
     // ...
 
+
+    // Products - public read, vendor write
+    match /products/{productId} {
+      allow read: if true;
+      allow create: if isVendor();
+      allow update: if isAuthenticated() && 
+        (resource.data.vendor_id == request.auth.uid || isAdmin());
+      allow delete: if isAuthenticated() && 
+        (resource.data.vendor_id == request.auth.uid || isAdmin());
+    }
+    
+    // Carts - owner only
+    match /carts/{cartId} {
+      allow read, write: if isAuthenticated() && 
+        resource.data.user_id == request.auth.uid;
+    }
+    
+    match /cart_items/{itemId} {
+      allow read, write: if isAuthenticated();
+    }
+    
+    // Reviews - public read, buyer write
+    match /reviews/{reviewId} {
+      allow read: if true;
+      allow create: if isAuthenticated();
+      allow update, delete: if isAuthenticated() && 
+        resource.data.buyer_id == request.auth.uid;
+    }
+    
+    // Addresses - owner only
+    match /addresses/{addressId} {
+      allow read, write: if isAuthenticated() && 
+        resource.data.user_id == request.auth.uid;
+    }
+    
+    // Wishlists - owner only
+    match /wishlists/{wishlistId} {
+      allow read, write: if isAuthenticated() && 
+        resource.data.user_id == request.auth.uid;
+    }
+    
+    // Categories - public read, admin write
+    match /categories/{categoryId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    
+    // Markets - public read, admin write
+    match /markets/{marketId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    
+    // Chat conversations - participants only
+    match /chat_conversations/{conversationId} {
+      allow read: if isAuthenticated() && (
+        request.auth.uid in resource.data.participant_ids ||
+        resource.data.buyer_id == request.auth.uid ||
+        resource.data.vendor_id == request.auth.uid ||
+        !exists(/databases/$(database)/documents/chat_conversations/$(conversationId))
+      );
+      allow write: if isAuthenticated();
+    }
+    
+    match /chat_messages/{messageId} {
+      allow read, write: if isAuthenticated();
+    }
+    
+    // Notifications - owner read/update
+    match /notifications/{notificationId} {
+      allow read, update, delete: if isAuthenticated() && 
+        resource.data.user_id == request.auth.uid;
+      allow create: if isAuthenticated();
+    }
+    
+    // Marketers - public read, owner write
+    match /marketers/{marketerId} {
+      allow read: if true;
+      allow create, update: if isAuthenticated() && request.auth.uid == marketerId;
+    }
+    
+    // Referrals - public read, authenticated write
+    match /referrals/{referralId} {
+      allow read: if true;
+      allow create: if isAuthenticated();
+      allow update, delete: if isAuthenticated() && 
+        resource.data.referrer_id == request.auth.uid;
+    }
+    
+    // Support tickets - owner and admin
+    match /support_tickets/{ticketId} {
+      allow read: if isAuthenticated() && (
+        resource.data.user_id == request.auth.uid || isAdmin()
+      );
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated() && (
+        resource.data.user_id == request.auth.uid || isAdmin()
+      );
+      allow delete: if isAdmin();
+    }
+
     // Transaction & Escrow (Fixed Collection Names)
+
 
     // Wallet Transactions - Read only for owner, Write only by backend (admin)
     match /wallet_transactions/{transactionId} {
@@ -128,5 +230,74 @@ service cloud.firestore {
       allow read: if isAuthenticated();
       allow write: if isAdmin();
     }
-  }
+    // Orders - buyer and vendor can read, buyer can create
+    match /orders/{orderId} {
+      allow read: if isAuthenticated() && (
+        resource.data.user_id == request.auth.uid ||
+        resource.data.vendor_id == request.auth.uid ||
+        isAdmin()
+      );
+      allow create: if isAuthenticated();
+      
+      // Update: Prevent users from faking payment status
+      allow update: if isAuthenticated() && (
+        isAdmin() ||
+        (
+          (resource.data.user_id == request.auth.uid || resource.data.vendor_id == request.auth.uid) &&
+          // Prevent changing critical fields
+          request.resource.data.payment_status == resource.data.payment_status &&
+          request.resource.data.escrow_status == resource.data.escrow_status &&
+          request.resource.data.total_amount == resource.data.total_amount &&
+          request.resource.data.shipping_fee == resource.data.shipping_fee
+        )
+      );
+      allow delete: if isAdmin();
+    }
+    
+    // ... (Existing rules) ...
+
+    // Payouts & Banking
+    match /vendor_payout_accounts/{accountId} {
+      allow read, write: if isAuthenticated() && (
+        resource.data.vendor_id == request.auth.uid || isAdmin()
+      );
+    }
+
+    match /payouts/{payoutId} {
+      allow read: if isAuthenticated() && (
+        resource.data.vendor_id == request.auth.uid || isAdmin()
+      );
+      allow write: if false; // Backend only
+    }
+
+    // Ads
+    match /ads/{adId} {
+      allow read: if true;
+      allow create: if isVendor();
+      allow update, delete: if isAuthenticated() && (
+        resource.data.vendor_id == request.auth.uid || isAdmin()
+      );
+    }
+
+    match /ad_campaigns/{campaignId} {
+       allow read, write: if isAuthenticated() && (
+        resource.data.vendor_id == request.auth.uid || isAdmin()
+      );
+    }
+    
+    // Commission Payments
+    match /commission_payments/{paymentId} {
+      allow read: if isAuthenticated() && (
+        resource.data.beneficiary_id == request.auth.uid || isAdmin()
+      );
+      allow write: if false; // Backend only
+    }
+    
+    // Delivery Zones
+    match /delivery_zones/{zoneId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
 }
+}
+
