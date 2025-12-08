@@ -25,15 +25,15 @@ service cloud.firestore {
     // Profiles - users can read all, write own
     match /profiles/{userId} {
       allow read: if isAuthenticated();
-      allow create: if isAuthenticated() && request.auth.uid == userId;
-      allow update: if isAuthenticated() && request.auth.uid == userId;
-      allow delete: if isAuthenticated() && request.auth.uid == userId || isAdmin();
+      allow create: if isOwner(userId);
+      allow update: if isOwner(userId);
+      allow delete: if isOwner(userId) || isAdmin();
     }
     
     // Vendors - public read, owner write (RESTRICTED)
     match /vendors/{vendorId} {
       allow read: if true;
-      allow create: if isAuthenticated() && request.auth.uid == vendorId;
+      allow create: if isOwner(vendorId);
       // Update: Allow if owner or admin, BUT prevent modifying wallet_balance, verification_status, etc.
       allow update: if isAuthenticated() && (
         isAdmin() || 
@@ -48,9 +48,6 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
     
-    // ...
-
-
     // Products - public read, vendor write
     match /products/{productId} {
       allow read: if true;
@@ -128,7 +125,7 @@ service cloud.firestore {
     // Marketers - public read, owner write
     match /marketers/{marketerId} {
       allow read: if true;
-      allow create, update: if isAuthenticated() && request.auth.uid == marketerId;
+      allow create, update: if isOwner(marketerId);
     }
     
     // Referrals - public read, authenticated write
@@ -152,7 +149,6 @@ service cloud.firestore {
     }
 
     // Transaction & Escrow (Fixed Collection Names)
-
 
     // Wallet Transactions - Read only for owner, Write only by backend (admin)
     match /wallet_transactions/{transactionId} {
@@ -254,8 +250,6 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
     
-    // ... (Existing rules) ...
-
     // Payouts & Banking
     match /vendor_payout_accounts/{accountId} {
       allow read, write: if isAuthenticated() && (
@@ -300,4 +294,3 @@ service cloud.firestore {
     }
 }
 }
-
