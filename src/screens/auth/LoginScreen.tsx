@@ -1,11 +1,13 @@
-import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { PackageIcon, Eye, EyeOff } from 'lucide-react';
 import { Button } from '../../components/ui/button';
 import { useAuth } from '../../contexts/AuthContext';
 
 export const LoginScreen: React.FC = () => {
-   const { signIn } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { signIn, user, profile } = useAuth();
 
   const [formData, setFormData] = useState({
     email: '',
@@ -14,6 +16,33 @@ export const LoginScreen: React.FC = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  // Handle automatic redirection when logged in
+  useEffect(() => {
+    if (user && profile) {
+      // If there's a return url, go there
+      const from = (location.state as any)?.from?.pathname;
+      if (from) {
+        navigate(from, { replace: true });
+        return;
+      }
+
+      // Otherwise redirect based on role
+      switch (profile.role) {
+        case 'vendor':
+          navigate('/vendor/dashboard', { replace: true });
+          break;
+        case 'admin':
+          navigate('/admin', { replace: true });
+          break;
+        case 'marketer':
+          navigate('/marketer/dashboard', { replace: true });
+          break;
+        default:
+          navigate('/', { replace: true });
+      }
+    }
+  }, [user, profile, navigate, location]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -28,11 +57,8 @@ export const LoginScreen: React.FC = () => {
     if (signInError) {
       setError(signInError.message);
       setLoading(false);
-    } else {
-      // AuthContext will handle profile loading and ProtectedRoute will handle navigation
-      // No manual navigation needed - let the natural auth flow work
-      setLoading(false);
     }
+    // Navigation will be handled by the useEffect above when user/profile state updates
   };
 
   return (
