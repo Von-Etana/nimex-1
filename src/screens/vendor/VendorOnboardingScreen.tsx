@@ -358,7 +358,6 @@ export const VendorOnboardingScreen: React.FC = () => {
         proof_of_address_url: proofOfAddressUrl || null,
         avatar_url: avatarUrl || null,
         bank_account_details: profileData.bankAccountDetails ? JSON.stringify(profileData.bankAccountDetails) : null,
-        verification_badge: calculateVerificationBadge(),
         subscription_plan: selectedSubscription as any,
         subscription_status: 'inactive', // Will be set to active after payment
         subscription_start_date: null,
@@ -366,9 +365,29 @@ export const VendorOnboardingScreen: React.FC = () => {
         is_active: true
       };
 
-      // Create or update vendor document using setDocument with merge
-      // This ensures the document is created if it doesn't exist
-      await FirestoreService.setDocument(COLLECTIONS.VENDORS, user.uid, vendorData, true);
+      // Check if vendor document already exists
+      const existingVendor = await FirestoreService.getDocument(COLLECTIONS.VENDORS, user.uid);
+
+      if (existingVendor) {
+        // Update existing vendor - don't modify protected fields (wallet_balance, verification_status, verification_badge, total_sales)
+        await FirestoreService.updateDocument(COLLECTIONS.VENDORS, user.uid, vendorData);
+      } else {
+        // Create new vendor with all required fields including protected ones
+        const newVendorData = {
+          ...vendorData,
+          verification_badge: calculateVerificationBadge(),
+          verification_status: 'pending',
+          wallet_balance: 0,
+          total_sales: 0,
+          rating: 0,
+          response_time: 0,
+          referral_code: null,
+          total_referrals: 0,
+          referred_by_vendor_id: null,
+          referred_by_marketer_id: null
+        };
+        await FirestoreService.setDocument(COLLECTIONS.VENDORS, user.uid, newVendorData);
+      }
 
       const vendorId = user.uid;
 
