@@ -16,7 +16,7 @@ export const SUBSCRIPTION_TIERS: SubscriptionTier[] = [
   {
     plan: 'monthly',
     name: 'Monthly',
-    price: 1200,
+    price: 1250,
     duration: 1,
     features: [
       'Basic marketplace access',
@@ -106,7 +106,7 @@ class SubscriptionService {
    * Validate subscription plan
    */
   isValidPlan(plan: string): plan is SubscriptionPlan {
-    return ['free', 'monthly', 'quarterly', 'semi_annual', 'annual'].includes(plan);
+    return ['monthly', 'quarterly', 'semi_annual', 'annual'].includes(plan);
   }
 
   /**

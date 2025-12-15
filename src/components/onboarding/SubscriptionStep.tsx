@@ -25,7 +25,7 @@ export const SubscriptionStep: React.FC<SubscriptionStepProps> = ({
             Choose Your Plan
           </CardTitle>
           <p className="text-sm text-neutral-600">
-            Select a subscription plan to start selling. New vendors get 1 month free!
+            Select a subscription plan to start selling on NIMEX
           </p>
         </CardHeader>
         <CardContent>
@@ -48,7 +48,7 @@ export const SubscriptionStep: React.FC<SubscriptionStepProps> = ({
           Choose Your Plan
         </CardTitle>
         <p className="text-sm text-neutral-600">
-          Select a subscription plan to start selling. New vendors get 1 month free!
+          Select a subscription plan to start selling on NIMEX
         </p>
       </CardHeader>
       <CardContent>
@@ -57,18 +57,11 @@ export const SubscriptionStep: React.FC<SubscriptionStepProps> = ({
             <div
               key={tier.plan}
               onClick={() => onSubscriptionSelect(tier.plan)}
-              className={`relative p-4 rounded-lg border-2 cursor-pointer transition-all ${
-                selectedSubscription === tier.plan
-                  ? 'border-primary-500 bg-primary-50'
-                  : 'border-neutral-200 hover:border-neutral-300'
-              }`}
+              className={`relative p-4 rounded-lg border-2 cursor-pointer transition-all ${selectedSubscription === tier.plan
+                ? 'border-primary-500 bg-primary-50'
+                : 'border-neutral-200 hover:border-neutral-300'
+                }`}
             >
-              {tier.plan === 'free' && (
-                <Badge className="absolute -top-2 left-1/2 -translate-x-1/2 bg-green-500 text-white">
-                  Free for New Vendors
-                </Badge>
-              )}
-
               <div className="text-center mb-4">
                 <h3 className="font-bold text-lg">{tier.name}</h3>
                 <div className="text-2xl font-bold text-primary-600">
@@ -93,9 +86,9 @@ export const SubscriptionStep: React.FC<SubscriptionStepProps> = ({
           <div className="flex items-start gap-3">
             <AlertCircle className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
             <div>
-              <h4 className="font-semibold text-blue-900 mb-1">Free Trial for New Vendors</h4>
+              <h4 className="font-semibold text-blue-900 mb-1">Choose Your Plan</h4>
               <p className="text-sm text-blue-700">
-                All new vendors receive 1 month free access to get started. You can upgrade or continue with the free plan anytime.
+                Select a plan that fits your business needs. You can upgrade or change your plan anytime.
               </p>
             </div>
           </div>

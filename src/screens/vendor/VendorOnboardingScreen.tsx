@@ -78,7 +78,7 @@ export const VendorOnboardingScreen: React.FC = () => {
   const [marketSuggestions, setMarketSuggestions] = useState<MarketLocation[]>([]);
   const [showMarketSuggestions, setShowMarketSuggestions] = useState(false);
   const [availableTags, setAvailableTags] = useState<SubCategoryTag[]>([]);
-  const [selectedSubscription, setSelectedSubscription] = useState<string>('free');
+  const [selectedSubscription, setSelectedSubscription] = useState<string>('monthly');
   const [formErrors, setFormErrors] = useState<FormErrors>({});
   const [notification, setNotification] = useState<NotificationState>({ type: 'info', message: '', visible: false });
   const [uploadingFiles, setUploadingFiles] = useState<{ [key: string]: boolean }>({});
@@ -360,15 +360,15 @@ export const VendorOnboardingScreen: React.FC = () => {
         bank_account_details: profileData.bankAccountDetails ? JSON.stringify(profileData.bankAccountDetails) : null,
         verification_badge: calculateVerificationBadge(),
         subscription_plan: selectedSubscription as any,
-        subscription_status: selectedSubscription === 'free' ? 'active' : 'inactive',
-        subscription_start_date: selectedSubscription === 'free' ? Timestamp.now() : null,
-        subscription_end_date: selectedSubscription === 'free' ? null : null, // Will be set after payment
+        subscription_status: 'inactive', // Will be set to active after payment
+        subscription_start_date: null,
+        subscription_end_date: null, // Will be set after payment
         is_active: true
       };
 
-      // Update vendor document
-      // Assuming vendor document ID is user.uid (created during signup)
-      await FirestoreService.updateDocument(COLLECTIONS.VENDORS, user.uid, vendorData);
+      // Create or update vendor document using setDocument with merge
+      // This ensures the document is created if it doesn't exist
+      await FirestoreService.setDocument(COLLECTIONS.VENDORS, user.uid, vendorData, true);
 
       const vendorId = user.uid;
 
@@ -397,40 +397,36 @@ export const VendorOnboardingScreen: React.FC = () => {
       }
 
       // Initialize payment with Paystack
-      if (selectedSubscription === 'free') {
-        navigate('/vendor/dashboard');
-      } else {
-        const { paystackService } = await import('../../services/paystackService');
-        const paymentResult = await paystackService.initializeSubscriptionPayment(
-          profile.email,
-          selectedSubscription,
-          vendorId
-        );
+      const { paystackService } = await import('../../services/paystackService');
+      const paymentResult = await paystackService.initializeSubscriptionPayment(
+        profile.email,
+        selectedSubscription,
+        vendorId
+      );
 
-        if (paymentResult.success && paymentResult.data) {
-          // Open payment modal
-          await paystackService.loadPaystackScript();
-          paystackService.openPaymentModal(
-            profile.email,
-            subscriptionService.getTierByPlan(selectedSubscription as any)?.price || 0,
-            paymentResult.data.reference,
-            async (reference) => {
-              // Verify payment and update subscription
-              const verification = await paystackService.verifySubscriptionPayment(reference);
-              if (verification.success) {
-                navigate('/vendor/dashboard');
-              } else {
-                showNotification('error', 'Payment verification failed. Please contact support.');
-              }
-            },
-            () => {
-              // Payment cancelled
-              console.log('Payment cancelled');
+      if (paymentResult.success && paymentResult.data) {
+        // Open payment modal
+        await paystackService.loadPaystackScript();
+        paystackService.openPaymentModal(
+          profile.email,
+          subscriptionService.getTierByPlan(selectedSubscription as any)?.price || 0,
+          paymentResult.data.reference,
+          async (reference) => {
+            // Verify payment and update subscription
+            const verification = await paystackService.verifySubscriptionPayment(reference);
+            if (verification.success) {
+              navigate('/vendor/dashboard');
+            } else {
+              showNotification('error', 'Payment verification failed. Please contact support.');
             }
-          );
-        } else {
-          showNotification('error', 'Failed to initialize payment. Please try again.');
-        }
+          },
+          () => {
+            // Payment cancelled
+            console.log('Payment cancelled');
+          }
+        );
+      } else {
+        showNotification('error', 'Failed to initialize payment. Please try again.');
       }
     } catch (error) {
       console.error('Error completing onboarding:', error);

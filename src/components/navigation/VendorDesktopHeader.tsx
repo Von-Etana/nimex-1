@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { PackageIcon, MessageCircle, Bell, UserIcon } from 'lucide-react';
+import { PackageIcon, MessageCircle, Bell, UserIcon, ShoppingBag } from 'lucide-react';
 import { Button } from '../ui/button';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -52,6 +52,14 @@ export const VendorDesktopHeader: React.FC = () => {
           >
             <MessageCircle className="w-4 h-4" />
             Chat
+          </Button>
+          <Button
+            onClick={() => navigate('/')}
+            variant="outline"
+            className="border-primary-500 text-primary-500 hover:bg-primary-50 font-sans text-sm px-4 py-2 rounded-lg flex items-center gap-2"
+          >
+            <ShoppingBag className="w-4 h-4" />
+            Browse as Buyer
           </Button>
           <Button
             onClick={() => navigate('/notifications')}
