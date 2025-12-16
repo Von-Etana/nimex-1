@@ -27,11 +27,11 @@ export const MobileBottomNav: React.FC = () => {
               <Link
                 key={item.path}
                 to={item.path}
-                className={`flex flex-col items-center justify-center flex-1 h-full transition-colors ${
-                  isActive ? 'text-primary-500' : 'text-neutral-600'
+                className={`flex flex-col items-center justify-center flex-1 h-full transition-all duration-200 active:scale-90 ${
+                  isActive ? 'text-primary-600 bg-primary-50/50' : 'text-neutral-500 hover:text-primary-500 hover:bg-neutral-50'
                 }`}
               >
-                <Icon className="w-5 h-5 mb-1" />
+                <Icon className={`w-5 h-5 mb-1 transition-transform duration-200 ${isActive ? 'scale-110' : ''}`} />
                 <span className="text-xs font-medium font-sans">{item.label}</span>
               </Link>
             );

@@ -66,7 +66,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onAddToCart, 
     return (
         <Card
             onClick={handleCardClick}
-            className="group border border-neutral-200 shadow-sm hover:shadow-lg hover:border-primary-200 transition-all cursor-pointer h-full flex flex-col overflow-hidden"
+            className="group border border-neutral-200 shadow-sm hover:shadow-lg hover:border-primary-200 transition-all duration-300 hover:-translate-y-1 cursor-pointer h-full flex flex-col overflow-hidden"
             onMouseEnter={() => setIsHovered(true)}
             onMouseLeave={() => setIsHovered(false)}
         >
@@ -80,22 +80,22 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onAddToCart, 
                 {/* Tags */}
                 <div className="absolute top-3 left-3 flex flex-col gap-2">
                     {product.discount && (
-                        <Badge className="bg-red-500 text-white font-sans font-semibold shadow-sm">
+                        <Badge className="bg-danger text-white font-sans font-semibold shadow-sm">
                             -{product.discount}%
                         </Badge>
                     )}
                     {product.tags?.includes('new') && (
-                        <Badge className="bg-blue-500 text-white font-sans font-semibold shadow-sm">
+                        <Badge className="bg-info text-white font-sans font-semibold shadow-sm">
                             NEW
                         </Badge>
                     )}
                     {product.tags?.includes('hot') && (
-                        <Badge className="bg-orange-500 text-white font-sans font-semibold shadow-sm">
+                        <Badge className="bg-warning text-white font-sans font-semibold shadow-sm">
                             HOT
                         </Badge>
                     )}
                     {product.tags?.includes('urgent') && (
-                        <Badge className="bg-red-600 text-white font-sans font-semibold shadow-sm animate-pulse">
+                        <Badge className="bg-danger text-white font-sans font-semibold shadow-sm animate-pulse">
                             URGENT
                         </Badge>
                     )}

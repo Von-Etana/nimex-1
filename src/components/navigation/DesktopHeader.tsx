@@ -43,9 +43,10 @@ export const DesktopHeader: React.FC = () => {
             <Link
               key={index}
               to={item.path}
-              className="font-sans text-sm text-neutral-700 hover:text-primary-500 transition-colors"
+              className="font-sans text-sm font-medium text-neutral-700 hover:text-primary-600 transition-all hover:-translate-y-0.5 relative group flex flex-col items-center"
             >
               {item.label}
+              <span className="absolute -bottom-1 w-0 h-0.5 bg-primary-500 transition-all duration-300 group-hover:w-full rounded-full opacity-0 group-hover:opacity-100" />
             </Link>
           ))}
         </nav>

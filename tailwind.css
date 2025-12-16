@@ -135,7 +135,8 @@
     --card: 0 0% 100%;
     --card-foreground: 0 0% 3.9%;
 
-    --primary: 0 0% 9%;
+    /* Updated Green Primary - roughly #006400/Emerald */
+    --primary: 120 100% 19.6%;
     --primary-foreground: 0 0% 98%;
 
     --secondary: 0 0% 96.1%;
@@ -147,7 +148,13 @@
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 98%;
 
-    --ring: 0 0% 3.9%;
+    /* New Semantic Colors */
+    --success: 142 76% 36%;
+    --danger: 0 84% 60%;
+    --warning: 38 92% 50%;
+    --info: 217 91% 60%;
+
+    --ring: 120 100% 19.6%;
 
     --radius: 0.5rem;
 

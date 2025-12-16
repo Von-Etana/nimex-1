@@ -192,7 +192,7 @@ export const HeroSection = (): JSX.Element => {
                 </div>
                 <Button
                   onClick={() => navigate('/search')}
-                  className="h-12 md:h-14 px-6 md:px-8 bg-red-500 hover:bg-red-600 text-white font-sans font-bold rounded-full text-base md:text-lg shadow-lg hover:shadow-xl transition-all flex-shrink-0 w-full md:w-auto"
+                  className="h-12 md:h-14 px-6 md:px-8 bg-primary hover:bg-primary/90 text-white font-sans font-bold rounded-full text-base md:text-lg shadow-lg hover:shadow-primary/20 hover:-translate-y-0.5 active:translate-y-0 transition-all flex-shrink-0 w-full md:w-auto"
                 >
                   Search
                 </Button>

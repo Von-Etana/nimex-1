@@ -42,13 +42,13 @@ export const Modal: React.FC<ModalProps> = ({
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
             <div
                 ref={overlayRef}
-                className="absolute inset-0 bg-black/50 backdrop-blur-sm transition-opacity"
+                className="absolute inset-0 bg-black/50 backdrop-blur-sm transition-opacity animate-fade-in"
                 onClick={onClose}
                 aria-hidden="true"
             />
             <div
                 className={cn(
-                    "relative bg-white rounded-xl shadow-xl w-full max-w-lg transform transition-all flex flex-col max-h-[90vh]",
+                    "relative bg-white rounded-xl shadow-xl w-full max-w-lg transform transition-all flex flex-col max-h-[90vh] animate-scale-up",
                     className
                 )}
                 role="dialog"
