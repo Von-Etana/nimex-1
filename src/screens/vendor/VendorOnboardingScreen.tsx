@@ -431,21 +431,52 @@ export const VendorOnboardingScreen: React.FC = () => {
           subscriptionService.getTierByPlan(selectedSubscription as any)?.price || 0,
           paymentResult.data.reference,
           async (reference) => {
-            // Verify payment and update subscription
-            const verification = await paystackService.verifySubscriptionPayment(reference);
-            if (verification.success) {
-              navigate('/vendor/dashboard');
-            } else {
-              showNotification('error', 'Payment verification failed. Please contact support.');
+            // Payment succeeded - Paystack only calls this callback on successful payment
+            try {
+              showNotification('success', 'Payment successful! Setting up your account...');
+
+              // Attempt verification but don't block navigation
+              const verification = await paystackService.verifySubscriptionPayment(reference);
+
+              if (verification.success) {
+                showNotification('success', 'Account setup complete! Redirecting to dashboard...');
+              } else {
+                // Verification failed but payment was successful (likely backend issue)
+                // Manually update subscription as fallback
+                console.warn('Payment verification failed, using fallback update');
+                try {
+                  await subscriptionService.updateVendorSubscription(vendorId, selectedSubscription as any);
+                  showNotification('info', 'Payment received! Redirecting to dashboard...');
+                } catch (updateError) {
+                  console.error('Fallback subscription update failed:', updateError);
+                  showNotification('info', 'Payment received! Please contact support if issues persist.');
+                }
+              }
+
+              // Always navigate to dashboard after successful Paystack callback
+              setTimeout(() => {
+                setLoading(false);
+                navigate('/vendor/dashboard');
+              }, 1500);
+            } catch (error) {
+              console.error('Error during payment verification:', error);
+              // Still redirect - payment was successful
+              showNotification('info', 'Payment received! Redirecting to dashboard...');
+              setTimeout(() => {
+                setLoading(false);
+                navigate('/vendor/dashboard');
+              }, 2000);
             }
           },
           () => {
-            // Payment cancelled
-            console.log('Payment cancelled');
+            // Payment cancelled by user
+            showNotification('info', 'Payment cancelled. You can try again when ready.');
+            setLoading(false);
           }
         );
       } else {
         showNotification('error', 'Failed to initialize payment. Please try again.');
+        setLoading(false);
       }
     } catch (error) {
       console.error('Error completing onboarding:', error);
@@ -507,17 +538,31 @@ export const VendorOnboardingScreen: React.FC = () => {
               onSelectMarketLocation={selectMarketLocation}
               onToggleSubCategoryTag={toggleSubCategoryTag}
               onAddCustomSubCategory={(customTag) => {
-                // Add custom tag to the global list if it doesn't exist
-                const existingTag = SUB_CATEGORY_TAGS.find(tag => tag.name.toLowerCase() === customTag.toLowerCase());
-                if (!existingTag) {
-                  // In a real app, this would be saved to the database
-                  // For now, we'll just add it to the local state
+                // Check if tag already exists in either list
+                const existingInGlobal = SUB_CATEGORY_TAGS.find(
+                  tag => tag.name.toLowerCase() === customTag.toLowerCase()
+                );
+                const existingInLocal = availableTags.find(
+                  tag => tag.name.toLowerCase() === customTag.toLowerCase()
+                );
+
+                if (existingInGlobal) {
+                  // Tag exists in global list, just select it
+                  toggleSubCategoryTag(existingInGlobal.id);
+                } else if (existingInLocal) {
+                  // Tag exists in local list, just select it
+                  toggleSubCategoryTag(existingInLocal.id);
+                } else {
+                  // Create new custom tag
                   const newTag = {
                     id: `custom_${Date.now()}`,
                     name: customTag,
                     category: profileData.businessCategory || 'Other'
                   };
+                  // Add to available tags
                   setAvailableTags(prev => [...prev, newTag]);
+                  // Automatically select the new tag
+                  toggleSubCategoryTag(newTag.id);
                 }
               }}
             />

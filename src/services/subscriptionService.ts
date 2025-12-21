@@ -28,7 +28,7 @@ export const SUBSCRIPTION_TIERS: SubscriptionTier[] = [
   {
     plan: 'quarterly',
     name: '3 Months',
-    price: 3500,
+    price: 3550,
     duration: 3,
     features: [
       'All monthly features',
@@ -41,7 +41,7 @@ export const SUBSCRIPTION_TIERS: SubscriptionTier[] = [
   {
     plan: 'semi_annual',
     name: '6 Months',
-    price: 6500,
+    price: 6550,
     duration: 6,
     features: [
       'All quarterly features',
@@ -54,7 +54,7 @@ export const SUBSCRIPTION_TIERS: SubscriptionTier[] = [
   {
     plan: 'annual',
     name: '12 Months',
-    price: 10500,
+    price: 10550,
     duration: 12,
     features: [
       'All semi-annual features',

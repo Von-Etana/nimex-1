@@ -11,6 +11,11 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == userId;
     }
     
+    // Check if user's email is verified
+    function isEmailVerified() {
+      return request.auth.token.email_verified == true;
+    }
+    
     function isAdmin() {
       return isAuthenticated() && 
         exists(/databases/$(database)/documents/profiles/$(request.auth.uid)) &&
@@ -20,6 +25,13 @@ service cloud.firestore {
     function isVendor() {
       return isAuthenticated() && 
         exists(/databases/$(database)/documents/vendors/$(request.auth.uid));
+    }
+    
+    // Check if vendor has active subscription (for dashboard access)
+    function hasActiveSubscription() {
+      return isAuthenticated() && 
+        exists(/databases/$(database)/documents/vendors/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/vendors/$(request.auth.uid)).data.subscription_status == 'active';
     }
     
     // Profiles - users can read all, write own
@@ -226,14 +238,15 @@ service cloud.firestore {
       allow read: if isAuthenticated();
       allow write: if isAdmin();
     }
-    // Orders - buyer and vendor can read, buyer can create
+    // Orders - buyer and vendor can read, buyer can create (requires verified email)
     match /orders/{orderId} {
       allow read: if isAuthenticated() && (
         resource.data.user_id == request.auth.uid ||
         resource.data.vendor_id == request.auth.uid ||
         isAdmin()
       );
-      allow create: if isAuthenticated();
+      // Order creation requires email verification for security
+      allow create: if isAuthenticated() && isEmailVerified();
       
       // Update: Prevent users from faking payment status
       allow update: if isAuthenticated() && (

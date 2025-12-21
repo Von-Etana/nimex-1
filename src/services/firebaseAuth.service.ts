@@ -10,11 +10,12 @@ import {
     sendPasswordResetEmail,
     sendEmailVerification,
     updateProfile,
+    signInWithPopup,
     User,
     UserCredential,
     AuthError,
 } from 'firebase/auth';
-import { auth } from '../lib/firebase.config';
+import { auth, GoogleAuthProvider } from '../lib/firebase.config';
 import { FirestoreService } from './firestore.service';
 import { COLLECTIONS } from '../lib/collections';
 import { logger } from '../lib/logger';
@@ -273,6 +274,116 @@ export class FirebaseAuthService {
             return { error: error as Error };
         }
     }
+
+    /**
+     * Sign in with Google OAuth
+     */
+    static async signInWithGoogle(role: UserRole): Promise<{ user: User | null; error: Error | null; isNewUser: boolean }> {
+        try {
+            logger.info('Initiating Google sign-in');
+
+            const provider = new GoogleAuthProvider();
+            provider.addScope('email');
+            provider.addScope('profile');
+
+            const userCredential: UserCredential = await signInWithPopup(auth, provider);
+            const user = userCredential.user;
+
+            // Check if this is a new user by looking for existing profile
+            const existingProfile = await FirestoreService.getDocument(
+                COLLECTIONS.PROFILES,
+                user.uid
+            );
+
+            const isNewUser = !existingProfile;
+
+            if (isNewUser) {
+                // Create profile for new user
+                await FirestoreService.setDocument(COLLECTIONS.PROFILES, user.uid, {
+                    email: user.email,
+                    full_name: user.displayName,
+                    role: role,
+                    phone: user.phoneNumber || null,
+                    avatar_url: user.photoURL || null,
+                    location: null,
+                });
+
+                // If vendor, create vendor record
+                if (role === 'vendor') {
+                    await FirestoreService.setDocument(COLLECTIONS.VENDORS, user.uid, {
+                        user_id: user.uid,
+                        business_name: '',
+                        business_description: null,
+                        business_address: null,
+                        business_phone: null,
+                        market_location: null,
+                        sub_category_tags: null,
+                        cac_number: null,
+                        proof_of_address_url: null,
+                        bank_account_details: null,
+                        verification_badge: 'none',
+                        verification_status: 'pending',
+                        verification_date: null,
+                        subscription_plan: 'free',
+                        subscription_status: 'inactive',
+                        subscription_start_date: null,
+                        subscription_end_date: null,
+                        rating: 0,
+                        total_sales: 0,
+                        response_time: 0,
+                        wallet_balance: 0,
+                        notification_preferences: null,
+                        is_active: true,
+                        referral_code: null,
+                        total_referrals: 0,
+                        referred_by_vendor_id: null,
+                        referred_by_marketer_id: null,
+                    });
+                }
+
+                logger.info(`New user created via Google: ${user.uid}`);
+            } else {
+                logger.info(`Existing user signed in via Google: ${user.uid}`);
+            }
+
+            return { user, error: null, isNewUser };
+        } catch (error) {
+            logger.error('Error during Google sign-in', error);
+            return { user: null, error: error as Error, isNewUser: false };
+        }
+    }
+
+    /**
+     * Check if current user's email is verified
+     */
+    static isEmailVerified(): boolean {
+        const user = auth.currentUser;
+        return user?.emailVerified ?? false;
+    }
+
+    /**
+     * Resend email verification to current user
+     */
+    static async resendVerificationEmail(): Promise<{ error: Error | null }> {
+        try {
+            const user = auth.currentUser;
+            if (!user) {
+                return { error: new Error('No user logged in') };
+            }
+
+            if (user.emailVerified) {
+                return { error: new Error('Email is already verified') };
+            }
+
+            await sendEmailVerification(user);
+            logger.info(`Verification email resent to: ${user.email}`);
+            return { error: null };
+        } catch (error) {
+            logger.error('Error resending verification email', error);
+            return { error: error as Error };
+        }
+    }
 }
 
 export default FirebaseAuthService;
+

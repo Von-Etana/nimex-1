@@ -1,5 +1,5 @@
 import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
-import { getAuth, connectAuthEmulator, Auth } from 'firebase/auth';
+import { getAuth, connectAuthEmulator, Auth, GoogleAuthProvider } from 'firebase/auth';
 import { getFirestore, connectFirestoreEmulator, Firestore } from 'firebase/firestore';
 import { getStorage, connectStorageEmulator, FirebaseStorage } from 'firebase/storage';
 import { getAnalytics, Analytics } from 'firebase/analytics';
@@ -87,4 +87,4 @@ try {
     throw error;
 }
 
-export { app, auth, db, storage, analytics };
+export { app, auth, db, storage, analytics, GoogleAuthProvider };

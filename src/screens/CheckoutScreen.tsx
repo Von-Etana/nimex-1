@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
-import { ShoppingBag, MapPin, CreditCard, Truck, AlertCircle, CheckCircle } from 'lucide-react';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
+import { ShoppingBag, MapPin, CreditCard, Truck, AlertCircle, CheckCircle, Mail, RefreshCw } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Card, CardContent } from '../components/ui/card';
 import { useAuth } from '../contexts/AuthContext';
@@ -37,7 +37,7 @@ interface Address {
 export const CheckoutScreen: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user } = useAuth();
+  const { user, emailVerified, resendVerificationEmail } = useAuth();
   const [cartItems] = useState<CartItem[]>(location.state?.cartItems || []);
   const [addresses, setAddresses] = useState<Address[]>([]);
   const [selectedAddressId, setSelectedAddressId] = useState<string>('');
@@ -47,6 +47,8 @@ export const CheckoutScreen: React.FC = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string>('');
   const [showAddressForm, setShowAddressForm] = useState(false);
+  const [resendingEmail, setResendingEmail] = useState(false);
+  const [emailSent, setEmailSent] = useState(false);
   const [newAddress, setNewAddress] = useState<Partial<Address>>({
     full_name: '',
     phone: '',
@@ -162,9 +164,26 @@ export const CheckoutScreen: React.FC = () => {
     }
   };
 
+  const handleResendVerification = async () => {
+    setResendingEmail(true);
+    const { error } = await resendVerificationEmail();
+    setResendingEmail(false);
+
+    if (!error) {
+      setEmailSent(true);
+      setTimeout(() => setEmailSent(false), 5000);
+    }
+  };
+
   const handleCheckout = async () => {
     if (!user || !selectedAddressId) {
       setError('Please select a delivery address');
+      return;
+    }
+
+    // Check email verification before checkout
+    if (!emailVerified) {
+      setError('Please verify your email address before placing an order. Check your inbox for the verification link.');
       return;
     }
 
@@ -284,6 +303,49 @@ export const CheckoutScreen: React.FC = () => {
             <CardContent className="p-4 flex items-center gap-3">
               <AlertCircle className="w-5 h-5 text-error flex-shrink-0" />
               <p className="font-sans text-sm text-error">{error}</p>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Email Verification Warning */}
+        {!emailVerified && (
+          <Card className="mb-6 border-amber-300 bg-amber-50">
+            <CardContent className="p-4">
+              <div className="flex items-start gap-3">
+                <Mail className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <h3 className="font-sans font-semibold text-amber-900 mb-1">
+                    Email Verification Required
+                  </h3>
+                  <p className="font-sans text-sm text-amber-800 mb-3">
+                    You must verify your email address before placing an order.
+                    Check your inbox ({user?.email}) for the verification link.
+                  </p>
+                  <div className="flex items-center gap-3">
+                    {emailSent ? (
+                      <span className="text-sm text-green-600 font-medium flex items-center gap-1">
+                        <CheckCircle className="w-4 h-4" />
+                        Verification email sent!
+                      </span>
+                    ) : (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleResendVerification}
+                        disabled={resendingEmail}
+                        className="border-amber-300 text-amber-700 hover:bg-amber-100"
+                      >
+                        {resendingEmail ? (
+                          <RefreshCw className="w-4 h-4 animate-spin mr-2" />
+                        ) : (
+                          <RefreshCw className="w-4 h-4 mr-2" />
+                        )}
+                        Resend Verification Email
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </div>
             </CardContent>
           </Card>
         )}
@@ -558,10 +620,10 @@ export const CheckoutScreen: React.FC = () => {
 
                 <Button
                   onClick={handleCheckout}
-                  disabled={!selectedAddressId || isProcessing || isCalculatingCost}
-                  className="w-full h-12 bg-primary-500 hover:bg-primary-600"
+                  disabled={!selectedAddressId || isProcessing || isCalculatingCost || !emailVerified}
+                  className="w-full h-12 bg-primary-500 hover:bg-primary-600 disabled:opacity-50"
                 >
-                  {isProcessing ? 'Processing...' : 'Proceed to Payment'}
+                  {isProcessing ? 'Processing...' : !emailVerified ? 'Verify Email to Checkout' : 'Proceed to Payment'}
                 </Button>
 
                 <div className="mt-6 pt-6 border-t border-neutral-100">

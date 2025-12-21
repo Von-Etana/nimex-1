@@ -1,6 +1,6 @@
 // Firebase Configuration and Initialization
 // Re-export from the main firebase.ts file to ensure singleton instances
-import { app, auth, db, storage, FirebaseConfig } from './firebase';
+import { app, auth, db, storage, FirebaseConfig, GoogleAuthProvider } from './firebase';
 
-export { app, auth, db, storage };
+export { app, auth, db, storage, GoogleAuthProvider };
 export type { FirebaseConfig };

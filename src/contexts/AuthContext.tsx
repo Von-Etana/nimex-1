@@ -35,10 +35,13 @@ interface AuthContextType {
   user: FirebaseUser | null;
   profile: Profile | null;
   loading: boolean;
+  emailVerified: boolean;
   signUp: (input: SignUpInput) => Promise<{ error: Error | null }>;
   signIn: (input: SignInInput) => Promise<{ error: Error | null }>;
+  signInWithGoogle: (role: UserRole) => Promise<{ error: Error | null; isNewUser: boolean }>;
   signOut: () => Promise<void>;
   updateProfile: (updates: UpdateProfileInput) => Promise<{ error: Error | null }>;
+  resendVerificationEmail: () => Promise<{ error: Error | null }>;
   hasPermission: (permission: string) => boolean;
   isAdmin: () => boolean;
 }
@@ -236,6 +239,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   /**
    * Check if vendor needs onboarding
+   * Onboarding is complete when vendor has business name AND active subscription
+   * KYC verification is a separate process and doesn't block dashboard access
    */
   const checkVendorOnboarding = async (userId: string): Promise<boolean> => {
     logger.info(`Checking vendor onboarding for user: ${userId}`);
@@ -247,27 +252,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       );
 
       if (!vendorData) {
-        return true; // No vendor record
+        return true; // No vendor record - needs onboarding
       }
 
       const vendor: any = vendorData;
       const hasBusinessName = vendor.business_name && vendor.business_name.trim() !== '';
+      const hasActiveSubscription = vendor.subscription_status === 'active';
 
-      // Check KYC status
-      const kycSubmissions = await FirestoreService.getDocuments(
-        COLLECTIONS.KYC_SUBMISSIONS,
-        {
-          filters: [
-            { field: 'user_id', operator: '==', value: userId },
-            { field: 'status', operator: '==', value: 'approved' },
-          ],
-        }
-      );
+      logger.info(`Vendor onboarding check: businessName=${hasBusinessName}, activeSubscription=${hasActiveSubscription}`);
 
-      const isKycApproved = kycSubmissions.length > 0;
-
-      logger.info(`Vendor onboarding check: businessName=${hasBusinessName}, kycApproved=${isKycApproved}`);
-      return !hasBusinessName || !isKycApproved;
+      // Onboarding is complete when vendor has business name AND active subscription
+      return !hasBusinessName || !hasActiveSubscription;
     } catch (error) {
       logger.error('Error checking vendor onboarding', error);
       return true; // Assume onboarding needed if error
@@ -424,14 +419,43 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return state.profile?.role === 'admin';
   }, [state.profile]);
 
+  /**
+   * Sign in with Google OAuth
+   */
+  const signInWithGoogle = async (role: UserRole) => {
+    try {
+      const { user, error, isNewUser } = await FirebaseAuthService.signInWithGoogle(role);
+      
+      if (error || !user) {
+        return { error, isNewUser: false };
+      }
+
+      // Profile will be loaded by onAuthStateChanged
+      return { error: null, isNewUser };
+    } catch (error) {
+      logger.error('Unexpected error during Google sign-in', error);
+      return { error: error as Error, isNewUser: false };
+    }
+  };
+
+  /**
+   * Resend email verification
+   */
+  const resendVerificationEmail = async () => {
+    return await FirebaseAuthService.resendVerificationEmail();
+  };
+
   const value: AuthContextType = {
     user: state.user,
     profile: state.profile,
     loading: state.loading,
+    emailVerified: state.user?.emailVerified ?? false,
     signUp,
     signIn,
+    signInWithGoogle,
     signOut,
     updateProfile,
+    resendVerificationEmail,
     hasPermission,
     isAdmin
   };

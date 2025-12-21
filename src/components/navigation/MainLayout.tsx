@@ -4,6 +4,7 @@ import { DesktopHeader } from './DesktopHeader';
 import { MobileBottomNav } from './MobileBottomNav';
 import { MobileHeader } from './MobileHeader';
 import { useAuth } from '../../contexts/AuthContext';
+import { EmailVerificationBanner } from '../EmailVerificationBanner';
 
 interface MainLayoutProps {
   children: React.ReactNode;
@@ -22,6 +23,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children, showBottomNav 
 
   return (
     <div className="min-h-screen bg-white flex flex-col">
+      <EmailVerificationBanner />
       <DesktopHeader />
       <MobileHeader />
 

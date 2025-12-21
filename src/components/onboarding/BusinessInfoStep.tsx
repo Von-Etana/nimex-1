@@ -1,10 +1,11 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import { MapPin, Building2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { MARKET_LOCATIONS, type MarketLocation } from '../../data/marketLocations';
 import { SUB_CATEGORY_TAGS } from '../../data/subCategoryTags';
 import { Badge } from '../ui/badge';
 import { FormSkeleton } from '../ui/loading-skeleton';
+import { GooglePlacesAutocomplete } from '../ui/GooglePlacesAutocomplete';
 
 interface VendorProfile {
   businessName: string;
@@ -71,8 +72,11 @@ export const BusinessInfoStep: React.FC<BusinessInfoStepProps> = ({
   onMarketLocationSearch,
   onSelectMarketLocation,
   onToggleSubCategoryTag,
+  onAddCustomSubCategory,
   onAvatarSelect
 }) => {
+  // Ref for custom subcategory input
+  const customSubcategoryRef = useRef<HTMLInputElement>(null);
   if (loading) {
     return (
       <Card className="max-w-2xl mx-auto">
@@ -200,21 +204,13 @@ export const BusinessInfoStep: React.FC<BusinessInfoStepProps> = ({
           <label className="block font-sans font-medium text-sm text-neutral-700 mb-2">
             Business Address *
           </label>
-          <input
-            type="text"
+          <GooglePlacesAutocomplete
             value={profileData.businessAddress}
-            onChange={(e) => onProfileDataChange('businessAddress', e.target.value)}
+            onChange={(value) => onProfileDataChange('businessAddress', value)}
             placeholder="Enter your business address"
-            className={`w-full h-10 px-3 rounded-lg border font-sans text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 ${formErrors.businessAddress ? 'border-red-500' : 'border-neutral-200'
-              }`}
-            aria-describedby={formErrors.businessAddress ? "business-address-error" : undefined}
-            aria-invalid={!!formErrors.businessAddress}
+            error={formErrors.businessAddress}
+            componentRestrictions={{ country: 'ng' }}
           />
-          {formErrors.businessAddress && (
-            <p id="business-address-error" className="text-red-500 text-xs mt-1" role="alert">
-              {formErrors.businessAddress}
-            </p>
-          )}
         </div>
 
         <div>
@@ -242,35 +238,27 @@ export const BusinessInfoStep: React.FC<BusinessInfoStepProps> = ({
           <label className="block font-sans font-medium text-sm text-neutral-700 mb-2">
             Market Location *
           </label>
-          <div className="relative">
-            <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400" />
-            <input
-              type="text"
-              value={profileData.marketLocation}
-              onChange={(e) => {
-                onProfileDataChange('marketLocation', e.target.value);
-                onMarketLocationSearch(e.target.value);
-              }}
-              placeholder="Select your market location"
-              className={`w-full h-10 pl-10 pr-3 rounded-lg border font-sans text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 ${formErrors.marketLocation ? 'border-red-500' : 'border-neutral-200'
-                }`}
-              aria-describedby={formErrors.marketLocation ? "market-location-error" : undefined}
-              aria-invalid={!!formErrors.marketLocation}
-            />
-          </div>
+          <GooglePlacesAutocomplete
+            value={profileData.marketLocation}
+            onChange={(value) => {
+              onProfileDataChange('marketLocation', value);
+              onMarketLocationSearch(value);
+            }}
+            placeholder="Search for your market location"
+            error={formErrors.marketLocation}
+            componentRestrictions={{ country: 'ng' }}
+          />
 
-          {formErrors.marketLocation && (
-            <p id="market-location-error" className="text-red-500 text-xs mt-1" role="alert">
-              {formErrors.marketLocation}
-            </p>
-          )}
-
+          {/* Fallback: Show predefined market suggestions */}
           {showMarketSuggestions && marketSuggestions.length > 0 && (
             <div
-              className="absolute top-full left-0 right-0 z-10 bg-white border border-neutral-200 rounded-lg shadow-lg max-h-48 overflow-y-auto"
+              className="absolute top-full left-0 right-0 z-20 bg-white border border-neutral-200 rounded-lg shadow-lg max-h-48 overflow-y-auto mt-1"
               role="listbox"
               aria-label="Market location suggestions"
             >
+              <div className="px-3 py-2 bg-neutral-50 text-xs text-neutral-500 font-semibold border-b">
+                Popular Markets
+              </div>
               {marketSuggestions.map((location) => (
                 <button
                   key={location.id}
@@ -342,40 +330,45 @@ export const BusinessInfoStep: React.FC<BusinessInfoStepProps> = ({
             </label>
             <div className="flex gap-2">
               <input
+                ref={customSubcategoryRef}
                 type="text"
                 placeholder="Enter custom subcategory"
-                className="flex-1 h-10 px-3 rounded-lg border border-neutral-200 font-sans text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-                onKeyPress={(e) => {
+                disabled={profileData.subCategoryTags.length >= 3}
+                className="flex-1 h-10 px-3 rounded-lg border border-neutral-200 font-sans text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:bg-neutral-50 disabled:cursor-not-allowed"
+                onKeyDown={(e) => {
                   if (e.key === 'Enter') {
                     e.preventDefault();
-                    const input = e.target as HTMLInputElement;
-                    const customTag = input.value.trim();
-                    if (customTag && !profileData.subCategoryTags.includes(customTag)) {
-                      onToggleSubCategoryTag(customTag);
+                    const customTag = customSubcategoryRef.current?.value.trim();
+                    if (customTag && profileData.subCategoryTags.length < 3) {
                       onAddCustomSubCategory(customTag);
-                      input.value = '';
+                      if (customSubcategoryRef.current) {
+                        customSubcategoryRef.current.value = '';
+                      }
                     }
                   }
                 }}
               />
               <button
                 type="button"
+                disabled={profileData.subCategoryTags.length >= 3}
                 onClick={() => {
-                  const input = document.querySelector('input[placeholder="Enter custom subcategory"]') as HTMLInputElement;
-                  const customTag = input?.value.trim();
-                  if (customTag && !profileData.subCategoryTags.includes(customTag)) {
-                    onToggleSubCategoryTag(customTag);
+                  const customTag = customSubcategoryRef.current?.value.trim();
+                  if (customTag && profileData.subCategoryTags.length < 3) {
                     onAddCustomSubCategory(customTag);
-                    input.value = '';
+                    if (customSubcategoryRef.current) {
+                      customSubcategoryRef.current.value = '';
+                    }
                   }
                 }}
-                className="px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 font-sans text-sm"
+                className="px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 font-sans text-sm disabled:bg-neutral-300 disabled:cursor-not-allowed"
               >
                 Add
               </button>
             </div>
             <p className="text-xs text-neutral-500 mt-1">
-              Custom subcategories will be added to the available list for future use
+              {profileData.subCategoryTags.length >= 3
+                ? 'Maximum 3 subcategories reached'
+                : 'Custom subcategories will be added to your profile'}
             </p>
           </div>
         </div>
