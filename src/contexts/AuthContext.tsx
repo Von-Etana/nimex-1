@@ -39,6 +39,8 @@ interface AuthContextType {
   signUp: (input: SignUpInput) => Promise<{ error: Error | null }>;
   signIn: (input: SignInInput) => Promise<{ error: Error | null }>;
   signInWithGoogle: (role: UserRole) => Promise<{ error: Error | null; isNewUser: boolean }>;
+  sendSignInLink: (email: string, role: UserRole) => Promise<{ error: Error | null }>;
+  completeEmailLinkSignIn: (email: string, emailLink: string, role: UserRole) => Promise<{ error: Error | null; isNewUser: boolean }>;
   signOut: () => Promise<void>;
   updateProfile: (updates: UpdateProfileInput) => Promise<{ error: Error | null }>;
   resendVerificationEmail: () => Promise<{ error: Error | null }>;
@@ -425,7 +427,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const signInWithGoogle = async (role: UserRole) => {
     try {
       const { user, error, isNewUser } = await FirebaseAuthService.signInWithGoogle(role);
-      
+
       if (error || !user) {
         return { error, isNewUser: false };
       }
@@ -445,6 +447,32 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return await FirebaseAuthService.resendVerificationEmail();
   };
 
+  /**
+   * Send passwordless sign-in link
+   */
+  const sendSignInLink = async (email: string, role: UserRole) => {
+    return await FirebaseAuthService.sendSignInLink(email, role);
+  };
+
+  /**
+   * Complete sign-in with email link
+   */
+  const completeEmailLinkSignIn = async (email: string, emailLink: string, role: UserRole) => {
+    try {
+      const { user, error, isNewUser } = await FirebaseAuthService.completeSignInWithEmailLink(email, emailLink, role);
+
+      if (error || !user) {
+        return { error, isNewUser: false };
+      }
+
+      // Profile will be loaded by onAuthStateChanged
+      return { error: null, isNewUser };
+    } catch (error) {
+      logger.error('Unexpected error during email link sign-in', error);
+      return { error: error as Error, isNewUser: false };
+    }
+  };
+
   const value: AuthContextType = {
     user: state.user,
     profile: state.profile,
@@ -453,6 +481,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     signUp,
     signIn,
     signInWithGoogle,
+    sendSignInLink,
+    completeEmailLinkSignIn,
     signOut,
     updateProfile,
     resendVerificationEmail,

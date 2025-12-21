@@ -11,6 +11,10 @@ import {
     sendEmailVerification,
     updateProfile,
     signInWithPopup,
+    sendSignInLinkToEmail,
+    isSignInWithEmailLink,
+    signInWithEmailLink,
+    ActionCodeSettings,
     User,
     UserCredential,
     AuthError,
@@ -383,7 +387,126 @@ export class FirebaseAuthService {
             return { error: error as Error };
         }
     }
+
+    /**
+     * Send passwordless sign-in link to user's email
+     */
+    static async sendSignInLink(
+        email: string,
+        role: UserRole
+    ): Promise<{ error: Error | null }> {
+        try {
+            logger.info(`Sending sign-in link to: ${email}`);
+
+            const actionCodeSettings: ActionCodeSettings = {
+                url: `${window.location.origin}/auth/email-link?role=${role}`,
+                handleCodeInApp: true,
+            };
+
+            await sendSignInLinkToEmail(auth, email, actionCodeSettings);
+
+            // Save email and role to localStorage for completion
+            window.localStorage.setItem('emailForSignIn', email);
+            window.localStorage.setItem('roleForSignIn', role);
+
+            logger.info(`Sign-in link sent successfully to: ${email}`);
+            return { error: null };
+        } catch (error) {
+            logger.error('Error sending sign-in link', error);
+            return { error: error as Error };
+        }
+    }
+
+    /**
+     * Check if the current URL is a sign-in with email link
+     */
+    static checkIsSignInWithEmailLink(url: string): boolean {
+        return isSignInWithEmailLink(auth, url);
+    }
+
+    /**
+     * Complete sign-in with email link
+     */
+    static async completeSignInWithEmailLink(
+        email: string,
+        emailLink: string,
+        role: UserRole
+    ): Promise<{ user: User | null; error: Error | null; isNewUser: boolean }> {
+        try {
+            logger.info(`Completing email link sign-in for: ${email}`);
+
+            const userCredential = await signInWithEmailLink(auth, email, emailLink);
+            const user = userCredential.user;
+
+            // Check if this is a new user
+            const existingProfile = await FirestoreService.getDocument(
+                COLLECTIONS.PROFILES,
+                user.uid
+            );
+
+            const isNewUser = !existingProfile;
+
+            if (isNewUser) {
+                // Create profile for new user
+                await FirestoreService.setDocument(COLLECTIONS.PROFILES, user.uid, {
+                    email: user.email,
+                    full_name: user.displayName || email.split('@')[0],
+                    role: role,
+                    phone: null,
+                    avatar_url: null,
+                    location: null,
+                });
+
+                // If vendor, create vendor record
+                if (role === 'vendor') {
+                    await FirestoreService.setDocument(COLLECTIONS.VENDORS, user.uid, {
+                        user_id: user.uid,
+                        business_name: '',
+                        business_description: null,
+                        business_address: null,
+                        business_phone: null,
+                        market_location: null,
+                        sub_category_tags: null,
+                        cac_number: null,
+                        proof_of_address_url: null,
+                        bank_account_details: null,
+                        verification_badge: 'none',
+                        verification_status: 'pending',
+                        verification_date: null,
+                        subscription_plan: 'free',
+                        subscription_status: 'inactive',
+                        subscription_start_date: null,
+                        subscription_end_date: null,
+                        rating: 0,
+                        total_sales: 0,
+                        response_time: 0,
+                        wallet_balance: 0,
+                        notification_preferences: null,
+                        is_active: true,
+                        referral_code: null,
+                        total_referrals: 0,
+                        referred_by_vendor_id: null,
+                        referred_by_marketer_id: null,
+                    });
+                }
+
+                logger.info(`New user created via email link: ${user.uid}`);
+            } else {
+                logger.info(`Existing user signed in via email link: ${user.uid}`);
+            }
+
+            // Clean up localStorage
+            window.localStorage.removeItem('emailForSignIn');
+            window.localStorage.removeItem('roleForSignIn');
+
+            return { user, error: null, isNewUser };
+        } catch (error) {
+            logger.error('Error completing email link sign-in', error);
+            return { user: null, error: error as Error, isNewUser: false };
+        }
+    }
 }
 
 export default FirebaseAuthService;
+
 

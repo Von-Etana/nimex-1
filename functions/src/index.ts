@@ -1,7 +1,8 @@
 import * as functions from "firebase-functions";
 import * as admin from "firebase-admin";
 import axios from "axios";
-import * as cors from "cors";
+import cors from "cors";
+import * as crypto from "crypto";
 
 // Initialize Firebase Admin
 admin.initializeApp();
@@ -23,7 +24,7 @@ const paystackClient = axios.create({
 });
 
 // Helper: Wrap CORS and Error Handling
-const wrapCors = (req: functions.https.Request, res: functions.Response, handler: () => Promise<any>) => {
+const wrapCors = (req: functions.https.Request, res: any, handler: () => Promise<any>) => {
     return corsHandler(req, res, async () => {
         try {
             await handler();
@@ -35,6 +36,326 @@ const wrapCors = (req: functions.https.Request, res: functions.Response, handler
         }
     });
 };
+
+/**
+ * Verify Paystack Webhook Signature
+ */
+const verifyPaystackSignature = (payload: string, signature: string): boolean => {
+    const hash = crypto
+        .createHmac("sha512", PAYSTACK_SECRET_KEY)
+        .update(payload)
+        .digest("hex");
+    return hash === signature;
+};
+
+/**
+ * Paystack Webhook Handler
+ * Handles various Paystack events including:
+ * - charge.success: Successful payment
+ * - transfer.success: Successful transfer/payout
+ * - subscription.create: New subscription
+ * - charge.abandoned: User abandoned payment (DO NOT mark as failed)
+ */
+export const paystackWebhook = functions.https.onRequest(async (req, res) => {
+    try {
+        // Only accept POST requests
+        if (req.method !== "POST") {
+            res.status(405).send("Method Not Allowed");
+            return;
+        }
+
+        // Verify webhook signature
+        const signature = req.headers["x-paystack-signature"] as string;
+        const payload = JSON.stringify(req.body);
+
+        if (!signature || !verifyPaystackSignature(payload, signature)) {
+            console.warn("Invalid Paystack webhook signature");
+            res.status(401).send("Invalid signature");
+            return;
+        }
+
+        const event = req.body;
+        const eventType = event.event;
+        const data = event.data;
+
+        console.log(`Received Paystack webhook: ${eventType}`, { reference: data.reference });
+
+        switch (eventType) {
+            case "charge.success":
+                await handleChargeSuccess(data);
+                break;
+
+            case "charge.abandoned":
+                // IMPORTANT: Do NOT mark as failed - user just didn't complete payment
+                // This is expected behavior when user closes payment modal
+                console.log(`Payment abandoned: ${data.reference} - No action taken (this is normal)`);
+                // Optionally log for analytics but don't update any status
+                await logPaymentEvent(data.reference, "abandoned", data);
+                break;
+
+            case "transfer.success":
+                await handleTransferSuccess(data);
+                break;
+
+            case "transfer.failed":
+                await handleTransferFailed(data);
+                break;
+
+            case "subscription.create":
+                await handleSubscriptionCreate(data);
+                break;
+
+            case "subscription.not_renew":
+                await handleSubscriptionNotRenew(data);
+                break;
+
+            default:
+                console.log(`Unhandled Paystack event: ${eventType}`);
+        }
+
+        // Always return 200 to Paystack to acknowledge receipt
+        res.status(200).json({ received: true });
+
+    } catch (error: any) {
+        console.error("Paystack webhook error:", error);
+        // Still return 200 to prevent Paystack from retrying
+        res.status(200).json({ received: true, error: error.message });
+    }
+});
+
+/**
+ * Handle successful charge (payment)
+ */
+async function handleChargeSuccess(data: any) {
+    const reference = data.reference;
+    const amount = data.amount / 100; // Convert from kobo to naira
+    const metadata = data.metadata || {};
+
+    console.log(`Processing successful charge: ${reference}, amount: ${amount}`);
+
+    // Check if this is a subscription payment
+    if (reference.includes("NIMEX-SUB-") || metadata.type === "subscription") {
+        await handleSubscriptionPayment(reference, amount, data);
+    }
+    // Check if this is an order payment
+    else if (reference.includes("NIMEX-") || metadata.order_id) {
+        await handleOrderPayment(reference, amount, data);
+    }
+
+    // Log the successful payment
+    await logPaymentEvent(reference, "success", data);
+}
+
+/**
+ * Handle subscription payment
+ */
+async function handleSubscriptionPayment(reference: string, amount: number, data: any) {
+    try {
+        // Extract vendor ID and plan from reference: NIMEX-SUB-{vendorId}-{plan}-{timestamp}
+        const parts = reference.split("-");
+        if (parts.length >= 4 && parts[1] === "SUB") {
+            const vendorId = parts[2];
+            const plan = parts[3];
+
+            // Get plan duration
+            const planDurations: Record<string, number> = {
+                monthly: 1,
+                quarterly: 3,
+                semi_annual: 6,
+                annual: 12,
+            };
+
+            const durationMonths = planDurations[plan] || 1;
+            const startDate = new Date();
+            const endDate = new Date();
+            endDate.setMonth(endDate.getMonth() + durationMonths);
+
+            // Update vendor subscription status
+            await db.collection("vendors").doc(vendorId).update({
+                subscription_plan: plan,
+                subscription_status: "active",
+                subscription_start_date: startDate.toISOString(),
+                subscription_end_date: endDate.toISOString(),
+                updated_at: admin.firestore.FieldValue.serverTimestamp(),
+            });
+
+            // Log transaction for admin dashboard
+            await db.collection("payment_transactions").add({
+                amount: amount,
+                payment_status: "paid",
+                payment_method: "paystack",
+                payment_reference: reference,
+                created_at: admin.firestore.FieldValue.serverTimestamp(),
+                vendor_id: vendorId,
+                buyer_id: vendorId,
+                type: "subscription",
+                description: `Subscription Payment - ${plan} Plan`,
+                customer_email: data.customer?.email || "",
+            });
+
+            console.log(`Subscription activated for vendor ${vendorId}: ${plan} plan until ${endDate.toISOString()}`);
+        }
+    } catch (error) {
+        console.error("Error handling subscription payment:", error);
+        throw error;
+    }
+}
+
+/**
+ * Handle order payment
+ */
+async function handleOrderPayment(reference: string, amount: number, data: any) {
+    try {
+        const metadata = data.metadata || {};
+        const orderId = metadata.order_id;
+
+        if (orderId) {
+            // Update order payment status
+            const orderRef = db.collection("orders").doc(orderId);
+            const orderDoc = await orderRef.get();
+
+            if (orderDoc.exists) {
+                await orderRef.update({
+                    payment_status: "paid",
+                    payment_reference: reference,
+                    payment_method: "paystack",
+                    payment_date: admin.firestore.FieldValue.serverTimestamp(),
+                    updated_at: admin.firestore.FieldValue.serverTimestamp(),
+                });
+
+                // Create escrow transaction if needed
+                const orderData = orderDoc.data();
+                if (orderData && !orderData.escrow_id) {
+                    const escrowRef = await db.collection("escrow_transactions").add({
+                        order_id: orderId,
+                        buyer_id: orderData.user_id,
+                        vendor_id: orderData.vendor_id,
+                        total_amount: amount,
+                        platform_fee: Math.round(amount * 0.05 * 100) / 100, // 5% platform fee
+                        vendor_amount: Math.round(amount * 0.95 * 100) / 100, // 95% to vendor
+                        status: "held",
+                        created_at: admin.firestore.FieldValue.serverTimestamp(),
+                    });
+
+                    await orderRef.update({
+                        escrow_id: escrowRef.id,
+                        escrow_status: "held",
+                    });
+                }
+
+                console.log(`Order ${orderId} marked as paid`);
+            }
+        }
+
+        // Log payment transaction
+        await db.collection("payment_transactions").add({
+            amount: amount,
+            payment_status: "paid",
+            payment_method: "paystack",
+            payment_reference: reference,
+            created_at: admin.firestore.FieldValue.serverTimestamp(),
+            order_id: orderId || null,
+            buyer_id: metadata.buyer_id || null,
+            type: "order",
+            description: `Order Payment - ${orderId}`,
+            customer_email: data.customer?.email || "",
+        });
+
+    } catch (error) {
+        console.error("Error handling order payment:", error);
+        throw error;
+    }
+}
+
+/**
+ * Handle successful transfer (payout to vendor)
+ */
+async function handleTransferSuccess(data: any) {
+    const reference = data.reference;
+    console.log(`Transfer successful: ${reference}`);
+
+    // Update payout status if exists
+    const payoutQuery = await db.collection("payouts")
+        .where("transfer_reference", "==", reference)
+        .limit(1)
+        .get();
+
+    if (!payoutQuery.empty) {
+        await payoutQuery.docs[0].ref.update({
+            status: "completed",
+            completed_at: admin.firestore.FieldValue.serverTimestamp(),
+        });
+    }
+}
+
+/**
+ * Handle failed transfer (payout failed)
+ */
+async function handleTransferFailed(data: any) {
+    const reference = data.reference;
+    console.error(`Transfer failed: ${reference}`, data);
+
+    // Update payout status
+    const payoutQuery = await db.collection("payouts")
+        .where("transfer_reference", "==", reference)
+        .limit(1)
+        .get();
+
+    if (!payoutQuery.empty) {
+        await payoutQuery.docs[0].ref.update({
+            status: "failed",
+            failure_reason: data.reason || "Unknown error",
+            failed_at: admin.firestore.FieldValue.serverTimestamp(),
+        });
+    }
+}
+
+/**
+ * Handle subscription creation
+ */
+async function handleSubscriptionCreate(data: any) {
+    console.log(`Subscription created: ${data.subscription_code}`);
+    // Handle if using Paystack's subscription feature directly
+}
+
+/**
+ * Handle subscription not renewed
+ */
+async function handleSubscriptionNotRenew(data: any) {
+    console.log(`Subscription not renewed: ${data.subscription_code}`);
+    // Mark vendor subscription as expired
+    if (data.customer?.email) {
+        const vendorQuery = await db.collection("profiles")
+            .where("email", "==", data.customer.email)
+            .where("role", "==", "vendor")
+            .limit(1)
+            .get();
+
+        if (!vendorQuery.empty) {
+            const userId = vendorQuery.docs[0].id;
+            await db.collection("vendors").doc(userId).update({
+                subscription_status: "expired",
+                updated_at: admin.firestore.FieldValue.serverTimestamp(),
+            });
+        }
+    }
+}
+
+/**
+ * Log payment events for analytics/debugging
+ */
+async function logPaymentEvent(reference: string, status: string, data: any) {
+    try {
+        await db.collection("payment_events").add({
+            reference,
+            status,
+            event_data: data,
+            created_at: admin.firestore.FieldValue.serverTimestamp(),
+        });
+    } catch (error) {
+        console.error("Error logging payment event:", error);
+    }
+}
 
 /**
  * Initialize Payment (Paystack)
@@ -92,7 +413,7 @@ export const verifyPayment = functions.https.onRequest(async (req, res) => {
  */
 export const releaseEscrow = functions.https.onRequest(async (req, res) => {
     wrapCors(req, res, async () => {
-        const { orderId, releaseType, notes, performedByUserId } = req.body;
+        const { orderId, releaseType, notes, performedByUserId: _performedByUserId } = req.body;
 
         // Verify Inputs
         if (!orderId) throw new Error("Order ID is required");
@@ -215,3 +536,4 @@ export const refundEscrow = functions.https.onRequest(async (req, res) => {
         res.json({ success: true, message: "Escrow refunded/cancelled successfully" });
     });
 });
+
