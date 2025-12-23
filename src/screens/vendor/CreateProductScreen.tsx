@@ -2,12 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Card, CardContent } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
-import { ArrowLeft, Save, Loader2, Upload, X, Video } from 'lucide-react';
+import { ArrowLeft, Save, Loader2, X, Video, AlertCircle } from 'lucide-react';
 import { FirestoreService } from '../../services/firestore.service';
 import { FirebaseStorageService } from '../../services/firebaseStorage.service';
 import { COLLECTIONS, STORAGE_PATHS } from '../../lib/collections';
 import { useAuth } from '../../contexts/AuthContext';
 import { ProductTagsInput } from '../../components/vendor/ProductTagsInput';
+import { ProductImageUpload } from '../../components/vendor/ProductImageUpload';
 
 interface Category {
   id: string;
@@ -44,10 +45,13 @@ export const CreateProductScreen: React.FC = () => {
     compare_at_price: '',
     stock_quantity: '',
     category_id: '',
-    image_url: '',
+    images: [] as string[],
     video_url: '',
     tags: [] as string[],
   });
+
+  const [vendorId, setVendorId] = useState<string>('');
+  const [tempProductId, setTempProductId] = useState<string>('');
 
   useEffect(() => {
     loadCategories();
@@ -58,12 +62,22 @@ export const CreateProductScreen: React.FC = () => {
 
   const loadCategories = async () => {
     try {
+      setLoading(true);
       const data = await FirestoreService.getDocuments<Category>(COLLECTIONS.CATEGORIES, {
-        orderBy: { field: 'name', direction: 'asc' }
+        orderByField: 'name',
+        orderByDirection: 'asc'
       });
+      console.log('Loaded categories:', data);
       setCategories(data || []);
+
+      // If no categories exist, show a message
+      if (!data || data.length === 0) {
+        console.warn('No categories found in database');
+      }
     } catch (err: any) {
       console.error('Error loading categories:', err);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -80,13 +94,14 @@ export const CreateProductScreen: React.FC = () => {
           compare_at_price: product.compare_at_price?.toString() || '',
           stock_quantity: product.stock_quantity.toString(),
           category_id: product.category_id || '',
-          image_url: typeof product.images === 'string' ? product.images : (product.images as any)?.url || '',
+          images: Array.isArray(product.images)
+            ? product.images
+            : (product.images ? [product.images] : []),
           video_url: product.video_url || '',
-          tags: product.tags || [], // Assuming tags are stored as array of strings in Firestore
+          tags: product.tags || [],
         });
 
-        const img = typeof product.images === 'string' ? product.images : (product.images as any)?.url;
-        if (img) setImagePreview(img);
+        setTempProductId(productId);
       }
     } catch (err: any) {
       setError('Failed to load product for editing');
@@ -96,9 +111,30 @@ export const CreateProductScreen: React.FC = () => {
     }
   };
 
-  const handleImageUrlChange = (url: string) => {
-    setFormData({ ...formData, image_url: url });
-    setImagePreview(url);
+  // Generate temp product ID for new products (used for image uploads)
+  useEffect(() => {
+    if (!isEditing && !tempProductId) {
+      setTempProductId(`prod_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`);
+    }
+  }, [isEditing, tempProductId]);
+
+  // Load vendor ID
+  useEffect(() => {
+    const loadVendorId = async () => {
+      if (!user) return;
+      const vendors = await FirestoreService.getDocuments<any>(COLLECTIONS.VENDORS, {
+        filters: [{ field: 'user_id', operator: '==', value: user.uid }],
+        limitCount: 1
+      });
+      if (vendors.length > 0) {
+        setVendorId(vendors[0].id || user.uid);
+      }
+    };
+    loadVendorId();
+  }, [user]);
+
+  const handleImagesChange = (newImages: string[]) => {
+    setFormData({ ...formData, images: newImages });
   };
 
   const handleVideoFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -186,10 +222,10 @@ export const CreateProductScreen: React.FC = () => {
         compare_at_price: formData.compare_at_price ? parseFloat(formData.compare_at_price) : null,
         stock_quantity: parseInt(formData.stock_quantity),
         category_id: formData.category_id || null,
-        images: formData.image_url,
-        image_url: formData.image_url,
+        images: formData.images,
+        image_url: formData.images[0] || null, // Primary image for backward compatibility
         video_url: finalVideoUrl || null,
-        tags: formData.tags, // Store tags directly in product document
+        tags: formData.tags,
         updated_at: new Date().toISOString()
       };
 
@@ -197,13 +233,13 @@ export const CreateProductScreen: React.FC = () => {
         // Update existing product
         await FirestoreService.updateDocument(COLLECTIONS.PRODUCTS, id, productData);
       } else {
-        // Create new product
-        const newId = `prod_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-        await FirestoreService.setDocument(COLLECTIONS.PRODUCTS, newId, {
+        // Create new product with pending verification status
+        await FirestoreService.setDocument(COLLECTIONS.PRODUCTS, tempProductId, {
           ...productData,
-          id: newId,
-          status: 'active',
-          is_active: true,
+          id: tempProductId,
+          status: 'pending_review', // Products need admin approval
+          verification_status: 'pending', // For admin verification
+          is_active: false, // Not visible until approved
           created_at: new Date().toISOString()
         });
       }
@@ -365,40 +401,21 @@ export const CreateProductScreen: React.FC = () => {
                   </div>
                 </div>
 
-                <div>
-                  <label className="block font-sans font-medium text-xs md:text-sm text-neutral-700 mb-1 md:mb-2">
-                    Product Image URL
-                  </label>
-                  <div className="space-y-3">
-                    <input
-                      type="url"
-                      value={formData.image_url}
-                      onChange={(e) => handleImageUrlChange(e.target.value)}
-                      className="w-full h-10 md:h-12 px-3 md:px-4 rounded-lg border border-neutral-200 font-sans text-sm md:text-base text-neutral-900 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                      placeholder="https://example.com/image.jpg"
-                    />
-                    {imagePreview && (
-                      <div className="relative w-32 h-32 md:w-40 md:h-40 rounded-lg overflow-hidden border border-neutral-200">
-                        <img
-                          src={imagePreview}
-                          alt="Preview"
-                          className="w-full h-full object-cover"
-                          onError={() => setImagePreview(null)}
-                        />
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setFormData({ ...formData, image_url: '' });
-                            setImagePreview(null);
-                          }}
-                          className="absolute top-2 right-2 p-1 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors"
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
-                      </div>
-                    )}
+                {vendorId && tempProductId && (
+                  <ProductImageUpload
+                    vendorId={vendorId}
+                    productId={tempProductId}
+                    existingImages={formData.images}
+                    maxImages={5}
+                    onImagesChange={handleImagesChange}
+                  />
+                )}
+                {(!vendorId || !tempProductId) && (
+                  <div className="flex items-center gap-2 p-4 bg-neutral-50 rounded-lg border border-neutral-200">
+                    <Loader2 className="w-4 h-4 animate-spin text-neutral-500" />
+                    <span className="text-sm text-neutral-600">Loading image uploader...</span>
                   </div>
-                </div>
+                )}
 
                 <div>
                   <label className="block font-sans font-medium text-xs md:text-sm text-neutral-700 mb-1 md:mb-2">

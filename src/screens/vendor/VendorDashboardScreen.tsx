@@ -9,7 +9,9 @@ import {
   Package,
   ExternalLink,
   MessageCircle,
-  Loader2
+  Loader2,
+  Wallet,
+  ArrowDownCircle
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
@@ -184,6 +186,25 @@ export const VendorDashboardScreen: React.FC = () => {
                       ₦{metrics.earnings.toLocaleString()}
                     </span>
                   </div>
+                  <Wallet className="w-6 h-6 md:w-8 md:h-8 text-green-700" />
+                </div>
+                <div className="flex gap-2 mt-3 md:mt-4">
+                  <Button
+                    onClick={() => navigate('/vendor/wallet')}
+                    size="sm"
+                    className="flex-1 bg-green-700 hover:bg-green-800 text-white text-xs"
+                  >
+                    <ArrowDownCircle className="w-3 h-3 mr-1" />
+                    Withdraw
+                  </Button>
+                  <Button
+                    onClick={() => navigate('/vendor/wallet')}
+                    size="sm"
+                    variant="outline"
+                    className="flex-1 border-green-700 text-green-700 hover:bg-green-50 text-xs"
+                  >
+                    View Wallet
+                  </Button>
                 </div>
               </CardContent>
             </Card>

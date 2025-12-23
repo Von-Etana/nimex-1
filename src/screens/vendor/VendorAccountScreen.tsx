@@ -482,7 +482,10 @@ export const VendorAccountScreen: React.FC = () => {
                       >
                         Withdraw Funds
                       </Button>
-                      <Button className="flex-1 h-10 md:h-12 bg-white hover:bg-neutral-50 text-neutral-900 border border-neutral-200 font-sans font-semibold text-xs md:text-sm">
+                      <Button
+                        onClick={() => window.location.href = '/vendor/wallet'}
+                        className="flex-1 h-10 md:h-12 bg-white hover:bg-neutral-50 text-neutral-900 border border-neutral-200 font-sans font-semibold text-xs md:text-sm"
+                      >
                         View Statement
                       </Button>
                     </div>
@@ -513,7 +516,10 @@ export const VendorAccountScreen: React.FC = () => {
                       ₦{pendingPayouts.toLocaleString()}.00
                     </p>
                   </div>
-                  <Button className="w-full h-9 md:h-10 bg-white hover:bg-neutral-50 text-neutral-900 border border-neutral-200 font-sans text-xs md:text-sm">
+                  <Button
+                    onClick={() => window.location.href = '/vendor/analytics'}
+                    className="w-full h-9 md:h-10 bg-white hover:bg-neutral-50 text-neutral-900 border border-neutral-200 font-sans text-xs md:text-sm"
+                  >
                     View all reports
                   </Button>
                 </div>
@@ -527,7 +533,10 @@ export const VendorAccountScreen: React.FC = () => {
                 <h2 className="font-heading font-bold text-base md:text-xl text-neutral-900">
                   Transaction History
                 </h2>
-                <Button className="h-8 md:h-9 px-3 md:px-4 bg-white hover:bg-neutral-50 text-neutral-900 border border-neutral-200 font-sans text-xs md:text-sm flex items-center gap-2">
+                <Button
+                  onClick={() => alert('Export feature coming soon!')}
+                  className="h-8 md:h-9 px-3 md:px-4 bg-white hover:bg-neutral-50 text-neutral-900 border border-neutral-200 font-sans text-xs md:text-sm flex items-center gap-2"
+                >
                   <Download className="w-3 h-3 md:w-4 md:h-4" />
                   <span className="hidden sm:inline">Export</span>
                 </Button>

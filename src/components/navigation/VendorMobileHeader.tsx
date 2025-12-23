@@ -37,6 +37,14 @@ export const VendorMobileHeader: React.FC = () => {
             </button>
 
             <button
+              onClick={() => navigate('/')}
+              className="px-2 py-1 rounded-lg bg-green-700 hover:bg-green-800 text-white text-xs font-medium flex items-center gap-1 transition-colors"
+              aria-label="Browse as Buyer"
+            >
+              <span>Buyer</span>
+            </button>
+
+            <button
               onClick={() => navigate('/notifications')}
               className="relative w-8 h-8 rounded-full bg-neutral-100 hover:bg-neutral-200 flex items-center justify-center transition-colors"
               aria-label="Notifications"

@@ -11,7 +11,7 @@ interface Listing {
   vendor_name: string;
   category: string;
   price: number;
-  status: 'active' | 'inactive' | 'moderation' | 'suspended';
+  status: 'active' | 'inactive' | 'moderation' | 'suspended' | 'pending_review';
   created_at: string;
 }
 
@@ -20,7 +20,7 @@ export const AdminListingsScreen: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'inactive' | 'moderation' | 'suspended'>('all');
+  const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'inactive' | 'moderation' | 'suspended' | 'pending_review'>('all');
 
   useEffect(() => {
     loadListings();
@@ -97,6 +97,8 @@ export const AdminListingsScreen: React.FC = () => {
         return 'bg-neutral-100 text-neutral-700';
       case 'moderation':
         return 'bg-yellow-100 text-yellow-700';
+      case 'pending_review':
+        return 'bg-orange-100 text-orange-700';
       case 'suspended':
         return 'bg-red-100 text-red-700';
       default:
@@ -109,7 +111,13 @@ export const AdminListingsScreen: React.FC = () => {
       setActionLoading(id);
       logger.info(`Approving product listing: ${id}`);
 
-      await FirestoreService.updateDocument('products', id, { status: 'active' });
+      // Set status to active and is_active to true so product appears on buyer dashboard
+      await FirestoreService.updateDocument('products', id, {
+        status: 'active',
+        is_active: true,
+        verification_status: 'approved',
+        approved_at: new Date().toISOString()
+      });
 
       // Update local state
       setListings(listings.map(listing =>
@@ -129,7 +137,11 @@ export const AdminListingsScreen: React.FC = () => {
       setActionLoading(id);
       logger.info(`Suspending product listing: ${id}`);
 
-      await FirestoreService.updateDocument('products', id, { status: 'suspended' });
+      await FirestoreService.updateDocument('products', id, {
+        status: 'suspended',
+        is_active: false,
+        verification_status: 'rejected'
+      });
 
       // Update local state
       setListings(listings.map(listing =>
@@ -171,7 +183,7 @@ export const AdminListingsScreen: React.FC = () => {
               />
             </div>
             <div className="flex items-center gap-2 overflow-x-auto">
-              {['all', 'active', 'inactive', 'moderation', 'suspended'].map((status) => (
+              {['all', 'pending_review', 'active', 'inactive', 'moderation', 'suspended'].map((status) => (
                 <button
                   key={status}
                   onClick={() => setFilterStatus(status as any)}
@@ -180,7 +192,7 @@ export const AdminListingsScreen: React.FC = () => {
                     : 'bg-white text-neutral-700 border border-neutral-200'
                     }`}
                 >
-                  {status.charAt(0).toUpperCase() + status.slice(1)}
+                  {status === 'pending_review' ? 'Pending Review' : status.charAt(0).toUpperCase() + status.slice(1)}
                 </button>
               ))}
             </div>
