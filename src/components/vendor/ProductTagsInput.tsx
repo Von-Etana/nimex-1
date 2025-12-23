@@ -31,7 +31,7 @@ export const ProductTagsInput: React.FC<ProductTagsInputProps> = ({
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (inputValue.trim().length > 1 && categoryId) {
+    if (inputValue.trim().length > 1) {
       loadSuggestions();
     } else {
       setSuggestions([]);
@@ -44,15 +44,29 @@ export const ProductTagsInput: React.FC<ProductTagsInputProps> = ({
       setLoading(true);
       const normalizedInput = inputValue.toLowerCase().trim();
 
-      // Firestore doesn't support ILIKE, so we'll fetch tags for the category and filter client-side
+      // Firestore doesn't support ILIKE, so we'll fetch tags and filter client-side
       // For better performance with large datasets, we'd use Algolia or Typesense
-      const tags = await FirestoreService.getDocuments<ProductTag>(COLLECTIONS.PRODUCT_TAGS, {
-        filters: [
-          { field: 'category_id', operator: '==', value: categoryId },
-          { field: 'is_approved', operator: '==', value: true }
-        ],
-        limitCount: 50 // Fetch more to filter client-side
-      });
+      let tags: ProductTag[] = [];
+
+      try {
+        // If categoryId is provided, filter by category; otherwise fetch general suggestions
+        const filters = categoryId
+          ? [
+            { field: 'category_id', operator: '==', value: categoryId },
+            { field: 'is_approved', operator: '==', value: true }
+          ]
+          : [
+            { field: 'is_approved', operator: '==', value: true }
+          ];
+
+        tags = await FirestoreService.getDocuments<ProductTag>(COLLECTIONS.PRODUCT_TAGS, {
+          filters: filters as any,
+          limitCount: 50 // Fetch more to filter client-side
+        });
+      } catch (err) {
+        // If query fails (e.g., permission denied), continue with empty suggestions
+        console.warn('Could not load tag suggestions:', err);
+      }
 
       const filteredSuggestions = (tags || [])
         .filter(tag => tag.tag_name.includes(normalizedInput))
@@ -88,20 +102,26 @@ export const ProductTagsInput: React.FC<ProductTagsInputProps> = ({
       if (existingTag) {
         tagToAdd = existingTag;
       } else {
+        // Create a new custom tag - works even without category
         try {
           const newTagId = `tag_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
           const newTagData = {
             id: newTagId,
             tag_name: normalizedName,
             display_name: trimmedValue,
-            category_id: categoryId,
+            category_id: categoryId || null, // Allow null category
             usage_count: 0,
             created_by: user?.uid,
             is_approved: true,
             created_at: new Date().toISOString()
           };
 
-          await FirestoreService.setDocument(COLLECTIONS.PRODUCT_TAGS, newTagId, newTagData);
+          // Try to save to Firestore, but don't block if it fails
+          try {
+            await FirestoreService.setDocument(COLLECTIONS.PRODUCT_TAGS, newTagId, newTagData);
+          } catch (saveError) {
+            console.warn('Could not save tag to database (will still add locally):', saveError);
+          }
 
           // We need to cast to ProductTag because FirestoreService doesn't return the object on setDocument
           tagToAdd = newTagData as unknown as ProductTag;

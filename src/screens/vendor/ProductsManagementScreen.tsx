@@ -39,14 +39,26 @@ export const ProductsManagementScreen: React.FC = () => {
 
       if (!user) return;
 
-      // Get vendor ID
+      // Get vendor ID - try direct lookup first, then by user_id field
+      let vendorId = user.uid;
       const vendor = await FirestoreService.getDocument<any>(COLLECTIONS.VENDORS, user.uid);
 
-      if (!vendor) return;
+      if (vendor) {
+        vendorId = vendor.id || user.uid;
+      } else {
+        // Try to find vendor by user_id field
+        const vendorsByUserId = await FirestoreService.getDocuments<any>(COLLECTIONS.VENDORS, {
+          filters: [{ field: 'user_id', operator: '==', value: user.uid }],
+          limitCount: 1
+        });
+        if (vendorsByUserId.length > 0) {
+          vendorId = vendorsByUserId[0].id || user.uid;
+        }
+      }
 
-      // Fetch products
+      // Fetch products - try both vendor_id values
       const productsData = await FirestoreService.getDocuments<Product>(COLLECTIONS.PRODUCTS, {
-        filters: [{ field: 'vendor_id', operator: '==', value: vendor.id || user.uid }],
+        filters: [{ field: 'vendor_id', operator: '==', value: vendorId }],
         orderByField: 'created_at',
         orderByDirection: 'desc'
       });
@@ -228,10 +240,10 @@ export const ProductsManagementScreen: React.FC = () => {
                             </span>
                           )}
                           <span className={`px-2 py-0.5 rounded text-xs ${product.stock_quantity > 10
-                              ? 'bg-green-100 text-green-700'
-                              : product.stock_quantity > 0
-                                ? 'bg-yellow-100 text-yellow-700'
-                                : 'bg-red-100 text-red-700'
+                            ? 'bg-green-100 text-green-700'
+                            : product.stock_quantity > 0
+                              ? 'bg-yellow-100 text-yellow-700'
+                              : 'bg-red-100 text-red-700'
                             }`}>
                             {product.stock_quantity} in stock
                           </span>

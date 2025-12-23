@@ -106,6 +106,16 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
     
+    // Product Tags (Subcategories) - public read, authenticated create
+    match /product_tags/{tagId} {
+      allow read: if true;
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated() && (
+        resource.data.created_by == request.auth.uid || isAdmin()
+      );
+      allow delete: if isAdmin();
+    }
+    
     // Markets - public read, admin write
     match /markets/{marketId} {
       allow read: if true;

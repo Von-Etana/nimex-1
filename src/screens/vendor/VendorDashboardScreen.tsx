@@ -66,34 +66,49 @@ export const VendorDashboardScreen: React.FC = () => {
 
       if (!user) return;
 
-      // Get vendor ID (assuming vendor ID is user ID)
+      // Get vendor ID - try direct lookup first, then by user_id field
+      let vendorId = user.uid;
+      let walletBalance = 0;
       const vendor = await FirestoreService.getDocument<any>(COLLECTIONS.VENDORS, user.uid);
 
-      if (!vendor) return;
+      if (vendor) {
+        vendorId = vendor.id || user.uid;
+        walletBalance = vendor.wallet_balance || 0;
+      } else {
+        // Try to find vendor by user_id field
+        const vendorsByUserId = await FirestoreService.getDocuments<any>(COLLECTIONS.VENDORS, {
+          filters: [{ field: 'user_id', operator: '==', value: user.uid }],
+          limitCount: 1
+        });
+        if (vendorsByUserId.length > 0) {
+          vendorId = vendorsByUserId[0].id || user.uid;
+          walletBalance = vendorsByUserId[0].wallet_balance || 0;
+        }
+      }
 
       // Fetch Orders
       const orders = await FirestoreService.getDocuments<Order>(COLLECTIONS.ORDERS, {
-        filters: [{ field: 'vendor_id', operator: '==', value: vendor.id || user.uid }],
+        filters: [{ field: 'vendor_id', operator: '==', value: vendorId }],
         orderByField: 'created_at',
         orderByDirection: 'desc'
       });
 
       // Fetch Products Count & Top Viewed
       const products = await FirestoreService.getDocuments<any>(COLLECTIONS.PRODUCTS, {
-        filters: [{ field: 'vendor_id', operator: '==', value: vendor.id || user.uid }],
+        filters: [{ field: 'vendor_id', operator: '==', value: vendorId }],
         orderByField: 'views_count',
         orderByDirection: 'desc',
         limitCount: 5
       });
 
       const productsCount = await FirestoreService.getCount(COLLECTIONS.PRODUCTS, {
-        filters: [{ field: 'vendor_id', operator: '==', value: vendor.id || user.uid }]
+        filters: [{ field: 'vendor_id', operator: '==', value: vendorId }]
       });
 
       // Fetch Unread Messages
       const conversations = await FirestoreService.getDocuments<Message>(COLLECTIONS.CHAT_CONVERSATIONS, {
         filters: [
-          { field: 'vendor_id', operator: '==', value: vendor.id || user.uid },
+          { field: 'vendor_id', operator: '==', value: vendorId },
           { field: 'unread_vendor', operator: '>', value: 0 }
         ],
         limitCount: 3
@@ -106,7 +121,7 @@ export const VendorDashboardScreen: React.FC = () => {
       }, {}) || {};
 
       setMetrics({
-        earnings: vendor.wallet_balance || 0,
+        earnings: walletBalance,
         totalOrders: orders.length || 0,
         unreadMessages: conversations.length || 0,
         totalProducts: productsCount || 0,

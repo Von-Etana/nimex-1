@@ -32,7 +32,8 @@ service firebase.storage {
     }
 
     // Product media (images and videos) - public read, authenticated write
-    match /products/{productId}/{fileName} {
+    // Path pattern: products/{vendorId}/{productId}/{fileName}
+    match /products/{vendorId}/{productId}/{fileName} {
       allow read: if true;
       allow write: if isAuthenticated() && (
         (isImageFile() && isValidImageSize()) || 
