@@ -29,7 +29,7 @@ export const NotificationsScreen: React.FC = () => {
     // Real-time subscription
     const q = query(
       collection(db, COLLECTIONS.NOTIFICATIONS),
-      where('user_id', '==', user.id),
+      where('user_id', '==', user.uid),
       orderBy('created_at', 'desc')
     );
 

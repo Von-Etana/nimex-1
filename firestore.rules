@@ -46,15 +46,18 @@ service cloud.firestore {
     match /vendors/{vendorId} {
       allow read: if true;
       allow create: if isOwner(vendorId);
-      // Update: Allow if owner or admin, BUT prevent modifying wallet_balance, verification_status, etc.
+      // Update: Allow if owner or admin, BUT prevent modifying sensitive fields
+      // Protected fields: wallet_balance, verification_status, verification_badge, total_sales
+      // Allowed fields: subscription_status, subscription_plan, business details, etc.
       allow update: if isAuthenticated() && (
         isAdmin() || 
         (
           (request.auth.uid == vendorId || resource.data.user_id == request.auth.uid) &&
-          request.resource.data.wallet_balance == resource.data.wallet_balance &&
-          request.resource.data.verification_status == resource.data.verification_status && 
-          request.resource.data.verification_badge == resource.data.verification_badge &&
-          request.resource.data.total_sales == resource.data.total_sales
+          // Prevent changing protected financial/verification fields
+          (!('wallet_balance' in request.resource.data) || request.resource.data.wallet_balance == resource.data.wallet_balance) &&
+          (!('verification_status' in request.resource.data) || request.resource.data.verification_status == resource.data.verification_status) && 
+          (!('verification_badge' in request.resource.data) || request.resource.data.verification_badge == resource.data.verification_badge) &&
+          (!('total_sales' in request.resource.data) || request.resource.data.total_sales == resource.data.total_sales)
         )
       );
       allow delete: if isAdmin();

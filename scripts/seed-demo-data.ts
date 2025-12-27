@@ -106,22 +106,23 @@ async function createAccount(account: any) {
         // 4. Create Vendor Document (if vendor)
         if (account.role === 'vendor') {
             const vendorRef = doc(db, COLLECTIONS.VENDORS, uid);
+
+            // For new vendors or when document doesn't exist
             const vendorData = {
                 user_id: uid,
                 business_name: account.businessName,
                 business_description: account.businessDescription,
                 business_address: account.businessAddress,
                 business_phone: account.phone,
-                verification_status: 'verified',
-                rating: 4.8,
-                total_sales: 125,
-                wallet_balance: 250500,
+                subscription_status: 'active',
+                subscription_plan: 'premium',
+                market_location: 'Lagos, Nigeria',
                 is_active: true,
                 created_at: Timestamp.now(),
                 updated_at: Timestamp.now()
             };
             await setDoc(vendorRef, vendorData, { merge: true });
-            console.log(`  - Vendor document created/updated`);
+            console.log(`  - Vendor document created/updated with active subscription`);
         }
 
         console.log(`✅ ${account.role} account setup complete.\n`);

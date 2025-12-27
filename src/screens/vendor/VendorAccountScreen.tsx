@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Card, CardContent } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import {
@@ -65,6 +66,7 @@ interface NotificationPreferences {
 
 export const VendorAccountScreen: React.FC = () => {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -483,7 +485,7 @@ export const VendorAccountScreen: React.FC = () => {
                         Withdraw Funds
                       </Button>
                       <Button
-                        onClick={() => window.location.href = '/vendor/wallet'}
+                        onClick={() => navigate('/vendor/wallet')}
                         className="flex-1 h-10 md:h-12 bg-white hover:bg-neutral-50 text-neutral-900 border border-neutral-200 font-sans font-semibold text-xs md:text-sm"
                       >
                         View Statement
@@ -517,7 +519,7 @@ export const VendorAccountScreen: React.FC = () => {
                     </p>
                   </div>
                   <Button
-                    onClick={() => window.location.href = '/vendor/analytics'}
+                    onClick={() => navigate('/vendor/analytics')}
                     className="w-full h-9 md:h-10 bg-white hover:bg-neutral-50 text-neutral-900 border border-neutral-200 font-sans text-xs md:text-sm"
                   >
                     View all reports

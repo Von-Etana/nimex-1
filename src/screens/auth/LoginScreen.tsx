@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { PackageIcon, Eye, EyeOff } from 'lucide-react';
 import { Button } from '../../components/ui/button';
@@ -7,7 +7,7 @@ import { useAuth } from '../../contexts/AuthContext';
 export const LoginScreen: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { signIn, signInWithGoogle, user, profile } = useAuth();
+  const { signIn, signInWithGoogle, user, profile, loading: authLoading } = useAuth();
 
   const [formData, setFormData] = useState({
     email: '',
@@ -18,9 +18,24 @@ export const LoginScreen: React.FC = () => {
   const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState('');
 
+  // Track if we've initiated a sign-in to detect stuck states
+  const signInAttempted = useRef(false);
+  const signInTimeout = useRef<NodeJS.Timeout | null>(null);
+
   // Handle automatic redirection when logged in
   useEffect(() => {
     if (user && profile) {
+      // Clear loading states on successful login
+      setLoading(false);
+      setGoogleLoading(false);
+      signInAttempted.current = false;
+
+      // Clear any timeout
+      if (signInTimeout.current) {
+        clearTimeout(signInTimeout.current);
+        signInTimeout.current = null;
+      }
+
       // If there's a return url, go there
       const from = (location.state as any)?.from?.pathname;
       if (from) {
@@ -45,10 +60,42 @@ export const LoginScreen: React.FC = () => {
     }
   }, [user, profile, navigate, location]);
 
+  // Reset loading state if user exists but profile is null (profile fetch failed or doesn't exist)
+  useEffect(() => {
+    if (user && !profile && !authLoading && signInAttempted.current) {
+      // User is authenticated but has no profile - this could mean:
+      // 1. Profile doesn't exist in Firestore
+      // 2. Profile fetch failed
+      setLoading(false);
+      setGoogleLoading(false);
+      setError('Account not found. Your profile may not exist in the system. Please contact support.');
+      signInAttempted.current = false;
+    }
+  }, [user, profile, authLoading]);
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (signInTimeout.current) {
+        clearTimeout(signInTimeout.current);
+      }
+    };
+  }, []);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setLoading(true);
+    signInAttempted.current = true;
+
+    // Set a timeout to prevent infinite loading state
+    signInTimeout.current = setTimeout(() => {
+      if (loading) {
+        setLoading(false);
+        setError('Sign in is taking longer than expected. Please try again.');
+        signInAttempted.current = false;
+      }
+    }, 15000); // 15 second timeout
 
     const { error: signInError } = await signIn({
       email: formData.email,
@@ -58,6 +105,11 @@ export const LoginScreen: React.FC = () => {
     if (signInError) {
       setError(signInError.message);
       setLoading(false);
+      signInAttempted.current = false;
+      if (signInTimeout.current) {
+        clearTimeout(signInTimeout.current);
+        signInTimeout.current = null;
+      }
     }
     // Navigation will be handled by the useEffect above when user/profile state updates
   };
@@ -65,6 +117,16 @@ export const LoginScreen: React.FC = () => {
   const handleGoogleSignIn = async () => {
     setError('');
     setGoogleLoading(true);
+    signInAttempted.current = true;
+
+    // Set a timeout to prevent infinite loading state
+    signInTimeout.current = setTimeout(() => {
+      if (googleLoading) {
+        setGoogleLoading(false);
+        setError('Sign in is taking longer than expected. Please try again.');
+        signInAttempted.current = false;
+      }
+    }, 15000); // 15 second timeout
 
     // For login, we use 'buyer' as default role - existing users will keep their role
     const { error: googleError } = await signInWithGoogle('buyer');
@@ -72,6 +134,11 @@ export const LoginScreen: React.FC = () => {
     if (googleError) {
       setError(googleError.message);
       setGoogleLoading(false);
+      signInAttempted.current = false;
+      if (signInTimeout.current) {
+        clearTimeout(signInTimeout.current);
+        signInTimeout.current = null;
+      }
     }
     // Navigation will be handled by the useEffect above
   };

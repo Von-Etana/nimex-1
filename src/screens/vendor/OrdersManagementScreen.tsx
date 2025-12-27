@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Search, ChevronDown } from 'lucide-react';
@@ -144,8 +144,8 @@ export const OrdersManagementScreen: React.FC = () => {
                 key={filter.value}
                 onClick={() => setActiveFilter(filter.value)}
                 className={`px-3 md:px-6 py-1.5 md:py-2 rounded-lg font-sans text-xs md:text-sm font-medium transition-colors whitespace-nowrap ${activeFilter === filter.value
-                    ? 'bg-green-700 text-white'
-                    : 'bg-white text-neutral-700 border border-neutral-200 hover:bg-neutral-50'
+                  ? 'bg-green-700 text-white'
+                  : 'bg-white text-neutral-700 border border-neutral-200 hover:bg-neutral-50'
                   }`}
               >
                 {filter.label}
