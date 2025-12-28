@@ -71,6 +71,9 @@ const NotFoundScreen = React.lazy(() => import('./screens/NotFoundScreen').then(
 
 // Marketer screens
 const MarketerDashboardScreen = React.lazy(() => import('./screens/marketer').then(module => ({ default: module.MarketerDashboardScreen })));
+const MarketerReferralsScreen = React.lazy(() => import('./screens/marketer').then(module => ({ default: module.MarketerReferralsScreen })));
+const MarketerEarningsScreen = React.lazy(() => import('./screens/marketer').then(module => ({ default: module.MarketerEarningsScreen })));
+const MarketerSettingsScreen = React.lazy(() => import('./screens/marketer').then(module => ({ default: module.MarketerSettingsScreen })));
 
 // Marketer layout
 const MarketerLayout = React.lazy(() => import('./layouts/MarketerLayout').then(module => ({ default: module.MarketerLayout })));
@@ -518,6 +521,39 @@ const App: React.FC = () => {
                     <ProtectedRoute>
                       <MarketerLayout>
                         <MarketerDashboardScreen />
+                      </MarketerLayout>
+                    </ProtectedRoute>
+                  }
+                />
+
+                <Route
+                  path="/marketer/referrals"
+                  element={
+                    <ProtectedRoute>
+                      <MarketerLayout>
+                        <MarketerReferralsScreen />
+                      </MarketerLayout>
+                    </ProtectedRoute>
+                  }
+                />
+
+                <Route
+                  path="/marketer/earnings"
+                  element={
+                    <ProtectedRoute>
+                      <MarketerLayout>
+                        <MarketerEarningsScreen />
+                      </MarketerLayout>
+                    </ProtectedRoute>
+                  }
+                />
+
+                <Route
+                  path="/marketer/settings"
+                  element={
+                    <ProtectedRoute>
+                      <MarketerLayout>
+                        <MarketerSettingsScreen />
                       </MarketerLayout>
                     </ProtectedRoute>
                   }

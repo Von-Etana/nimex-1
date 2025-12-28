@@ -1,5 +1,5 @@
 import React from 'react';
-import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
     LayoutDashboard,
     Users,
@@ -13,7 +13,11 @@ import {
 import { useAuth } from '../contexts/AuthContext';
 import { Button } from '../components/ui/button';
 
-export const MarketerLayout: React.FC = () => {
+interface MarketerLayoutProps {
+    children: React.ReactNode;
+}
+
+export const MarketerLayout: React.FC<MarketerLayoutProps> = ({ children }) => {
     const location = useLocation();
     const navigate = useNavigate();
     const { user, signOut } = useAuth();
@@ -76,8 +80,8 @@ export const MarketerLayout: React.FC = () => {
                                         key={item.name}
                                         to={item.href}
                                         className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${isActive(item.href)
-                                                ? 'bg-primary-50 text-primary-700'
-                                                : 'text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900'
+                                            ? 'bg-primary-50 text-primary-700'
+                                            : 'text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900'
                                             }`}
                                     >
                                         <Icon className="w-4 h-4" />
@@ -132,8 +136,8 @@ export const MarketerLayout: React.FC = () => {
                                         to={item.href}
                                         onClick={() => setMobileMenuOpen(false)}
                                         className={`flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${isActive(item.href)
-                                                ? 'bg-primary-50 text-primary-700'
-                                                : 'text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900'
+                                            ? 'bg-primary-50 text-primary-700'
+                                            : 'text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900'
                                             }`}
                                     >
                                         <Icon className="w-5 h-5" />
@@ -162,7 +166,7 @@ export const MarketerLayout: React.FC = () => {
 
             {/* Main Content */}
             <main>
-                <Outlet />
+                {children}
             </main>
         </div>
     );
