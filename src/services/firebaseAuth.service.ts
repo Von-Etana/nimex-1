@@ -24,6 +24,7 @@ import { FirestoreService } from './firestore.service';
 import { COLLECTIONS } from '../lib/collections';
 import { logger } from '../lib/logger';
 import type { UserRole } from '../types/database';
+import { emailNotificationService } from './emailNotificationService';
 
 export interface SignUpData {
     email: string;
@@ -119,6 +120,14 @@ export class FirebaseAuthService {
 
             // Send email verification
             await sendEmailVerification(user);
+
+            // Send welcome email (non-blocking)
+            if (data.email && data.fullName) {
+                emailNotificationService.sendWelcomeEmail(
+                    data.email,
+                    data.fullName
+                ).catch(err => logger.error('Failed to send welcome email:', err));
+            }
 
             logger.info(`User account created successfully: ${user.uid}`);
             return { user, error: null };

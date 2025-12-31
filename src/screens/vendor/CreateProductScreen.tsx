@@ -68,14 +68,42 @@ export const CreateProductScreen: React.FC = () => {
         orderByDirection: 'asc'
       });
       console.log('Loaded categories:', data);
-      setCategories(data || []);
 
-      // If no categories exist, show a message
+      // If no categories exist in database, use fallback categories
       if (!data || data.length === 0) {
-        console.warn('No categories found in database');
+        console.warn('No categories found in database, using fallback categories');
+        const fallbackCategories: Category[] = [
+          { id: 'electronics', name: 'Electronics' },
+          { id: 'fashion', name: 'Fashion & Clothing' },
+          { id: 'home-garden', name: 'Home & Garden' },
+          { id: 'health-beauty', name: 'Health & Beauty' },
+          { id: 'food-beverages', name: 'Food & Beverages' },
+          { id: 'automobiles', name: 'Automobiles' },
+          { id: 'sports-outdoors', name: 'Sports & Outdoors' },
+          { id: 'books-media', name: 'Books & Media' },
+          { id: 'toys-games', name: 'Toys & Games' },
+          { id: 'other', name: 'Other' },
+        ];
+        setCategories(fallbackCategories);
+      } else {
+        setCategories(data);
       }
     } catch (err: any) {
       console.error('Error loading categories:', err);
+      // Use fallback categories on error
+      const fallbackCategories: Category[] = [
+        { id: 'electronics', name: 'Electronics' },
+        { id: 'fashion', name: 'Fashion & Clothing' },
+        { id: 'home-garden', name: 'Home & Garden' },
+        { id: 'health-beauty', name: 'Health & Beauty' },
+        { id: 'food-beverages', name: 'Food & Beverages' },
+        { id: 'automobiles', name: 'Automobiles' },
+        { id: 'sports-outdoors', name: 'Sports & Outdoors' },
+        { id: 'books-media', name: 'Books & Media' },
+        { id: 'toys-games', name: 'Toys & Games' },
+        { id: 'other', name: 'Other' },
+      ];
+      setCategories(fallbackCategories);
     } finally {
       setLoading(false);
     }
@@ -233,13 +261,13 @@ export const CreateProductScreen: React.FC = () => {
         // Update existing product
         await FirestoreService.updateDocument(COLLECTIONS.PRODUCTS, id, productData);
       } else {
-        // Create new product with pending verification status
+        // Create new product - auto-publish without admin approval
         await FirestoreService.setDocument(COLLECTIONS.PRODUCTS, tempProductId, {
           ...productData,
           id: tempProductId,
-          status: 'pending_review', // Products need admin approval
-          verification_status: 'pending', // For admin verification
-          is_active: false, // Not visible until approved
+          status: 'active', // Products are immediately visible
+          verification_status: 'approved', // Auto-approved
+          is_active: true, // Visible to buyers immediately
           created_at: new Date().toISOString()
         });
       }

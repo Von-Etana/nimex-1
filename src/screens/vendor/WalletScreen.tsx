@@ -120,9 +120,40 @@ export const WalletScreen: React.FC = () => {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  // Hardcoded bank list for fallback when API fails
+  const NIGERIAN_BANKS: { code: string; name: string }[] = [
+    { code: '044', name: 'Access Bank' },
+    { code: '063', name: 'Diamond Bank' },
+    { code: '050', name: 'Ecobank' },
+    { code: '070', name: 'Fidelity Bank' },
+    { code: '011', name: 'First Bank' },
+    { code: '214', name: 'First City Monument Bank' },
+    { code: '058', name: 'Guaranty Trust Bank' },
+    { code: '030', name: 'Heritage Bank' },
+    { code: '301', name: 'Jaiz Bank' },
+    { code: '082', name: 'Keystone Bank' },
+    { code: '526', name: 'Parallex Bank' },
+    { code: '076', name: 'Polaris Bank' },
+    { code: '101', name: 'Providus Bank' },
+    { code: '221', name: 'Stanbic IBTC Bank' },
+    { code: '068', name: 'Standard Chartered' },
+    { code: '232', name: 'Sterling Bank' },
+    { code: '100', name: 'Suntrust Bank' },
+    { code: '032', name: 'Union Bank' },
+    { code: '033', name: 'United Bank for Africa' },
+    { code: '215', name: 'Unity Bank' },
+    { code: '035', name: 'Wema Bank' },
+    { code: '057', name: 'Zenith Bank' },
+  ];
+
   const handleAddPayoutAccount = async () => {
     if (!vendorData || !newAccount.bankCode || !newAccount.accountNumber) {
       setError('Please fill in all required fields');
+      return;
+    }
+
+    if (newAccount.accountNumber.length !== 10) {
+      setError('Account number must be 10 digits');
       return;
     }
 
@@ -130,22 +161,39 @@ export const WalletScreen: React.FC = () => {
     setError('');
 
     try {
-      const banks = await flutterwaveService.getBankList();
-      const selectedBank = banks.banks?.find(b => b.code === newAccount.bankCode);
+      // Try API first, fallback to hardcoded list
+      let selectedBank = null;
+
+      try {
+        const banks = await flutterwaveService.getBankList();
+        selectedBank = banks.banks?.find(b => b.code === newAccount.bankCode);
+      } catch (apiErr) {
+        console.warn('Bank API failed, using fallback list');
+      }
+
+      // Use fallback if API didn't return the bank
+      if (!selectedBank) {
+        selectedBank = NIGERIAN_BANKS.find(b => b.code === newAccount.bankCode);
+      }
 
       if (!selectedBank) {
-        setError('Invalid bank selected');
+        setError('Please select a valid bank from the dropdown');
+        setLoading(false);
         return;
       }
 
-      const resolved = await flutterwaveService.resolveAccountNumber(
-        newAccount.accountNumber,
-        newAccount.bankCode
-      );
-
-      if (!resolved.success) {
-        setError('Unable to verify account number');
-        return;
+      // Try to verify account, but don't block if verification fails
+      let accountName = '';
+      try {
+        const resolved = await flutterwaveService.resolveAccountNumber(
+          newAccount.accountNumber,
+          newAccount.bankCode
+        );
+        if (resolved.success && resolved.accountName) {
+          accountName = resolved.accountName;
+        }
+      } catch (verifyErr) {
+        console.warn('Account verification failed, proceeding without verification');
       }
 
       const accountId = crypto.randomUUID();
@@ -154,9 +202,9 @@ export const WalletScreen: React.FC = () => {
         bank_name: selectedBank.name,
         bank_code: newAccount.bankCode,
         account_number: newAccount.accountNumber,
-        account_name: resolved.accountName || '',
+        account_name: accountName || newAccount.accountNumber, // Use account number as fallback
         is_default: payoutAccounts.length === 0,
-        is_verified: true,
+        is_verified: accountName ? true : false, // Only mark verified if we got account name
       });
 
       setSuccess('Payout account added successfully');
@@ -165,7 +213,7 @@ export const WalletScreen: React.FC = () => {
       await loadPayoutAccounts();
     } catch (err) {
       console.error('Error adding payout account:', err);
-      setError('Failed to add payout account');
+      setError('Failed to add payout account. Please try again.');
     } finally {
       setLoading(false);
     }

@@ -31,6 +31,10 @@ export const getFriendlyErrorMessage = (error: any): string => {
         return 'Incorrect password. Please try again or reset your password.';
     }
 
+    if (code === 'auth/invalid-credential' || message.includes('invalid-credential')) {
+        return 'Invalid email or password. Please check your credentials and try again.';
+    }
+
     if (code === 'auth/network-request-failed' || message.includes('network-request-failed')) {
         return 'Network error. Please check your internet connection and try again.';
     }
@@ -41,6 +45,26 @@ export const getFriendlyErrorMessage = (error: any): string => {
 
     if (code === 'auth/requires-recent-login' || message.includes('requires-recent-login')) {
         return 'For security, please sign in again to continue.';
+    }
+
+    if (code === 'auth/popup-closed-by-user' || message.includes('popup-closed-by-user')) {
+        return 'Sign-in popup was closed. Please try again.';
+    }
+
+    if (code === 'auth/popup-blocked' || message.includes('popup-blocked')) {
+        return 'Sign-in popup was blocked by your browser. Please allow popups and try again.';
+    }
+
+    if (code === 'auth/operation-not-allowed' || message.includes('operation-not-allowed')) {
+        return 'This sign-in method is not enabled. Please contact support.';
+    }
+
+    if (code === 'auth/account-exists-with-different-credential' || message.includes('account-exists-with-different-credential')) {
+        return 'An account already exists with a different sign-in method. Try signing in with email/password.';
+    }
+
+    if (code === 'auth/user-disabled' || message.includes('user-disabled')) {
+        return 'This account has been disabled. Please contact support for assistance.';
     }
 
     // Generic or Custom Errors

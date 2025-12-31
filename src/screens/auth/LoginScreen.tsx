@@ -3,6 +3,7 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { PackageIcon, Eye, EyeOff } from 'lucide-react';
 import { Button } from '../../components/ui/button';
 import { useAuth } from '../../contexts/AuthContext';
+import { getFriendlyErrorMessage } from '../../utils/errorHandling';
 
 export const LoginScreen: React.FC = () => {
   const navigate = useNavigate();
@@ -103,7 +104,7 @@ export const LoginScreen: React.FC = () => {
     });
 
     if (signInError) {
-      setError(signInError.message);
+      setError(getFriendlyErrorMessage(signInError));
       setLoading(false);
       signInAttempted.current = false;
       if (signInTimeout.current) {
@@ -132,7 +133,7 @@ export const LoginScreen: React.FC = () => {
     const { error: googleError } = await signInWithGoogle('buyer');
 
     if (googleError) {
-      setError(googleError.message);
+      setError(getFriendlyErrorMessage(googleError));
       setGoogleLoading(false);
       signInAttempted.current = false;
       if (signInTimeout.current) {

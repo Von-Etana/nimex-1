@@ -3,6 +3,7 @@ import { COLLECTIONS } from '../lib/collections';
 import { logger } from '../lib/logger';
 import { Timestamp } from 'firebase/firestore';
 import type { Vendor, Profile } from '../types/firestore';
+import { emailNotificationService } from './emailNotificationService';
 
 export interface ReferralStats {
   totalReferrals: number;
@@ -207,6 +208,23 @@ class ReferralService {
         status: 'completed',
         created_at: Timestamp.now()
       });
+
+      // Send email notification to marketer
+      try {
+        const marketer = await FirestoreService.getDocument<any>(COLLECTIONS.MARKETERS, marketerId);
+        const vendor = await FirestoreService.getDocument<Vendor>(COLLECTIONS.VENDORS, vendorId);
+
+        if (marketer?.email && vendor?.business_name) {
+          emailNotificationService.sendReferralNotification(
+            marketer.email,
+            marketer.full_name || 'Marketer',
+            vendor.business_name,
+            commissionAmount
+          ).catch(err => logger.error('Failed to send referral email:', err));
+        }
+      } catch (emailError) {
+        logger.error('Error sending referral notification email:', emailError);
+      }
 
       return { success: true };
     } catch (error) {

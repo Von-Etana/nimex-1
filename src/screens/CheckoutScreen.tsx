@@ -10,6 +10,7 @@ import { COLLECTIONS } from '../lib/collections';
 import { orderService } from '../services/orderService';
 import { flutterwaveService } from '../services/flutterwaveService';
 import { deliveryService } from '../services/deliveryService';
+import { emailNotificationService } from '../services/emailNotificationService';
 
 interface CartItem {
   id: string;
@@ -266,6 +267,22 @@ export const CheckoutScreen: React.FC = () => {
                   'flutterwave'
                 );
               }
+            }
+
+            // Send order confirmation email
+            if (user.email) {
+              const orderItems = cartItems.map(item => ({
+                title: item.title,
+                quantity: item.quantity,
+                price: item.price
+              }));
+
+              emailNotificationService.sendOrderConfirmation(
+                user.email,
+                firstOrder.data.orderId,
+                totalAmount,
+                orderItems
+              ).catch(err => console.error('Failed to send order confirmation email:', err));
             }
 
             localStorage.removeItem('nimex_cart');

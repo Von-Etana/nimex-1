@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Send, MessageCircle, User, Store } from 'lucide-react';
+import { useParams } from 'react-router-dom';
+import { Send, MessageCircle, User, Store, Loader2 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { FirestoreService } from '../services/firestore.service';
 import { COLLECTIONS } from '../lib/collections';
@@ -43,6 +44,7 @@ interface Message {
 }
 
 export const ChatScreen: React.FC = () => {
+  const { vendorId: urlVendorId } = useParams<{ vendorId?: string }>();
   const { user, profile } = useAuth();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
@@ -50,11 +52,64 @@ export const ChatScreen: React.FC = () => {
   const [newMessage, setNewMessage] = useState('');
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
+  const [creatingConversation, setCreatingConversation] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     loadConversations();
   }, [user?.uid]);
+
+  // Handle URL vendorId parameter - create or find conversation
+  useEffect(() => {
+    const handleVendorIdParam = async () => {
+      if (!urlVendorId || !user?.uid || conversations.length === 0) return;
+
+      // Check if conversation with this vendor already exists
+      const existingConvo = conversations.find(c => c.vendor_id === urlVendorId);
+
+      if (existingConvo) {
+        setSelectedConversation(existingConvo);
+      } else {
+        // Create new conversation with this vendor
+        setCreatingConversation(true);
+        try {
+          const conversationId = `conv_${user.uid}_${urlVendorId}_${Date.now()}`;
+
+          // Get vendor info
+          const vendor = await FirestoreService.getDocument<any>(COLLECTIONS.VENDORS, urlVendorId);
+
+          const newConvo: Conversation = {
+            id: conversationId,
+            buyer_id: user.uid,
+            vendor_id: urlVendorId,
+            last_message_at: new Date().toISOString(),
+            unread_buyer: 0,
+            unread_vendor: 0,
+            vendor: { business_name: vendor?.business_name || 'Vendor' },
+            buyer: { full_name: profile?.full_name || 'Buyer' }
+          };
+
+          await FirestoreService.setDocument(COLLECTIONS.CHAT_CONVERSATIONS, conversationId, {
+            buyer_id: user.uid,
+            vendor_id: urlVendorId,
+            last_message_at: new Date().toISOString(),
+            unread_buyer: 0,
+            unread_vendor: 0,
+            created_at: new Date().toISOString()
+          });
+
+          setConversations(prev => [newConvo, ...prev]);
+          setSelectedConversation(newConvo);
+        } catch (error) {
+          logger.error('Error creating conversation', error);
+        } finally {
+          setCreatingConversation(false);
+        }
+      }
+    };
+
+    handleVendorIdParam();
+  }, [urlVendorId, user?.uid, conversations.length]);
 
   // Real-time subscription for messages in selected conversation
   useEffect(() => {
@@ -266,10 +321,15 @@ export const ChatScreen: React.FC = () => {
     }
   };
 
-  if (loading) {
+  if (loading || creatingConversation) {
     return (
       <div className="w-full min-h-screen bg-neutral-50 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-700"></div>
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-700 mx-auto mb-4"></div>
+          {creatingConversation && (
+            <p className="font-sans text-sm text-neutral-600">Starting conversation...</p>
+          )}
+        </div>
       </div>
     );
   }
