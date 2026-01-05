@@ -64,7 +64,7 @@ export const MarketerSettingsScreen: React.FC = () => {
     });
 
     useEffect(() => {
-        if (user?.email) {
+        if (user?.uid) {
             loadProfile();
         }
     }, [user]);
@@ -73,16 +73,15 @@ export const MarketerSettingsScreen: React.FC = () => {
         try {
             setLoading(true);
 
-            const marketers = await FirestoreService.getDocuments<MarketerProfile>(
+            if (!user?.uid) return;
+
+            // Get marketer info using user ID (document ID = user ID)
+            const marketer = await FirestoreService.getDocument<MarketerProfile>(
                 COLLECTIONS.MARKETERS,
-                {
-                    filters: [{ field: 'email', operator: '==', value: user?.email }],
-                    limitCount: 1
-                }
+                user.uid
             );
 
-            if (marketers.length > 0) {
-                const marketer = marketers[0];
+            if (marketer) {
                 setProfile(marketer);
                 setFullName(marketer.full_name || '');
                 setPhone(marketer.phone || '');

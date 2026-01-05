@@ -48,30 +48,24 @@ export const MarketerRegistrationScreen: React.FC = () => {
       });
 
       if (authError) {
-        throw authError; // Throw full error object for utility
+        throw authError;
       }
 
-      // Get the user ID from the auth context (it might take a moment to update, 
-      // but FirebaseAuthService.signUp returns the user object if we used it directly.
-      // Since we used useAuth().signUp which returns { error }, we rely on the fact 
-      // that the user is created. 
-      // Ideally, we should get the UID. 
-      // Let's assume for now we can proceed with the registration using the email 
-      // to link, or we should have modified useAuth to return the user.
-      // However, since we just signed up, the user is logged in.
-      // We can get the current user from the auth service directly if needed, 
-      // or just pass the email which is unique.
-
-      // Actually, let's use the FirebaseAuthService directly to get the UID if needed,
-      // but useAuth handles the state update.
-      // For the referral service, we'll pass the email and let it handle it, 
-      // but we updated it to take userId.
-      // We can get the currentUser from the firebase auth instance.
+      // Get the user ID from the Firebase auth instance
+      // Import auth directly to get the current user
       const { auth } = await import('../lib/firebase.config');
-      const userId = auth.currentUser?.uid;
+
+      // Wait a moment for auth state to update if needed
+      let userId = auth.currentUser?.uid;
+
+      // If userId is not immediately available, wait briefly and retry
+      if (!userId) {
+        await new Promise(resolve => setTimeout(resolve, 500));
+        userId = auth.currentUser?.uid;
+      }
 
       if (!userId) {
-        throw new Error('Authentication failed. Please try again.');
+        throw new Error('Authentication completed but user session not established. Please try logging in.');
       }
 
       // 2. Create Marketer Profile
@@ -80,14 +74,16 @@ export const MarketerRegistrationScreen: React.FC = () => {
         email: formData.email,
         phone: formData.phone,
         businessName: formData.businessName,
-        userId: userId!, // We can safely assume userId exists if auth succeeded, but handling null is good practice
+        userId: userId,
       });
 
       if (result.success) {
         // Redirect to dashboard immediately
         navigate('/marketer/dashboard');
       } else {
-        setError(result.error || 'Registration failed. Please try again.');
+        // If marketer profile creation failed, we still have an auth account
+        // The user can try logging in and completing profile later
+        setError(result.error || 'Profile creation failed. Please try logging in to complete setup.');
       }
     } catch (err: any) {
       console.error('Error during marketer registration:', err);

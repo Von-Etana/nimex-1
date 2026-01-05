@@ -10,8 +10,11 @@ import {
   SearchIcon,
   ShirtIcon,
   TvIcon,
-  UserIcon,
   UtensilsIcon,
+  ArrowRight,
+  Sparkles,
+  MapPin,
+  TrendingUp,
 } from "lucide-react";
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -23,39 +26,32 @@ import { FirestoreService } from "../../../../services/firestore.service";
 import { COLLECTIONS } from "../../../../lib/collections";
 import { Loader2 } from "lucide-react";
 
-const navigationItems = [
-  { label: "Home", active: true },
-  { label: "Categories", active: false },
-  { label: "Become a Vendor", active: false },
-  { label: "About Us", active: false },
-];
-
 const categories = [
-  { icon: TvIcon, title: "Electronics", subtitle: "Gadgets and devices" },
-  { icon: ShirtIcon, title: "Fashion", subtitle: "Trendy apparel" },
-  { icon: HouseIcon, title: "Home & Office", subtitle: "" },
-  {
-    icon: UtensilsIcon,
-    title: "Groceries",
-    subtitle: "Fresh food and essentials",
-  },
-  { icon: BookOpenIcon, title: "Books", subtitle: "Literary delights" },
-  { icon: Flower2Icon, title: "Health & Beauty", subtitle: "" },
-  { icon: CarIcon, title: "Automotive", subtitle: "Vehicles and accessories" },
-  { icon: DumbbellIcon, title: "Sports", subtitle: "Gear and equipment" },
-  { icon: BabyIcon, title: "BabyIcon & Kids", subtitle: "" },
-  {
-    icon: FlaskConicalIcon,
-    title: "Chemicals",
-    subtitle: "Industrial and household",
-  },
+  { icon: TvIcon, title: "Electronics", color: "bg-blue-500" },
+  { icon: ShirtIcon, title: "Fashion", color: "bg-pink-500" },
+  { icon: HouseIcon, title: "Home & Office", color: "bg-amber-500" },
+  { icon: UtensilsIcon, title: "Groceries", color: "bg-green-500" },
+  { icon: BookOpenIcon, title: "Books", color: "bg-purple-500" },
+  { icon: Flower2Icon, title: "Health & Beauty", color: "bg-rose-500" },
+  { icon: CarIcon, title: "Automotive", color: "bg-slate-600" },
+  { icon: DumbbellIcon, title: "Sports", color: "bg-orange-500" },
+  { icon: BabyIcon, title: "Baby & Kids", color: "bg-cyan-500" },
+  { icon: FlaskConicalIcon, title: "Chemicals", color: "bg-indigo-500" },
 ];
 
-// Removed mock data
+const stats = [
+  { value: "50K+", label: "Products" },
+  { value: "10K+", label: "Vendors" },
+  { value: "100K+", label: "Customers" },
+  { value: "₦500M+", label: "Transactions" },
+];
 
 export const HeroSection = (): JSX.Element => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [location, setLocation] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState("All Categories");
   const [freshRecommendations, setFreshRecommendations] = useState<any[]>([]);
   const [topVendorsList, setTopVendorsList] = useState<any[]>([]);
   const [electronics, setElectronics] = useState<any[]>([]);
@@ -80,27 +76,13 @@ export const HeroSection = (): JSX.Element => {
       });
       setFreshRecommendations(mapProducts(fresh));
 
-      // Fetch Top Vendors (simulated by fetching vendors)
+      // Fetch Top Vendors
       const vendors = await FirestoreService.getDocuments<any>(COLLECTIONS.VENDORS, {
         filters: [{ field: 'is_active', operator: '==', value: true }],
         limitCount: 6
       });
       setTopVendorsList(mapVendors(vendors));
 
-      // Fetch Categories
-      const fetchCategory = async (category: string) => {
-        return await FirestoreService.getDocuments<any>(COLLECTIONS.PRODUCTS, {
-          filters: [
-            { field: 'is_active', operator: '==', value: true },
-            // Note: In a real app, we'd use category ID, but for now assuming we can filter by some field or just fetch recent
-            // Since we don't have category IDs handy, we'll fetch recent and filter client side or just show recent for now
-          ],
-          limitCount: 6
-        });
-      };
-
-      // For demo purposes, we'll just use the fresh products for categories if we can't filter easily without IDs
-      // In a real implementation, you'd query by category_id
       setElectronics(mapProducts(fresh));
       setFashion(mapProducts(fresh));
       setHomeOffice(mapProducts(fresh));
@@ -118,7 +100,7 @@ export const HeroSection = (): JSX.Element => {
       image: p.image_url || "https://via.placeholder.com/150",
       title: p.name,
       price: `₦ ${p.price.toLocaleString()}`,
-      vendor: "Vendor", // Ideally fetch vendor name
+      vendor: "Vendor",
       vendorImage: "https://via.placeholder.com/50",
       location: "Lagos",
       views: "100",
@@ -143,135 +125,223 @@ export const HeroSection = (): JSX.Element => {
     }));
   };
 
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    const params = new URLSearchParams();
+    if (searchQuery) params.set('q', searchQuery);
+    if (location) params.set('location', location);
+    if (selectedCategory !== 'All Categories') params.set('category', selectedCategory);
+    navigate(`/search?${params.toString()}`);
+  };
+
   return (
-    <section className="flex flex-col gap-8 md:gap-14 w-full">
-      <div className="flex flex-col w-full max-w-7xl mx-auto items-start gap-8 md:gap-16 px-4 md:px-6 py-6 md:py-8">
-        <div className="w-full min-h-[500px] md:h-[600px] bg-gradient-to-br from-neutral-50 via-neutral-100 to-primary-50 rounded-3xl overflow-hidden relative flex items-center">
-          <div className="absolute top-8 right-12 md:top-12 md:right-20 w-16 h-16 border-4 border-pink-400 rounded-full opacity-60 animate-pulse"></div>
-          <div className="absolute top-16 right-32 md:top-20 md:right-40 w-12 h-12 border-4 border-red-400 rotate-45 opacity-50"></div>
-          <div className="absolute bottom-24 left-8 md:bottom-32 md:left-16 w-20 h-20 bg-yellow-400 rounded-full opacity-40 blur-2xl"></div>
+    <section className="flex flex-col w-full">
+      {/* Hero Banner */}
+      <div className="relative w-full bg-gradient-hero bg-gradient-mesh overflow-hidden">
+        {/* Decorative Elements */}
+        <div className="absolute top-20 right-20 w-72 h-72 bg-primary-200/30 rounded-full blur-3xl animate-float" />
+        <div className="absolute bottom-20 left-20 w-96 h-96 bg-green-200/20 rounded-full blur-3xl" />
+        <div className="absolute top-1/2 right-1/4 w-4 h-4 bg-primary-500 rounded-full animate-pulse" />
+        <div className="absolute top-1/3 left-1/4 w-3 h-3 bg-amber-400 rounded-full animate-pulse" style={{ animationDelay: '0.5s' }} />
+        <div className="absolute bottom-1/3 right-1/3 w-2 h-2 bg-blue-400 rounded-full animate-pulse" style={{ animationDelay: '1s' }} />
 
-          <div className="w-full max-w-7xl mx-auto px-6 md:px-12 lg:px-16 py-12 flex flex-col items-center justify-center">
-            <div className="w-full z-10 text-center">
-              <h1 className="font-heading font-bold text-neutral-900 text-3xl md:text-4xl lg:text-5xl xl:text-6xl leading-tight mb-4 md:mb-6">
-                Find Nearby Vendors
-              </h1>
-              <p className="font-sans text-neutral-600 text-base md:text-lg lg:text-xl leading-relaxed mb-8 md:mb-10 max-w-2xl mx-auto">
-                Explore top-rated products, trusted vendors and authentic Nigerian items
-              </p>
+        <div className="relative max-w-7xl mx-auto px-4 md:px-6 py-16 md:py-24 lg:py-32">
+          <div className="text-center max-w-4xl mx-auto">
+            {/* Badge */}
+            <div className="inline-flex items-center gap-2 bg-white/80 backdrop-blur-sm rounded-full px-4 py-2 mb-6 shadow-sm border border-primary-100">
+              <Sparkles className="w-4 h-4 text-primary-500" />
+              <span className="font-sans text-sm font-medium text-primary-700">Nigeria's #1 Marketplace</span>
+            </div>
 
-              <div className="bg-white rounded-3xl md:rounded-full shadow-2xl p-2 flex flex-col md:flex-row items-stretch md:items-center gap-2 w-full max-w-5xl mx-auto mb-6 md:mb-8">
-                <div className="flex items-center gap-3 flex-1 px-4 py-3 border-b md:border-b-0 md:border-r border-neutral-200">
+            {/* Headline */}
+            <h1 className="font-heading font-bold text-4xl md:text-5xl lg:text-6xl xl:text-7xl text-neutral-900 leading-tight mb-6 animate-slide-up-fade">
+              Discover & Shop from{" "}
+              <span className="text-gradient-primary">Local Vendors</span>
+            </h1>
+
+            {/* Subheadline */}
+            <p className="font-sans text-lg md:text-xl text-neutral-600 mb-10 max-w-2xl mx-auto animate-slide-up-fade stagger-2">
+              Connect with trusted vendors, find authentic Nigerian products, and enjoy seamless shopping with secure payments
+            </p>
+
+            {/* Search Bar */}
+            <form onSubmit={handleSearch} className="animate-slide-up-fade stagger-3">
+              <div className="bg-white rounded-2xl md:rounded-full shadow-premium-lg p-2 flex flex-col md:flex-row items-stretch md:items-center gap-2 max-w-4xl mx-auto">
+                {/* Search Input */}
+                <div className="flex items-center gap-3 flex-1 px-4 py-3 border-b md:border-b-0 md:border-r border-neutral-100">
                   <SearchIcon className="w-5 h-5 text-primary-500 flex-shrink-0" />
                   <input
                     type="text"
-                    placeholder="AI Search"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Search for products..."
                     className="w-full font-sans text-sm md:text-base text-neutral-900 placeholder-neutral-400 outline-none bg-transparent"
                   />
                 </div>
-                <div className="flex items-center gap-3 flex-1 px-4 py-3 border-b md:border-b-0 md:border-r border-neutral-200">
-                  <svg className="w-5 h-5 text-primary-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                  </svg>
+
+                {/* Location Input */}
+                <div className="flex items-center gap-3 flex-1 px-4 py-3 border-b md:border-b-0 md:border-r border-neutral-100">
+                  <MapPin className="w-5 h-5 text-primary-500 flex-shrink-0" />
                   <input
                     type="text"
+                    value={location}
+                    onChange={(e) => setLocation(e.target.value)}
                     placeholder="Location"
                     className="w-full font-sans text-sm md:text-base text-neutral-900 placeholder-neutral-400 outline-none bg-transparent"
                   />
                 </div>
-                <div className="flex items-center gap-3 flex-1 px-4 py-3 border-b md:border-b-0 border-neutral-200">
+
+                {/* Category Select */}
+                <div className="flex items-center gap-3 flex-1 px-4 py-3">
                   <PackageIcon className="w-5 h-5 text-primary-500 flex-shrink-0" />
-                  <select className="w-full font-sans text-sm md:text-base text-neutral-900 outline-none bg-transparent cursor-pointer">
+                  <select
+                    value={selectedCategory}
+                    onChange={(e) => setSelectedCategory(e.target.value)}
+                    className="w-full font-sans text-sm md:text-base text-neutral-900 outline-none bg-transparent cursor-pointer"
+                  >
                     <option>All Categories</option>
-                    <option>Electronics</option>
-                    <option>Fashion</option>
-                    <option>Food</option>
-                    <option>Books</option>
+                    {categories.map((cat) => (
+                      <option key={cat.title}>{cat.title}</option>
+                    ))}
                   </select>
                 </div>
+
+                {/* Search Button */}
                 <Button
-                  onClick={() => navigate('/search')}
-                  className="h-12 md:h-14 px-6 md:px-8 bg-primary hover:bg-primary/90 text-white font-sans font-bold rounded-full text-base md:text-lg shadow-lg hover:shadow-primary/20 hover:-translate-y-0.5 active:translate-y-0 transition-all flex-shrink-0 w-full md:w-auto"
+                  type="submit"
+                  className="h-12 md:h-14 px-8 bg-gradient-primary text-white font-sans font-bold rounded-xl md:rounded-full text-base shadow-lg hover:shadow-glow transition-all duration-300 flex-shrink-0 btn-shine"
                 >
+                  <SearchIcon className="w-5 h-5 mr-2" />
                   Search
                 </Button>
               </div>
+            </form>
 
-              <div className="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4">
-                <p className="font-sans text-sm text-neutral-600">Or browse featured categories:</p>
-                <div className="flex flex-wrap gap-2 justify-center">
-                  <button
-                    onClick={() => navigate('/vendors')}
-                    className="px-4 py-2 bg-neutral-900 hover:bg-neutral-800 text-white rounded-full font-sans text-sm font-medium flex items-center gap-2 transition-all"
-                  >
-                    <HouseIcon className="w-4 h-4" />
-                    Vendors
-                  </button>
-                  <button
-                    onClick={() => navigate('/products')}
-                    className="px-4 py-2 bg-neutral-900 hover:bg-neutral-800 text-white rounded-full font-sans text-sm font-medium flex items-center gap-2 transition-all"
-                  >
-                    <DumbbellIcon className="w-4 h-4" />
-                    Products
-                  </button>
-                  <button
-                    onClick={() => navigate('/categories')}
-                    className="px-4 py-2 bg-neutral-900 hover:bg-neutral-800 text-white rounded-full font-sans text-sm font-medium flex items-center gap-2 transition-all"
-                  >
-                    <ShirtIcon className="w-4 h-4" />
-                    Categories
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="flex flex-col items-start gap-5 md:gap-7 w-full">
-          <div className="flex items-center justify-between w-full">
-            <h2 className="font-heading font-bold text-neutral-900 text-xl md:text-2xl">
-              Shop by Category
-            </h2>
-            <a
-              href="/categories"
-              className="font-sans text-sm font-medium text-primary-600 hover:text-primary-700 transition-colors"
-            >
-              View All →
-            </a>
-          </div>
-
-          <div className="w-full overflow-hidden">
-            <div className="grid grid-cols-5 md:grid-cols-10 gap-3">
-              {categories.map((category, index) => (
-                <Card
-                  key={index}
-                  onClick={() => navigate(`/products?category=${encodeURIComponent(category.title)}`)}
-                  className="h-24 md:h-28 shadow-sm border border-neutral-100 cursor-pointer hover:shadow-md hover:border-primary-200 transition-all"
+            {/* Quick Links */}
+            <div className="flex flex-wrap items-center justify-center gap-3 mt-8 animate-slide-up-fade stagger-4">
+              <span className="font-sans text-sm text-neutral-500">Popular:</span>
+              {['Electronics', 'Fashion', 'Groceries', 'Home'].map((term) => (
+                <button
+                  key={term}
+                  onClick={() => navigate(`/products?category=${term}`)}
+                  className="px-4 py-2 bg-white/80 backdrop-blur-sm border border-neutral-200 rounded-full font-sans text-sm font-medium text-neutral-700 hover:bg-primary-50 hover:border-primary-200 hover:text-primary-700 transition-all duration-200"
                 >
-                  <CardContent className="flex flex-col items-center justify-center h-full p-2 gap-1">
-                    <category.icon className="w-5 h-5 md:w-6 md:h-6 text-primary-500 flex-shrink-0" />
-                    <h3 className="font-heading font-semibold text-neutral-900 text-[10px] leading-tight text-center line-clamp-2">
-                      {category.title}
-                    </h3>
-                  </CardContent>
-                </Card>
+                  {term}
+                </button>
+              ))}
+            </div>
+
+            {/* Stats */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-6 md:gap-8 mt-16 animate-slide-up-fade stagger-5">
+              {stats.map((stat, index) => (
+                <div key={index} className="text-center">
+                  <p className="font-heading font-bold text-2xl md:text-3xl text-neutral-900">{stat.value}</p>
+                  <p className="font-sans text-sm text-neutral-500 mt-1">{stat.label}</p>
+                </div>
               ))}
             </div>
           </div>
         </div>
+      </div>
 
+      {/* Categories Section */}
+      <div className="max-w-7xl mx-auto px-4 md:px-6 py-12 md:py-16">
+        <div className="flex items-center justify-between mb-8">
+          <div>
+            <h2 className="font-heading font-bold text-neutral-900 text-2xl md:text-3xl">
+              Shop by Category
+            </h2>
+            <p className="font-sans text-neutral-500 mt-1">Explore products across all categories</p>
+          </div>
+          <Button
+            variant="ghost"
+            onClick={() => navigate('/categories')}
+            className="text-primary-600 hover:text-primary-700 font-medium"
+          >
+            View All
+            <ArrowRight className="w-4 h-4 ml-1" />
+          </Button>
+        </div>
+
+        <div className="grid grid-cols-5 md:grid-cols-10 gap-3">
+          {categories.map((category, index) => (
+            <Card
+              key={index}
+              onClick={() => navigate(`/products?category=${encodeURIComponent(category.title)}`)}
+              className="group cursor-pointer border-0 shadow-sm hover:shadow-premium hover:-translate-y-1 transition-all duration-300"
+            >
+              <CardContent className="flex flex-col items-center justify-center p-4 gap-2">
+                <div className={`w-12 h-12 ${category.color} rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform duration-300`}>
+                  <category.icon className="w-6 h-6 text-white" />
+                </div>
+                <h3 className="font-sans font-medium text-neutral-700 text-[10px] md:text-xs text-center line-clamp-2 group-hover:text-primary-600 transition-colors">
+                  {category.title}
+                </h3>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </div>
+
+      {/* Featured CTA Banner */}
+      <div className="max-w-7xl mx-auto px-4 md:px-6 pb-12">
+        <div className="relative overflow-hidden rounded-2xl bg-gradient-primary p-8 md:p-12">
+          <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-3xl" />
+          <div className="absolute bottom-0 left-0 w-48 h-48 bg-white/5 rounded-full blur-2xl" />
+
+          <div className="relative flex flex-col md:flex-row items-center justify-between gap-6">
+            <div className="text-center md:text-left">
+              <h3 className="font-heading font-bold text-white text-2xl md:text-3xl mb-2">
+                Become a Vendor Today
+              </h3>
+              <p className="font-sans text-white/80 max-w-md">
+                Join thousands of successful vendors. Start selling and grow your business with NIMEX.
+              </p>
+            </div>
+            <Button
+              onClick={() => navigate('/vendor/register')}
+              className="bg-white text-primary-600 hover:bg-neutral-100 font-bold px-8 py-3 rounded-xl shadow-lg btn-shine flex-shrink-0"
+            >
+              Start Selling
+              <ArrowRight className="w-5 h-5 ml-2" />
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      {/* Product Sections */}
+      <div className="max-w-7xl mx-auto px-4 md:px-6 py-8">
         {loading ? (
-          <div className="flex justify-center py-10"><Loader2 className="animate-spin" /></div>
+          <div className="flex justify-center py-16">
+            <div className="flex flex-col items-center gap-4">
+              <Loader2 className="w-8 h-8 animate-spin text-primary-500" />
+              <p className="font-sans text-neutral-500">Loading products...</p>
+            </div>
+          </div>
         ) : (
-          <>
-            <ProductGrid title="Fresh Recommendations" products={freshRecommendations} />
-            <ProductGrid title="Top Vendors" products={topVendorsList} />
-            <ProductGrid title="Trending in Electronics" products={electronics} />
-            <ProductGrid title="Trending in Fashion" products={fashion} />
-            <ProductGrid title="Trending in Home & Office" products={homeOffice} />
-            <ProductGrid title="Trending in Groceries" products={groceries} />
-          </>
+          <div className="flex flex-col gap-16">
+            <ProductGrid
+              title="Fresh Recommendations"
+              subtitle="Newly added products you might love"
+              products={freshRecommendations}
+            />
+            <ProductGrid
+              title="Top Vendors"
+              subtitle="Trusted sellers with excellent ratings"
+              products={topVendorsList}
+            />
+            <ProductGrid
+              title="Trending in Electronics"
+              subtitle="Popular gadgets and devices"
+              products={electronics}
+              icon={<TrendingUp className="w-5 h-5 text-blue-500" />}
+            />
+            <ProductGrid
+              title="Fashion & Style"
+              subtitle="Trendy apparel and accessories"
+              products={fashion}
+            />
+          </div>
         )}
       </div>
     </section>

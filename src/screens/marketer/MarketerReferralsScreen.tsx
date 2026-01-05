@@ -37,7 +37,7 @@ export const MarketerReferralsScreen: React.FC = () => {
     const [copied, setCopied] = useState(false);
 
     useEffect(() => {
-        if (user?.email) {
+        if (user?.uid) {
             loadReferrals();
         }
     }, [user]);
@@ -46,18 +46,16 @@ export const MarketerReferralsScreen: React.FC = () => {
         try {
             setLoading(true);
 
-            // Get marketer info
-            const marketers = await FirestoreService.getDocuments<any>(
+            if (!user?.uid) return;
+
+            // Get marketer info using user ID (document ID = user ID)
+            const marketer = await FirestoreService.getDocument<any>(
                 COLLECTIONS.MARKETERS,
-                {
-                    filters: [{ field: 'email', operator: '==', value: user?.email }],
-                    limitCount: 1
-                }
+                user.uid
             );
 
-            if (marketers.length === 0) return;
+            if (!marketer) return;
 
-            const marketer = marketers[0];
             setReferralCode(marketer.referral_code || '');
 
             // Get referrals
@@ -247,8 +245,8 @@ export const MarketerReferralsScreen: React.FC = () => {
                                         key={status}
                                         onClick={() => setFilterStatus(status)}
                                         className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${filterStatus === status
-                                                ? 'bg-primary-600 text-white'
-                                                : 'bg-white text-neutral-700 border border-neutral-200 hover:bg-neutral-50'
+                                            ? 'bg-primary-600 text-white'
+                                            : 'bg-white text-neutral-700 border border-neutral-200 hover:bg-neutral-50'
                                             }`}
                                     >
                                         {status.charAt(0).toUpperCase() + status.slice(1)}
@@ -303,8 +301,8 @@ export const MarketerReferralsScreen: React.FC = () => {
                                                 </td>
                                                 <td className="px-6 py-4 text-center">
                                                     <span className={`inline-block px-2 py-1 rounded-full text-xs font-semibold ${referral.commission_paid
-                                                            ? 'bg-green-100 text-green-800'
-                                                            : 'bg-yellow-100 text-yellow-800'
+                                                        ? 'bg-green-100 text-green-800'
+                                                        : 'bg-yellow-100 text-yellow-800'
                                                         }`}>
                                                         {referral.commission_paid ? 'Paid' : 'Pending'}
                                                     </span>

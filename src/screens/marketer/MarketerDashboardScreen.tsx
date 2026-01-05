@@ -67,7 +67,7 @@ export const MarketerDashboardScreen: React.FC = () => {
     const [copiedLink, setCopiedLink] = useState(false);
 
     useEffect(() => {
-        if (user?.email) {
+        if (user?.uid) {
             loadMarketerData();
         }
     }, [user]);
@@ -76,21 +76,21 @@ export const MarketerDashboardScreen: React.FC = () => {
         try {
             setLoading(true);
 
-            // Get marketer info
-            const marketers = await FirestoreService.getDocuments<MarketerInfo>(
-                COLLECTIONS.MARKETERS,
-                {
-                    filters: [{ field: 'email', operator: '==', value: user?.email }],
-                    limitCount: 1
-                }
-            );
-
-            if (!marketers || marketers.length === 0) {
-                logger.error('Marketer not found');
+            if (!user?.uid) {
+                logger.error('No user ID available');
                 return;
             }
 
-            const marketer = marketers[0];
+            // Get marketer info using user ID (document ID = user ID)
+            const marketer = await FirestoreService.getDocument<MarketerInfo>(
+                COLLECTIONS.MARKETERS,
+                user.uid
+            );
+
+            if (!marketer) {
+                logger.error('Marketer not found for user:', user.uid);
+                return;
+            }
             setMarketerInfo(marketer);
 
             // Get referrals

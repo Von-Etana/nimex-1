@@ -2,7 +2,8 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent } from '../../../../components/ui/card';
 import { Badge } from '../../../../components/ui/badge';
-import { Eye, MapPin, CheckCircle } from 'lucide-react';
+import { Eye, MapPin, CheckCircle, ArrowRight, Star, Heart } from 'lucide-react';
+import { Button } from '../../../../components/ui/button';
 
 interface Product {
   image: string;
@@ -23,11 +24,19 @@ interface Product {
 
 interface ProductGridProps {
   title: string;
+  subtitle?: string;
   products: Product[];
   onViewAll?: () => void;
+  icon?: React.ReactNode;
 }
 
-export const ProductGrid: React.FC<ProductGridProps> = ({ title, products, onViewAll }) => {
+export const ProductGrid: React.FC<ProductGridProps> = ({
+  title,
+  subtitle,
+  products,
+  onViewAll,
+  icon
+}) => {
   const navigate = useNavigate();
 
   const handleProductClick = (product: Product, index: number) => {
@@ -35,57 +44,111 @@ export const ProductGrid: React.FC<ProductGridProps> = ({ title, products, onVie
     navigate(`/product/${productId}`, { state: { product } });
   };
 
+  if (products.length === 0) {
+    return null;
+  }
+
   return (
-    <div className="flex flex-col items-start gap-4 md:gap-5 w-full">
-      <div className="flex items-center justify-between w-full">
-        <h2 className="font-heading font-bold text-neutral-900 text-lg md:text-xl">
-          {title}
-        </h2>
-        <button
-          onClick={onViewAll}
-          className="font-sans font-medium text-accent-yellow hover:text-accent-orange text-xs md:text-sm"
+    <div className="flex flex-col gap-6 w-full">
+      {/* Header */}
+      <div className="flex items-end justify-between">
+        <div className="flex items-center gap-3">
+          {icon && (
+            <div className="w-10 h-10 bg-neutral-100 rounded-xl flex items-center justify-center">
+              {icon}
+            </div>
+          )}
+          <div>
+            <h2 className="font-heading font-bold text-neutral-900 text-xl md:text-2xl">
+              {title}
+            </h2>
+            {subtitle && (
+              <p className="font-sans text-sm text-neutral-500 mt-0.5">{subtitle}</p>
+            )}
+          </div>
+        </div>
+        <Button
+          variant="ghost"
+          onClick={onViewAll || (() => navigate('/products'))}
+          className="text-primary-600 hover:text-primary-700 font-medium text-sm"
         >
           View All
-        </button>
+          <ArrowRight className="w-4 h-4 ml-1" />
+        </Button>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-6 gap-3 md:gap-4 w-full">
+      {/* Product Grid */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
         {products.map((product, index) => (
           <Card
             key={index}
             onClick={() => handleProductClick(product, index)}
-            className="w-full shadow-sm border border-neutral-100 overflow-hidden cursor-pointer hover:shadow-lg hover:border-primary-200 transition-all"
+            className="group relative w-full shadow-sm border border-neutral-100 overflow-hidden cursor-pointer hover:shadow-premium hover:-translate-y-1 transition-all duration-300 rounded-xl"
           >
             <CardContent className="p-0">
-              <div
-                className="w-full h-32 md:h-36 bg-cover bg-center"
-                style={{ backgroundImage: `url(${product.image})` }}
-              />
-              <div className="p-2 md:p-3 flex flex-col gap-1.5">
-                <h3 className="font-heading font-semibold text-neutral-900 text-xs md:text-sm line-clamp-2 leading-tight">
+              {/* Image Container */}
+              <div className="relative aspect-square overflow-hidden bg-neutral-100">
+                <img
+                  src={product.image}
+                  alt={product.title}
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                />
+
+                {/* Badge */}
+                <Badge
+                  className={`absolute top-2 left-2 px-2 py-0.5 rounded-md font-semibold text-[10px] shadow-sm ${product.badge.variant === 'yellow'
+                      ? 'bg-amber-400 text-amber-900'
+                      : product.badge.variant === 'green'
+                        ? 'bg-emerald-500 text-white'
+                        : 'bg-red-500 text-white'
+                    }`}
+                >
+                  {product.badge.text}
+                </Badge>
+
+                {/* Wishlist Button */}
+                <button
+                  onClick={(e) => { e.stopPropagation(); }}
+                  className="absolute top-2 right-2 w-7 h-7 bg-white/90 backdrop-blur-sm rounded-full flex items-center justify-center shadow-sm opacity-0 group-hover:opacity-100 transition-opacity duration-200 hover:bg-red-50 hover:text-red-500"
+                >
+                  <Heart className="w-3.5 h-3.5" />
+                </button>
+
+                {/* Quick View Overlay */}
+                <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center">
+                  <span className="bg-white text-neutral-900 px-3 py-1.5 rounded-lg text-xs font-medium shadow-md transform translate-y-2 group-hover:translate-y-0 transition-transform duration-200">
+                    Quick View
+                  </span>
+                </div>
+              </div>
+
+              {/* Content */}
+              <div className="p-3 flex flex-col gap-2">
+                {/* Title */}
+                <h3 className="font-sans font-semibold text-neutral-900 text-xs md:text-sm line-clamp-2 leading-snug min-h-[32px] group-hover:text-primary-600 transition-colors">
                   {product.title}
                 </h3>
 
-                <div className="flex flex-col gap-0.5">
-                  <div className="flex items-baseline gap-1.5">
-                    <span className="font-sans font-bold text-primary-500 text-sm md:text-base">
-                      {product.price}
+                {/* Price */}
+                <div className="flex items-baseline gap-1.5">
+                  <span className="font-heading font-bold text-primary-600 text-sm md:text-base">
+                    {product.price}
+                  </span>
+                  {product.oldPrice && (
+                    <span className="font-sans text-neutral-400 text-[10px] line-through">
+                      {product.oldPrice}
                     </span>
-                    {product.oldPrice && (
-                      <span className="font-sans text-neutral-400 text-xs line-through">
-                        {product.oldPrice}
-                      </span>
-                    )}
-                  </div>
+                  )}
                 </div>
 
-                <div className="flex items-center gap-1.5 mt-0.5">
+                {/* Vendor */}
+                <div className="flex items-center gap-1.5">
                   <img
                     src={product.vendorImage}
                     alt={product.vendor}
-                    className="w-4 h-4 md:w-5 md:h-5 rounded-full object-cover"
+                    className="w-4 h-4 rounded-full object-cover ring-1 ring-neutral-200"
                   />
-                  <span className="font-sans text-neutral-600 text-[10px] md:text-xs truncate flex-1">
+                  <span className="font-sans text-neutral-600 text-[10px] truncate flex-1">
                     {product.vendor}
                   </span>
                   {product.verified && (
@@ -93,41 +156,32 @@ export const ProductGrid: React.FC<ProductGridProps> = ({ title, products, onVie
                   )}
                 </div>
 
-                <div className="flex items-center justify-between gap-2 text-[10px] md:text-xs text-neutral-500 mt-0.5">
-                  <div className="flex items-center gap-1">
-                    <MapPin className="w-3 h-3" />
-                    <span className="truncate">{product.location}</span>
+                {/* Location & Views */}
+                <div className="flex items-center justify-between text-[9px] md:text-[10px] text-neutral-400">
+                  <div className="flex items-center gap-0.5">
+                    <MapPin className="w-2.5 h-2.5" />
+                    <span className="truncate max-w-[60px]">{product.location}</span>
                   </div>
-                  <div className="flex items-center gap-1">
-                    <Eye className="w-3 h-3" />
+                  <div className="flex items-center gap-0.5">
+                    <Eye className="w-2.5 h-2.5" />
                     <span>{product.views}</span>
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between gap-2 mt-0.5">
-                  <div className="flex items-center gap-0.5">
-                    {[...Array(5)].map((_, i) => (
-                      <span
-                        key={i}
-                        className={`text-xs ${
-                          i < product.rating ? 'text-accent-yellow' : 'text-neutral-300'
+                {/* Rating */}
+                <div className="flex items-center gap-0.5">
+                  {[...Array(5)].map((_, i) => (
+                    <Star
+                      key={i}
+                      className={`w-3 h-3 ${i < product.rating
+                          ? 'text-amber-400 fill-amber-400'
+                          : 'text-neutral-200 fill-neutral-200'
                         }`}
-                      >
-                        ★
-                      </span>
-                    ))}
-                  </div>
-                  <Badge
-                    className={`w-fit h-auto px-1.5 py-0.5 rounded-full font-sans font-medium text-[9px] md:text-[10px] ${
-                      product.badge.variant === 'yellow'
-                        ? 'bg-accent-yellow text-accent-foreground hover:bg-accent-yellow'
-                        : product.badge.variant === 'green'
-                          ? 'bg-primary-500 text-white hover:bg-primary-500'
-                          : 'bg-error text-white hover:bg-error'
-                    }`}
-                  >
-                    {product.badge.text}
-                  </Badge>
+                    />
+                  ))}
+                  <span className="font-sans text-[10px] text-neutral-400 ml-1">
+                    ({product.rating})
+                  </span>
                 </div>
               </div>
             </CardContent>

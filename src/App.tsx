@@ -521,7 +521,7 @@ const App: React.FC = () => {
                 <Route
                   path="/marketer/dashboard"
                   element={
-                    <ProtectedRoute>
+                    <ProtectedRoute allowedRoles={['marketer']}>
                       <MarketerLayout>
                         <MarketerDashboardScreen />
                       </MarketerLayout>
@@ -532,7 +532,7 @@ const App: React.FC = () => {
                 <Route
                   path="/marketer/referrals"
                   element={
-                    <ProtectedRoute>
+                    <ProtectedRoute allowedRoles={['marketer']}>
                       <MarketerLayout>
                         <MarketerReferralsScreen />
                       </MarketerLayout>
@@ -543,7 +543,7 @@ const App: React.FC = () => {
                 <Route
                   path="/marketer/earnings"
                   element={
-                    <ProtectedRoute>
+                    <ProtectedRoute allowedRoles={['marketer']}>
                       <MarketerLayout>
                         <MarketerEarningsScreen />
                       </MarketerLayout>
@@ -554,7 +554,7 @@ const App: React.FC = () => {
                 <Route
                   path="/marketer/settings"
                   element={
-                    <ProtectedRoute>
+                    <ProtectedRoute allowedRoles={['marketer']}>
                       <MarketerLayout>
                         <MarketerSettingsScreen />
                       </MarketerLayout>

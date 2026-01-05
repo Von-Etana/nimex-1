@@ -45,7 +45,7 @@ export const MarketerEarningsScreen: React.FC = () => {
     const [filterPeriod, setFilterPeriod] = useState<string>('all');
 
     useEffect(() => {
-        if (user?.email) {
+        if (user?.uid) {
             loadEarnings();
         }
     }, [user]);
@@ -54,18 +54,15 @@ export const MarketerEarningsScreen: React.FC = () => {
         try {
             setLoading(true);
 
-            // Get marketer info
-            const marketers = await FirestoreService.getDocuments<any>(
+            if (!user?.uid) return;
+
+            // Get marketer info using user ID (document ID = user ID)
+            const marketer = await FirestoreService.getDocument<any>(
                 COLLECTIONS.MARKETERS,
-                {
-                    filters: [{ field: 'email', operator: '==', value: user?.email }],
-                    limitCount: 1
-                }
+                user.uid
             );
 
-            if (marketers.length === 0) return;
-
-            const marketer = marketers[0];
+            if (!marketer) return;
 
             // Get referrals to calculate earnings
             const referrals = await FirestoreService.getDocuments<any>(
@@ -252,8 +249,8 @@ export const MarketerEarningsScreen: React.FC = () => {
                                         key={period}
                                         onClick={() => setFilterPeriod(period)}
                                         className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${filterPeriod === period
-                                                ? 'bg-primary-600 text-white'
-                                                : 'bg-neutral-100 text-neutral-700 hover:bg-neutral-200'
+                                            ? 'bg-primary-600 text-white'
+                                            : 'bg-neutral-100 text-neutral-700 hover:bg-neutral-200'
                                             }`}
                                     >
                                         {period.charAt(0).toUpperCase() + period.slice(1)}
@@ -298,8 +295,8 @@ export const MarketerEarningsScreen: React.FC = () => {
                                                 {transaction.type === 'payout' ? '-' : '+'}₦{transaction.amount.toLocaleString()}
                                             </p>
                                             <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${transaction.status === 'completed'
-                                                    ? 'bg-green-100 text-green-700'
-                                                    : 'bg-yellow-100 text-yellow-700'
+                                                ? 'bg-green-100 text-green-700'
+                                                : 'bg-yellow-100 text-yellow-700'
                                                 }`}>
                                                 {transaction.status}
                                             </span>
