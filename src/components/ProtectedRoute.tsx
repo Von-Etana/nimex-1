@@ -1,31 +1,62 @@
 import React from 'react';
-import { DesktopHeader } from './DesktopHeader';
-import { MobileBottomNav } from './MobileBottomNav';
-import { MobileHeader } from './MobileHeader';
-import { EmailVerificationBanner } from '../EmailVerificationBanner';
+import { Navigate, useLocation } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
+import { logger } from '../lib/logger';
+import type { UserRole } from '../types/database';
 
-interface MainLayoutProps {
+interface ProtectedRouteProps {
   children: React.ReactNode;
-  showBottomNav?: boolean;
+  allowedRoles?: UserRole[];
 }
 
-export const MainLayout: React.FC<MainLayoutProps> = ({ children, showBottomNav = true }) => {
+export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
+  children,
+  allowedRoles
+}) => {
+  const { user, profile, loading } = useAuth();
+  const location = useLocation();
 
-  // Removed: Automatic vendor redirect to dashboard
-  // Vendors should be able to browse as buyers when they explicitly navigate to buyer pages
-  // (e.g., clicking "Browse as Buyer" button or accessing /chat)
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-white">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-[#006400] border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-[#171a1f] font-['Inter']">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
-  return (
-    <div className="min-h-screen bg-white flex flex-col">
-      <EmailVerificationBanner />
-      <DesktopHeader />
-      <MobileHeader />
+  if (!user) {
+    return <Navigate to="/login" state={{ from: location }} replace />;
+  }
 
-      <main className="flex-1 w-full pb-16 md:pb-0">
-        {children}
-      </main>
+  if (allowedRoles && profile && !allowedRoles.includes(profile.role)) {
+    return <Navigate to="/" replace />;
+  }
 
-      {showBottomNav && <MobileBottomNav />}
-    </div>
-  );
+  // Check if vendor needs onboarding (but allow access to onboarding page itself and non-vendor routes)
+  // Only enforce onboarding for vendor-specific routes (/vendor/*)
+  const isVendorRoute = location.pathname.startsWith('/vendor');
+  if (user && profile?.role === 'vendor' && profile.needsOnboarding && isVendorRoute && location.pathname !== '/vendor/onboarding') {
+    logger.info('Vendor needs onboarding, redirecting to /vendor/onboarding', {
+      userId: user.uid,
+      role: profile.role,
+      needsOnboarding: profile.needsOnboarding,
+      currentPath: location.pathname
+    });
+    return <Navigate to="/vendor/onboarding" replace />;
+  }
+
+  if (user && profile?.role === 'vendor' && !profile.needsOnboarding && location.pathname === '/vendor/onboarding') {
+    logger.info('Vendor onboarding complete, redirecting to dashboard', {
+      userId: user.uid,
+      role: profile.role,
+      needsOnboarding: profile.needsOnboarding,
+      currentPath: location.pathname
+    });
+    return <Navigate to="/vendor/dashboard" replace />;
+  }
+
+  return <>{children}</>;
 };
