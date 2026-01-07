@@ -1,9 +1,7 @@
-import React, { useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React from 'react';
 import { DesktopHeader } from './DesktopHeader';
 import { MobileBottomNav } from './MobileBottomNav';
 import { MobileHeader } from './MobileHeader';
-import { useAuth } from '../../contexts/AuthContext';
 import { EmailVerificationBanner } from '../EmailVerificationBanner';
 
 interface MainLayoutProps {
@@ -12,14 +10,10 @@ interface MainLayoutProps {
 }
 
 export const MainLayout: React.FC<MainLayoutProps> = ({ children, showBottomNav = true }) => {
-  const { profile, loading } = useAuth();
-  const navigate = useNavigate();
 
-  useEffect(() => {
-    if (!loading && profile?.role === 'vendor') {
-      navigate('/vendor/dashboard', { replace: true });
-    }
-  }, [profile, loading, navigate]);
+  // Removed: Automatic vendor redirect to dashboard
+  // Vendors should be able to browse as buyers when they explicitly navigate to buyer pages
+  // (e.g., clicking "Browse as Buyer" button or accessing /chat)
 
   return (
     <div className="min-h-screen bg-white flex flex-col">
