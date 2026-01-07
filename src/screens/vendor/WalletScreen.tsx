@@ -198,7 +198,7 @@ export const WalletScreen: React.FC = () => {
 
       const accountId = crypto.randomUUID();
       await FirestoreService.setDocument(COLLECTIONS.VENDOR_PAYOUT_ACCOUNTS, accountId, {
-        vendor_id: vendorData.id || user?.uid,
+        vendor_id: user?.uid, // Use user.uid to match Firestore security rules
         bank_name: selectedBank.name,
         bank_code: newAccount.bankCode,
         account_number: newAccount.accountNumber,
