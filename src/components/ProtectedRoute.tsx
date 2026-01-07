@@ -1,60 +1,31 @@
 import React from 'react';
-import { Navigate, useLocation } from 'react-router-dom';
-import { useAuth } from '../contexts/AuthContext';
-import { logger } from '../lib/logger';
-import type { UserRole } from '../types/database';
+import { DesktopHeader } from './DesktopHeader';
+import { MobileBottomNav } from './MobileBottomNav';
+import { MobileHeader } from './MobileHeader';
+import { EmailVerificationBanner } from '../EmailVerificationBanner';
 
-interface ProtectedRouteProps {
+interface MainLayoutProps {
   children: React.ReactNode;
-  allowedRoles?: UserRole[];
+  showBottomNav?: boolean;
 }
 
-export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
-  children,
-  allowedRoles
-}) => {
-  const { user, profile, loading } = useAuth();
-  const location = useLocation();
+export const MainLayout: React.FC<MainLayoutProps> = ({ children, showBottomNav = true }) => {
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-white">
-        <div className="text-center">
-          <div className="w-16 h-16 border-4 border-[#006400] border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-[#171a1f] font-['Inter']">Loading...</p>
-        </div>
-      </div>
-    );
-  }
+  // Removed: Automatic vendor redirect to dashboard
+  // Vendors should be able to browse as buyers when they explicitly navigate to buyer pages
+  // (e.g., clicking "Browse as Buyer" button or accessing /chat)
 
-  if (!user) {
-    return <Navigate to="/login" state={{ from: location }} replace />;
-  }
+  return (
+    <div className="min-h-screen bg-white flex flex-col">
+      <EmailVerificationBanner />
+      <DesktopHeader />
+      <MobileHeader />
 
-  if (allowedRoles && profile && !allowedRoles.includes(profile.role)) {
-    return <Navigate to="/" replace />;
-  }
+      <main className="flex-1 w-full pb-16 md:pb-0">
+        {children}
+      </main>
 
-  // Check if vendor needs onboarding (but allow access to onboarding page itself)
-  if (user && profile?.role === 'vendor' && profile.needsOnboarding && location.pathname !== '/vendor/onboarding') {
-    logger.info('Vendor needs onboarding, redirecting to /vendor/onboarding', {
-      userId: user.uid,
-      role: profile.role,
-      needsOnboarding: profile.needsOnboarding,
-      currentPath: location.pathname
-    });
-    return <Navigate to="/vendor/onboarding" replace />;
-  }
-
-  if (user && profile?.role === 'vendor' && !profile.needsOnboarding && location.pathname === '/vendor/onboarding') {
-    logger.info('Vendor onboarding complete, redirecting to dashboard', {
-      userId: user.uid,
-      role: profile.role,
-      needsOnboarding: profile.needsOnboarding,
-      currentPath: location.pathname
-    });
-    return <Navigate to="/vendor/dashboard" replace />;
-  }
-
-  return <>{children}</>;
+      {showBottomNav && <MobileBottomNav />}
+    </div>
+  );
 };
