@@ -10,6 +10,7 @@ import {
   Menu,
   X,
   ShieldCheck,
+  ArrowUpRight,
 } from 'lucide-react';
 
 interface MenuItem {
@@ -44,6 +45,11 @@ export const AdminLayout: React.FC = () => {
       icon: CreditCard,
       label: 'Transactions',
       path: '/admin/transactions',
+    },
+    {
+      icon: ArrowUpRight,
+      label: 'Withdrawals',
+      path: '/admin/withdrawals',
     },
     {
       icon: FileCheck,
@@ -87,9 +93,8 @@ export const AdminLayout: React.FC = () => {
       )}
 
       <aside
-        className={`fixed lg:static inset-y-0 left-0 w-64 bg-white border-r border-neutral-200 z-50 transform transition-transform duration-300 ease-in-out ${
-          sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
-        }`}
+        className={`fixed lg:static inset-y-0 left-0 w-64 bg-white border-r border-neutral-200 z-50 transform transition-transform duration-300 ease-in-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
+          }`}
       >
         <div className="flex flex-col h-full">
           <div className="flex items-center justify-between p-6 border-b border-neutral-200">
@@ -137,11 +142,10 @@ export const AdminLayout: React.FC = () => {
                         navigate(item.path);
                         setSidebarOpen(false);
                       }}
-                      className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-sans text-sm transition-colors ${
-                        active
+                      className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-sans text-sm transition-colors ${active
                           ? 'bg-primary-50 text-primary-700 font-medium'
                           : 'text-neutral-700 hover:bg-neutral-100'
-                      }`}
+                        }`}
                     >
                       <Icon className="w-5 h-5 flex-shrink-0" />
                       <span>{item.label}</span>
