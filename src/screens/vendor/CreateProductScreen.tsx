@@ -268,7 +268,8 @@ export const CreateProductScreen: React.FC = () => {
           status: 'active', // Products are immediately visible
           verification_status: 'approved', // Auto-approved
           is_active: true, // Visible to buyers immediately
-          created_at: new Date().toISOString()
+          created_at: new Date().toISOString(),
+          approved_at: new Date().toISOString() // Mark as approved immediately
         });
       }
 
