@@ -30,6 +30,7 @@ const AdminSettingsScreen = React.lazy(() => import('./screens/admin').then(modu
 const AdminSettingsDetailScreen = React.lazy(() => import('./screens/admin').then(module => ({ default: module.AdminSettingsDetailScreen })));
 const AdminMarketersScreen = React.lazy(() => import('./screens/admin').then(module => ({ default: module.AdminMarketersScreen })));
 const AdminCommissionsScreen = React.lazy(() => import('./screens/admin').then(module => ({ default: module.AdminCommissionsScreen })));
+const AdminWithdrawalsScreen = React.lazy(() => import('./screens/admin').then(module => ({ default: module.AdminWithdrawalsScreen })));
 
 const ProductSearchScreen = React.lazy(() => import('./screens/ProductSearchScreen').then(module => ({ default: module.ProductSearchScreen })));
 const ProductDetailScreen = React.lazy(() => import('./screens/ProductDetailScreen').then(module => ({ default: module.ProductDetailScreen })));
@@ -515,6 +516,7 @@ const App: React.FC = () => {
                   <Route path="settings/:section" element={<AdminSettingsDetailScreen />} />
                   <Route path="marketers" element={<AdminMarketersScreen />} />
                   <Route path="commissions" element={<AdminCommissionsScreen />} />
+                  <Route path="withdrawals" element={<AdminWithdrawalsScreen />} />
                 </Route>
 
                 {/* Marketer Routes */}
