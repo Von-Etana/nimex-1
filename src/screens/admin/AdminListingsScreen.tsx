@@ -342,15 +342,33 @@ export const AdminListingsScreen: React.FC = () => {
                       ₦{listing.price.toLocaleString()}
                     </p>
                     <div className="flex items-center gap-2">
-                      <button className="flex-1 py-2 bg-green-100 text-green-700 rounded-lg font-sans text-xs font-medium">
-                        Approve
-                      </button>
-                      <button className="flex-1 py-2 bg-red-100 text-red-700 rounded-lg font-sans text-xs font-medium">
-                        Reject
-                      </button>
-                      <button className="p-2 bg-neutral-100 rounded-lg">
-                        <Eye className="w-4 h-4 text-neutral-600" />
-                      </button>
+                      {actionLoading === listing.id ? (
+                        <div className="flex-1 flex items-center justify-center py-2">
+                          <Loader2 className="w-4 h-4 animate-spin text-neutral-600" />
+                        </div>
+                      ) : (
+                        <>
+                          {listing.status !== 'active' && (
+                            <button
+                              onClick={() => handleApprove(listing.id)}
+                              className="flex-1 py-2 bg-green-100 text-green-700 rounded-lg font-sans text-xs font-medium hover:bg-green-200 transition-colors"
+                            >
+                              Approve
+                            </button>
+                          )}
+                          {listing.status !== 'suspended' && (
+                            <button
+                              onClick={() => handleReject(listing.id)}
+                              className="flex-1 py-2 bg-red-100 text-red-700 rounded-lg font-sans text-xs font-medium hover:bg-red-200 transition-colors"
+                            >
+                              Reject
+                            </button>
+                          )}
+                          <button className="p-2 bg-neutral-100 rounded-lg hover:bg-neutral-200 transition-colors">
+                            <Eye className="w-4 h-4 text-neutral-600" />
+                          </button>
+                        </>
+                      )}
                     </div>
                   </CardContent>
                 </Card>
