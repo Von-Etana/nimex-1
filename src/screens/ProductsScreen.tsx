@@ -7,175 +7,46 @@ import { useToast } from '../contexts/ToastContext';
 import {
   SlidersHorizontal,
   ChevronDown,
-  Star
+  Star,
+  Loader2
 } from 'lucide-react';
 import { triggerCartUpdate } from '../hooks/useCart';
 import { CartService } from '../services/cartService';
 import { ProductCard, Product } from '../components/products/ProductCard';
+import { FirestoreService } from '../services/firestore.service';
+import { COLLECTIONS } from '../lib/collections';
 
-// Extended mock products with more data for testing features
-const mockProducts: Product[] = [
-  {
-    id: 1,
-    name: 'Handwoven Ankara Fabric',
-    price: 8500,
-    originalPrice: 12000,
-    image: '/image-1.png',
-    images: ['/image-1.png', '/image-2.png'],
-    vendor: 'NaijaCrafts Emporium',
-    vendorId: 1,
-    rating: 4.8,
-    reviews: 124,
-    category: 'Textiles',
-    inStock: true,
-    discount: 29,
-    tags: ['hot', 'deal']
-  },
-  {
-    id: 2,
-    name: 'Traditional Clay Pottery Set',
-    price: 15000,
-    image: '/image-2.png',
-    images: ['/image-2.png', '/image-3.png'],
-    vendor: 'NaijaCrafts Emporium',
-    vendorId: 1,
-    rating: 4.9,
-    reviews: 89,
-    category: 'Home & Garden',
-    inStock: true,
-    tags: ['new']
-  },
-  {
-    id: 3,
-    name: 'Beaded Jewelry Collection',
-    price: 6500,
-    originalPrice: 9000,
-    image: '/image-3.png',
-    images: ['/image-3.png', '/image-1.png'],
-    vendor: 'Fashion Finesse Boutique',
-    vendorId: 3,
-    rating: 4.7,
-    reviews: 156,
-    category: 'Fashion',
-    inStock: true,
-    discount: 28,
-    tags: ['trending']
-  },
-  {
-    id: 4,
-    name: 'Nigerian Cookbook Collection',
-    price: 4500,
-    image: '/image-5.png',
-    vendor: 'The Bookworm Nook',
-    vendorId: 6,
-    rating: 4.9,
-    reviews: 234,
-    category: 'Books',
-    inStock: true,
-  },
-  {
-    id: 5,
-    name: 'Organic Jollof Spice Mix',
-    price: 2500,
-    image: '/image-4.png',
-    vendor: 'Mama Nkechi\'s Kitchen',
-    vendorId: 2,
-    rating: 5.0,
-    reviews: 412,
-    category: 'Food',
-    inStock: true,
-    tags: ['urgent']
-  },
-  {
-    id: 6,
-    name: 'African Print Dashiki',
-    price: 12500,
-    originalPrice: 18000,
-    image: '/image-6.png',
-    vendor: 'Fashion Finesse Boutique',
-    vendorId: 3,
-    rating: 4.6,
-    reviews: 98,
-    category: 'Fashion',
-    inStock: true,
-    discount: 31,
-  },
-  {
-    id: 7,
-    name: 'Indoor Plant Collection',
-    price: 8000,
-    image: '/image-7.png',
-    vendor: 'Green Thumb Gardens',
-    vendorId: 5,
-    rating: 4.8,
-    reviews: 67,
-    category: 'Home & Garden',
-    inStock: true,
-  },
-  {
-    id: 8,
-    name: 'Wireless Bluetooth Earbuds',
-    price: 18000,
-    originalPrice: 25000,
-    image: '/image-8.png',
-    vendor: 'Tech Haven Electronics',
-    vendorId: 1,
-    rating: 4.5,
-    reviews: 289,
-    category: 'Electronics',
-    inStock: true,
-    discount: 28,
-    tags: ['hot']
-  },
-  {
-    id: 9,
-    name: 'Leather Laptop Bag',
-    price: 22000,
-    image: '/image-1.png',
-    vendor: 'Fashion Finesse Boutique',
-    vendorId: 3,
-    rating: 4.7,
-    reviews: 143,
-    category: 'Fashion',
-    inStock: true,
-  },
-  {
-    id: 10,
-    name: 'Adire Tie-Dye Fabric',
-    price: 7500,
-    image: '/image-2.png',
-    vendor: 'NaijaCrafts Emporium',
-    vendorId: 1,
-    rating: 4.9,
-    reviews: 178,
-    category: 'Textiles',
-    inStock: true,
-  },
-  {
-    id: 11,
-    name: 'Palm Oil (5 Litres)',
-    price: 9500,
-    image: '/image-4.png',
-    vendor: 'Mama Nkechi\'s Kitchen',
-    vendorId: 2,
-    rating: 4.8,
-    reviews: 256,
-    category: 'Food',
-    inStock: true,
-  },
-  {
-    id: 12,
-    name: 'Contemporary Art Print',
-    price: 35000,
-    image: '/image-3.png',
-    vendor: 'NaijaCrafts Emporium',
-    vendorId: 1,
-    rating: 4.6,
-    reviews: 45,
-    category: 'Art',
-    inStock: true,
-  },
-];
+// Helper function to transform Firestore product to ProductCard format
+const transformProduct = (firestoreProduct: any, vendorMap: Map<string, any>): Product => {
+  const vendor = vendorMap.get(firestoreProduct.vendor_id);
+  const images = Array.isArray(firestoreProduct.images)
+    ? firestoreProduct.images
+    : firestoreProduct.image_url
+      ? [firestoreProduct.image_url]
+      : ['/image-1.png'];
+
+  return {
+    id: firestoreProduct.id,
+    name: firestoreProduct.title || firestoreProduct.name || 'Untitled Product',
+    price: firestoreProduct.price || 0,
+    originalPrice: firestoreProduct.compare_at_price || undefined,
+    image: images[0] || '/image-1.png',
+    images: images,
+    vendor: vendor?.business_name || 'Unknown Vendor',
+    vendorId: firestoreProduct.vendor_id || '',
+    rating: firestoreProduct.rating || 4.5,
+    reviews: firestoreProduct.review_count || 0,
+    category: firestoreProduct.category_id || 'Uncategorized',
+    inStock: (firestoreProduct.stock_quantity || 0) > 0,
+    discount: firestoreProduct.compare_at_price
+      ? Math.round(((firestoreProduct.compare_at_price - firestoreProduct.price) / firestoreProduct.compare_at_price) * 100)
+      : undefined,
+    tags: firestoreProduct.tags || [],
+    video_url: firestoreProduct.video_url,
+    location: vendor?.market_location,
+    isVerified: vendor?.is_verified || false,
+  };
+};
 
 const categories = ['All', 'Fashion', 'Electronics', 'Food', 'Books', 'Home & Garden', 'Textiles', 'Art', 'Real Estate', 'Vehicles', 'Building Materials', 'Health & Wellness'];
 
@@ -200,6 +71,11 @@ export const ProductsScreen: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const { success } = useToast();
 
+  // Product state
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // Filter state
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [selectedPriceRange, setSelectedPriceRange] = useState(0);
   const [minRating, setMinRating] = useState(0);
@@ -207,18 +83,61 @@ export const ProductsScreen: React.FC = () => {
   const [showFilters, setShowFilters] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
+  // Fetch products from Firestore
+  useEffect(() => {
+    const fetchProducts = async () => {
+      try {
+        setLoading(true);
+
+        // Fetch active products
+        const productsData = await FirestoreService.getDocuments<any>(COLLECTIONS.PRODUCTS, {
+          filters: [
+            { field: 'is_active', operator: '==', value: true },
+            { field: 'status', operator: '==', value: 'active' }
+          ],
+          orderByField: 'created_at',
+          orderByDirection: 'desc'
+        });
+
+        if (!productsData || productsData.length === 0) {
+          setProducts([]);
+          setLoading(false);
+          return;
+        }
+
+        // Fetch vendors to map vendor names
+        const vendorIds = Array.from(new Set(productsData.map(p => p.vendor_id).filter(Boolean)));
+        const vendorMap = new Map<string, any>();
+
+        if (vendorIds.length > 0) {
+          const vendors = await FirestoreService.getDocuments<any>(COLLECTIONS.VENDORS);
+          vendors.forEach(v => {
+            vendorMap.set(v.id, v);
+          });
+        }
+
+        // Transform products to ProductCard format
+        const transformedProducts = productsData.map(p => transformProduct(p, vendorMap));
+        setProducts(transformedProducts);
+      } catch (error) {
+        console.error('Error fetching products:', error);
+        setProducts([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchProducts();
+  }, []);
+
   // Initialize filters from URL params
   useEffect(() => {
     const categoryParam = searchParams.get('category');
     if (categoryParam) {
-      // Check if category exists in our list, if not add it temporarily or match closest
-      // For now, we just set it if it matches loosely or default to All
       const match = categories.find(c => c.toLowerCase() === categoryParam.toLowerCase());
       if (match) {
         setSelectedCategory(match);
       } else {
-        // If it's a valid category but not in our short list, we might want to handle it
-        // For this demo, we'll just set it if it's not empty
         if (categoryParam !== 'All') setSelectedCategory(categoryParam);
       }
     }
@@ -240,15 +159,17 @@ export const ProductsScreen: React.FC = () => {
     setSearchParams(searchParams);
   };
 
-  const filteredProducts = mockProducts.filter((product) => {
-    const categoryMatch = selectedCategory === 'All' || product.category === selectedCategory || (selectedCategory === 'Fashion & Beauty' && product.category === 'Fashion'); // Simple mapping for demo
+  const filteredProducts = products.filter((product) => {
+    const categoryMatch = selectedCategory === 'All' ||
+      product.category === selectedCategory ||
+      product.category?.toLowerCase().includes(selectedCategory.toLowerCase());
     const priceRange = priceRanges[selectedPriceRange];
     const priceMatch = product.price >= priceRange.min && product.price <= priceRange.max;
     const ratingMatch = product.rating >= minRating;
     const searchMatch = !searchQuery ||
       product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       product.vendor.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      product.category.toLowerCase().includes(searchQuery.toLowerCase());
+      (product.category && product.category.toLowerCase().includes(searchQuery.toLowerCase()));
     return categoryMatch && priceMatch && ratingMatch && searchMatch;
   });
 
@@ -269,9 +190,6 @@ export const ProductsScreen: React.FC = () => {
 
   const handleAddToCart = (e: React.MouseEvent) => {
     e.stopPropagation();
-    // In a real app, we'd pass the specific product here
-    // For now, the ProductCard handles the click event but we need to implement the actual cart logic
-    // This function is just a placeholder if we were to pass it down
   };
 
   const addToCartLogic = async (product: Product) => {
@@ -281,8 +199,6 @@ export const ProductsScreen: React.FC = () => {
       triggerCartUpdate();
     } catch (error) {
       console.error('Error adding to cart:', error);
-      // In a real app, we would show an error toast here
-      // error('Failed to add to cart');
     }
   }
 
@@ -290,6 +206,16 @@ export const ProductsScreen: React.FC = () => {
     (selectedCategory !== 'All' ? 1 : 0) +
     (selectedPriceRange !== 0 ? 1 : 0) +
     (minRating > 0 ? 1 : 0);
+
+  if (loading) {
+    return (
+      <div className="flex flex-col w-full min-h-screen bg-neutral-50">
+        <div className="flex items-center justify-center h-96">
+          <Loader2 className="w-8 h-8 animate-spin text-primary-500" />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col w-full min-h-screen bg-neutral-50">
