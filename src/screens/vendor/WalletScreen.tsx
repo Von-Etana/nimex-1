@@ -1,7 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
-import { Wallet, Plus, DollarSign, TrendingUp, AlertCircle, CheckCircle, Copy } from 'lucide-react';
+import {
+  Wallet, Plus, DollarSign, AlertCircle, CheckCircle, Copy,
+  ArrowUpRight, ArrowDownLeft, Clock, RefreshCw, History
+} from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { flutterwaveService } from '../../services/flutterwaveService';
 import { FirestoreService } from '../../services/firestore.service';
@@ -15,6 +18,8 @@ interface VendorData {
   flutterwave_account_number: string | null;
   flutterwave_bank_name: string | null;
   flutterwave_account_name: string | null;
+  virtual_account_number?: string | null;
+  virtual_account_bank?: string | null;
 }
 
 interface PayoutAccount {
@@ -25,6 +30,24 @@ interface PayoutAccount {
   account_name: string;
   is_default: boolean;
   is_verified: boolean;
+}
+
+interface WalletTransaction {
+  id: string;
+  type: 'credit' | 'debit' | 'withdrawal' | 'escrow_release' | 'order';
+  amount: number;
+  payment_status: string;
+  description: string;
+  created_at: string;
+  payment_reference?: string;
+}
+
+interface EscrowTransaction {
+  id: string;
+  order_id: string;
+  amount: number;
+  status: string;
+  created_at: string;
 }
 
 export const WalletScreen: React.FC = () => {
@@ -38,6 +61,13 @@ export const WalletScreen: React.FC = () => {
   const [success, setSuccess] = useState('');
   const [copied, setCopied] = useState(false);
 
+  // New state for transactions and escrow
+  const [transactions, setTransactions] = useState<WalletTransaction[]>([]);
+  const [pendingEscrow, setPendingEscrow] = useState<number>(0);
+  const [isLoadingTransactions, setIsLoadingTransactions] = useState(false);
+  const [showTransferModal, setShowTransferModal] = useState(false);
+  const [isCreatingVirtualAccount, setIsCreatingVirtualAccount] = useState(false);
+
   const [newAccount, setNewAccount] = useState({
     bankCode: '',
     accountNumber: '',
@@ -48,6 +78,8 @@ export const WalletScreen: React.FC = () => {
     if (user && profile?.role === 'vendor') {
       loadVendorData();
       loadPayoutAccounts();
+      loadTransactions();
+      loadPendingEscrow();
     }
   }, [user, profile]);
 
@@ -87,6 +119,54 @@ export const WalletScreen: React.FC = () => {
     }
   };
 
+  // Load transaction history
+  const loadTransactions = async () => {
+    if (!user) return;
+
+    setIsLoadingTransactions(true);
+    try {
+      // Fetch transactions for this vendor
+      const txData = await FirestoreService.getDocuments<WalletTransaction>('payment_transactions', {
+        filters: [{ field: 'vendor_id', operator: '==', value: user.uid }],
+        orderByField: 'created_at',
+        orderByDirection: 'desc',
+        limitCount: 20
+      });
+
+      setTransactions(txData || []);
+    } catch (err) {
+      console.error('Error loading transactions:', err);
+    } finally {
+      setIsLoadingTransactions(false);
+    }
+  };
+
+  // Load pending escrow amounts
+  const loadPendingEscrow = async () => {
+    if (!user) return;
+
+    try {
+      // Fetch orders with pending escrow
+      const pendingOrders = await FirestoreService.getDocuments<any>(COLLECTIONS.ORDERS, {
+        filters: [
+          { field: 'vendor_id', operator: '==', value: user.uid },
+          { field: 'payment_status', operator: '==', value: 'paid' },
+          { field: 'status', operator: 'in', value: ['confirmed', 'processing', 'shipped'] }
+        ]
+      });
+
+      // Calculate total pending escrow
+      const totalPending = (pendingOrders || []).reduce((sum, order) => {
+        return sum + (order.total_amount || 0);
+      }, 0);
+
+      setPendingEscrow(totalPending);
+    } catch (err) {
+      console.error('Error loading pending escrow:', err);
+      setPendingEscrow(0);
+    }
+  };
+
   const handleCreateWallet = async () => {
     if (!vendorData || !user?.email) return;
 
@@ -111,6 +191,33 @@ export const WalletScreen: React.FC = () => {
       setError('An error occurred while creating wallet');
     } finally {
       setIsCreatingWallet(false);
+    }
+  };
+
+  const handleCreateVirtualAccount = async () => {
+    if (!vendorData || !user?.email) return;
+
+    setIsCreatingVirtualAccount(true);
+    setError('');
+    setSuccess('');
+
+    try {
+      const result = await flutterwaveService.createVirtualAccount(vendorData.id || user.uid, {
+        email: user.email,
+        business_name: vendorData.business_name,
+        phone: profile?.phone,
+      });
+
+      if (result.success && result.data) {
+        setSuccess('Virtual account created successfully!');
+        await loadVendorData(); // Reload to get updated virtual account details
+      } else {
+        setError(result.error || 'Failed to create virtual account');
+      }
+    } catch (err) {
+      setError('An error occurred while creating virtual account');
+    } finally {
+      setIsCreatingVirtualAccount(false);
     }
   };
 
@@ -348,21 +455,112 @@ export const WalletScreen: React.FC = () => {
             <CardContent className="p-6">
               <div className="flex items-start justify-between mb-4">
                 <div>
-                  <p className="font-sans text-sm text-neutral-600 mb-1">Pending Settlements</p>
-                  <h2 className="font-heading font-bold text-2xl text-neutral-900">
-                    ₦0
+                  <p className="font-sans text-sm text-neutral-600 mb-1">Pending in Escrow</p>
+                  <h2 className="font-heading font-bold text-2xl text-amber-600">
+                    ₦{pendingEscrow.toLocaleString()}
                   </h2>
                 </div>
-                <div className="w-12 h-12 bg-neutral-100 rounded-full flex items-center justify-center">
-                  <TrendingUp className="w-6 h-6 text-neutral-600" />
+                <div className="w-12 h-12 bg-amber-100 rounded-full flex items-center justify-center">
+                  <Clock className="w-6 h-6 text-amber-600" />
                 </div>
               </div>
               <p className="font-sans text-xs text-neutral-500">
-                Funds will be available after delivery confirmation
+                Funds will be released after delivery confirmation
               </p>
             </CardContent>
           </Card>
         </div>
+
+        {/* Transaction History Section */}
+        <Card className="mb-8">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-primary-100 rounded-full flex items-center justify-center">
+                  <History className="w-5 h-5 text-primary-600" />
+                </div>
+                <h3 className="font-heading font-semibold text-lg text-neutral-900">
+                  Transaction History
+                </h3>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => { loadTransactions(); loadPendingEscrow(); }}
+                disabled={isLoadingTransactions}
+              >
+                <RefreshCw className={`w-4 h-4 mr-2 ${isLoadingTransactions ? 'animate-spin' : ''}`} />
+                Refresh
+              </Button>
+            </div>
+
+            {isLoadingTransactions ? (
+              <div className="flex justify-center py-8">
+                <div className="w-8 h-8 border-4 border-primary-500 border-t-transparent rounded-full animate-spin" />
+              </div>
+            ) : transactions.length === 0 ? (
+              <div className="text-center py-8">
+                <DollarSign className="w-12 h-12 text-neutral-300 mx-auto mb-3" />
+                <p className="font-sans text-neutral-600">No transactions yet</p>
+                <p className="font-sans text-sm text-neutral-400 mt-1">
+                  Your transaction history will appear here
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {transactions.map((tx) => (
+                  <div
+                    key={tx.id}
+                    className="flex items-center justify-between p-4 border border-neutral-100 rounded-lg hover:bg-neutral-50 transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className={`w-10 h-10 rounded-full flex items-center justify-center ${tx.type === 'withdrawal' || tx.type === 'debit'
+                        ? 'bg-red-100'
+                        : 'bg-green-100'
+                        }`}>
+                        {tx.type === 'withdrawal' || tx.type === 'debit' ? (
+                          <ArrowUpRight className="w-5 h-5 text-red-600" />
+                        ) : (
+                          <ArrowDownLeft className="w-5 h-5 text-green-600" />
+                        )}
+                      </div>
+                      <div>
+                        <p className="font-sans font-medium text-neutral-900">
+                          {tx.description || (tx.type === 'withdrawal' ? 'Withdrawal' : 'Credit')}
+                        </p>
+                        <p className="font-sans text-xs text-neutral-500">
+                          {new Date(tx.created_at).toLocaleDateString('en-NG', {
+                            day: 'numeric',
+                            month: 'short',
+                            year: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                          })}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className={`font-heading font-bold ${tx.type === 'withdrawal' || tx.type === 'debit'
+                        ? 'text-red-600'
+                        : 'text-green-600'
+                        }`}>
+                        {tx.type === 'withdrawal' || tx.type === 'debit' ? '-' : '+'}₦{tx.amount.toLocaleString()}
+                      </p>
+                      <span className={`text-xs px-2 py-0.5 rounded-full ${tx.payment_status === 'paid' || tx.payment_status === 'successful'
+                        ? 'bg-green-100 text-green-700'
+                        : tx.payment_status === 'pending'
+                          ? 'bg-amber-100 text-amber-700'
+                          : 'bg-neutral-100 text-neutral-700'
+                        }`}>
+                        {tx.payment_status}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
         {!vendorData.flutterwave_wallet_id ? (
           <Card className="mb-8">
@@ -425,6 +623,66 @@ export const WalletScreen: React.FC = () => {
             </CardContent>
           </Card>
         )}
+
+        {/* Virtual Account Section */}
+        <Card className="mb-8">
+          <CardContent className="p-6">
+            <h3 className="font-heading font-semibold text-lg text-neutral-900 mb-4">
+              Virtual Bank Account
+            </h3>
+            <p className="font-sans text-sm text-neutral-600 mb-4">
+              Get a dedicated account number for receiving direct bank transfers
+            </p>
+
+            {vendorData?.virtual_account_number ? (
+              <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-lg p-4 space-y-3 border border-green-200">
+                <div className="flex justify-between items-center">
+                  <span className="font-sans text-sm text-neutral-600">Bank</span>
+                  <span className="font-sans font-medium text-neutral-900">
+                    {vendorData.virtual_account_bank || 'Wema Bank'}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="font-sans text-sm text-neutral-600">Account Number</span>
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono font-bold text-lg text-green-700">
+                      {vendorData.virtual_account_number}
+                    </span>
+                    <button
+                      onClick={() => copyToClipboard(vendorData.virtual_account_number || '')}
+                      className="p-1.5 hover:bg-green-200 rounded transition-colors"
+                    >
+                      <Copy className="w-4 h-4 text-green-600" />
+                    </button>
+                  </div>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="font-sans text-sm text-neutral-600">Account Name</span>
+                  <span className="font-sans font-medium text-neutral-900">
+                    {vendorData.business_name}
+                  </span>
+                </div>
+                <p className="font-sans text-xs text-green-700 mt-2 pt-2 border-t border-green-200">
+                  ✓ Customers can transfer directly to this account. Funds are credited automatically.
+                </p>
+              </div>
+            ) : (
+              <div className="text-center py-6 bg-neutral-50 rounded-lg border-2 border-dashed border-neutral-200">
+                <Wallet className="w-10 h-10 text-neutral-400 mx-auto mb-3" />
+                <p className="font-sans text-neutral-600 mb-4">
+                  No virtual account yet
+                </p>
+                <Button
+                  onClick={handleCreateVirtualAccount}
+                  disabled={isCreatingVirtualAccount}
+                  className="bg-green-600 hover:bg-green-700"
+                >
+                  {isCreatingVirtualAccount ? 'Creating...' : 'Create Virtual Account'}
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
         <Card>
           <CardContent className="p-6">
