@@ -1,14 +1,16 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams } from 'react-router-dom';
-import { Send, MessageCircle, User, Store, Loader2 } from 'lucide-react';
+import { Send, MessageCircle, User, Store, Loader2, Image } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { FirestoreService } from '../services/firestore.service';
+import { FirebaseStorageService } from '../services/firebaseStorage.service';
 import { COLLECTIONS } from '../lib/collections';
 import { logger } from '../lib/logger';
 import { sanitizeText } from '../lib/sanitization';
 import { useAuth } from '../contexts/AuthContext';
-import { where, orderBy, onSnapshot, query, collection, Timestamp } from 'firebase/firestore';
+import { where, orderBy, onSnapshot, query, collection, Timestamp, doc } from 'firebase/firestore';
 import { db } from '../lib/firebase.config';
+import { notificationService } from '../services/notificationService';
 
 interface Conversation {
   id: string;
@@ -28,6 +30,8 @@ interface Conversation {
   product?: {
     title: string;
   };
+  buyer_typing?: boolean;
+  vendor_typing?: boolean;
 }
 
 interface Message {
@@ -53,7 +57,12 @@ export const ChatScreen: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [creatingConversation, setCreatingConversation] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [isOtherUserTyping, setIsOtherUserTyping] = useState(false);
+  const [otherUserPresence, setOtherUserPresence] = useState<{ isOnline: boolean; lastSeen?: string | null }>({ isOnline: false });
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     loadConversations();
@@ -140,6 +149,83 @@ export const ChatScreen: React.FC = () => {
 
     return () => unsubscribe();
   }, [selectedConversation?.id]);
+
+  // Real-time subscription for conversation data (typing status)
+  useEffect(() => {
+    if (!selectedConversation || !user?.uid) return;
+
+    const unsubscribe = onSnapshot(doc(db, COLLECTIONS.CHAT_CONVERSATIONS, selectedConversation.id), (docSnapshot) => {
+      if (docSnapshot.exists()) {
+        const data = docSnapshot.data() as Conversation;
+        if (user.uid === data.buyer_id) {
+          setIsOtherUserTyping(data.vendor_typing || false);
+        } else {
+          setIsOtherUserTyping(data.buyer_typing || false);
+        }
+      }
+    });
+
+    return () => unsubscribe();
+  }, [selectedConversation?.id, user?.uid]);
+
+  // Subscribe to other user's presence
+  useEffect(() => {
+    if (!selectedConversation || !user?.uid) return;
+
+    const otherUserId = user.uid === selectedConversation.buyer_id
+      ? selectedConversation.vendor_id
+      : selectedConversation.buyer_id;
+
+    if (!otherUserId) return;
+
+    const unsubscribe = onSnapshot(doc(db, COLLECTIONS.PROFILES, otherUserId), (docSnapshot) => {
+      if (docSnapshot.exists()) {
+        const data = docSnapshot.data();
+        const lastSeen = data.last_seen;
+        // Check if last seen is within 5 minutes
+        const isOnline = lastSeen && (new Date().getTime() - new Date(lastSeen).getTime() < 5 * 60 * 1000);
+        setOtherUserPresence({ isOnline, lastSeen });
+      }
+    });
+
+    return () => unsubscribe();
+  }, [selectedConversation?.id, user?.uid]);
+
+  const handleTyping = () => {
+    if (!selectedConversation || !user?.uid) return;
+
+    // Clear existing timeout
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+
+    // Set typing status to true (optimization: only update if not already recently updated? 
+    // For now, simple approach is fine, but maybe check a local ref to avoid too many writes?
+    // Actually, writing on every keystroke is bad. Let's create a local ref to track if we've already set it to true.)
+
+    // Better approach: locally track 'isTyping' state to avoid redundant 'true' writes.
+    // However, for simplicity and robustness (in case of page refresh), just writing 'true' is okay as long as not *every* keystroke triggers a write if it's already true.
+
+    // Let's implement a simple debounce for setting it to true? No, we want it immediate.
+    // We can assume if we have a timeout pending, we are "typing".
+
+    const field = selectedConversation.buyer_id === user.uid ? 'buyer_typing' : 'vendor_typing';
+
+    if (!typingTimeoutRef.current) {
+      // Only write 'true' if we weren't already typing (timeout is null)
+      FirestoreService.updateDocument(COLLECTIONS.CHAT_CONVERSATIONS, selectedConversation.id, {
+        [field]: true
+      }).catch(e => console.error(e));
+    }
+
+    // Reset timeout to clear typing status
+    typingTimeoutRef.current = setTimeout(() => {
+      FirestoreService.updateDocument(COLLECTIONS.CHAT_CONVERSATIONS, selectedConversation.id, {
+        [field]: false
+      }).catch(e => console.error(e));
+      typingTimeoutRef.current = null;
+    }, 2000);
+  };
 
   useEffect(() => {
     if (selectedConversation) {
@@ -282,6 +368,23 @@ export const ChatScreen: React.FC = () => {
 
       await FirestoreService.updateDocument(COLLECTIONS.CHAT_CONVERSATIONS, selectedConversation.id, updates);
 
+      // Notify the recipient about new message
+      const recipientId = selectedConversation.buyer_id === user.uid
+        ? selectedConversation.vendor_id
+        : selectedConversation.buyer_id;
+
+      const senderName = selectedConversation.buyer_id === user.uid
+        ? selectedConversation.buyer?.full_name || 'Buyer'
+        : selectedConversation.vendor?.business_name || 'Vendor';
+
+      await notificationService.createNotification({
+        userId: recipientId,
+        type: 'new_message',
+        title: 'New Message 💬',
+        message: `${senderName}: ${newMessage.trim().substring(0, 50)}${newMessage.length > 50 ? '...' : ''}`,
+        data: { conversationId: selectedConversation.id },
+      });
+
       setNewMessage('');
       // No need to reload messages, subscription will catch it
       loadConversations(); // Refresh list to show new last message
@@ -294,6 +397,85 @@ export const ChatScreen: React.FC = () => {
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file || !selectedConversation || !user?.uid) return;
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      logger.error('Invalid file type');
+      return;
+    }
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      logger.error('File too large');
+      return;
+    }
+
+    setUploadingImage(true);
+    try {
+      // Upload image
+      const { url, error } = await FirebaseStorageService.uploadChatImage(
+        selectedConversation.id,
+        file
+      );
+
+      if (error || !url) {
+        throw error || new Error('Failed to upload image');
+      }
+
+      // Create message with image
+      const messageId = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+      await FirestoreService.setDocument(COLLECTIONS.CHAT_MESSAGES, messageId, {
+        conversation_id: selectedConversation.id,
+        sender_id: user.uid,
+        image_url: url,
+        is_read: false,
+        created_at: Timestamp.now()
+      });
+
+      // Update conversation
+      const updates: any = {
+        last_message: '📷 Image',
+        last_message_at: new Date().toISOString(),
+      };
+
+      if (selectedConversation.buyer_id !== user.uid) {
+        updates.unread_buyer = (selectedConversation.unread_buyer || 0) + 1;
+      }
+      if (selectedConversation.vendor_id !== user.uid) {
+        updates.unread_vendor = (selectedConversation.unread_vendor || 0) + 1;
+      }
+
+      await FirestoreService.updateDocument(COLLECTIONS.CHAT_CONVERSATIONS, selectedConversation.id, updates);
+
+      // Notify recipient
+      const recipientId = selectedConversation.buyer_id === user.uid
+        ? selectedConversation.vendor_id
+        : selectedConversation.buyer_id;
+
+      await notificationService.createNotification({
+        userId: recipientId,
+        type: 'new_message',
+        title: 'New Image 📷',
+        message: 'You received a new image',
+        data: { conversationId: selectedConversation.id },
+      });
+
+      loadConversations();
+    } catch (error) {
+      logger.error('Error uploading image', error);
+    } finally {
+      setUploadingImage(false);
+      // Reset file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
   };
 
   const formatTime = (dateString: string) => {
@@ -428,9 +610,17 @@ export const ChatScreen: React.FC = () => {
                       )}
                     </div>
                     <div>
-                      <h3 className="font-sans font-semibold text-neutral-900">
+                      <h3 className="font-sans font-semibold text-neutral-900 flex items-center gap-2">
                         {getOtherParticipant(selectedConversation).name}
+                        {otherUserPresence.isOnline && (
+                          <span className="w-2 h-2 bg-green-500 rounded-full" title="Online"></span>
+                        )}
                       </h3>
+                      {!otherUserPresence.isOnline && otherUserPresence.lastSeen && (
+                        <p className="font-sans text-xs text-neutral-400">
+                          Last seen {formatTime(otherUserPresence.lastSeen)}
+                        </p>
+                      )}
                       {selectedConversation.product && (
                         <p className="font-sans text-xs text-neutral-600">
                           Re: {selectedConversation.product.title}
@@ -474,24 +664,59 @@ export const ChatScreen: React.FC = () => {
                       </div>
                     );
                   })}
+
+                  {isOtherUserTyping && (
+                    <div className="flex justify-start">
+                      <div className="bg-neutral-100 text-neutral-500 text-xs px-4 py-2 rounded-lg italic flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 bg-neutral-400 rounded-full animate-bounce"></span>
+                        <span className="w-1.5 h-1.5 bg-neutral-400 rounded-full animate-bounce delay-100"></span>
+                        <span className="w-1.5 h-1.5 bg-neutral-400 rounded-full animate-bounce delay-200"></span>
+                      </div>
+                    </div>
+                  )}
                   <div ref={messagesEndRef} />
                 </div>
 
                 {/* Message Input */}
                 <div className="p-4 border-t border-neutral-200">
+                  {/* Hidden file input */}
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    accept="image/*"
+                    onChange={handleImageUpload}
+                    className="hidden"
+                  />
                   <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={uploadingImage || sending}
+                      className="flex-shrink-0 border-neutral-200 hover:bg-neutral-50"
+                      title="Send image"
+                    >
+                      {uploadingImage ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Image className="w-4 h-4 text-neutral-600" />
+                      )}
+                    </Button>
                     <input
                       type="text"
                       value={newMessage}
-                      onChange={(e) => setNewMessage(e.target.value)}
+                      onChange={(e) => {
+                        setNewMessage(e.target.value);
+                        handleTyping();
+                      }}
                       onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
                       placeholder="Type your message..."
                       className="flex-1 px-3 py-2 border border-neutral-200 rounded-lg font-sans text-sm focus:outline-none focus:ring-2 focus:ring-green-700"
-                      disabled={sending}
+                      disabled={sending || uploadingImage}
                     />
                     <Button
                       onClick={sendMessage}
-                      disabled={!newMessage.trim() || sending}
+                      disabled={!newMessage.trim() || sending || uploadingImage}
                       className="bg-green-700 hover:bg-green-800 text-white px-4"
                     >
                       {sending ? (
