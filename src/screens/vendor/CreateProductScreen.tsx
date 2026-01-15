@@ -216,10 +216,11 @@ export const CreateProductScreen: React.FC = () => {
       if (videoFile) {
         setIsUploading(true);
         try {
-          const storageId = id || `new_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+          const productStorageId = id || `new_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
           const fileExt = videoFile.name.split('.').pop();
           const fileName = `video_${Date.now()}.${fileExt}`;
-          const path = `products/${storageId}`;
+          // Path must match storage rules: products/{vendorId}/{productId}/{fileName}
+          const path = `products/${vendor.id}/${productStorageId}`;
 
           const { promise } = FirebaseStorageService.uploadFileWithProgress(
             videoFile,
