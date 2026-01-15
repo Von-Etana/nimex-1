@@ -11,7 +11,8 @@ import {
   MessageCircle,
   Loader2,
   Wallet,
-  ArrowDownCircle
+  ArrowDownCircle,
+  TrendingUp
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
@@ -53,6 +54,7 @@ export const VendorDashboardScreen: React.FC = () => {
   const [unreadMessagesList, setUnreadMessagesList] = useState<Message[]>([]);
   const [topProducts, setTopProducts] = useState<any[]>([]);
   const [orderStatusCounts, setOrderStatusCounts] = useState<Record<string, number>>({});
+  const [dailySales, setDailySales] = useState<{ date: string; amount: number; orders: number }[]>([]);
 
   useEffect(() => {
     if (user) {
@@ -131,6 +133,25 @@ export const VendorDashboardScreen: React.FC = () => {
       setUnreadMessagesList(conversations || []);
       setTopProducts(products || []);
       setOrderStatusCounts(statusCounts);
+
+      // Calculate 7-day sales trend
+      const last7Days: { date: string; amount: number; orders: number }[] = [];
+      const now = new Date();
+      for (let i = 6; i >= 0; i--) {
+        const date = new Date(now);
+        date.setDate(date.getDate() - i);
+        const dateStr = date.toISOString().split('T')[0];
+        const dayName = date.toLocaleDateString('en-US', { weekday: 'short' });
+
+        const dayOrders = orders.filter(order => {
+          const orderDate = order.created_at?.toDate?.() || new Date(order.created_at);
+          return orderDate.toISOString().split('T')[0] === dateStr;
+        });
+
+        const dayAmount = dayOrders.reduce((sum, o) => sum + (o.total_amount || 0), 0);
+        last7Days.push({ date: dayName, amount: dayAmount, orders: dayOrders.length });
+      }
+      setDailySales(last7Days);
 
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
@@ -532,6 +553,58 @@ export const VendorDashboardScreen: React.FC = () => {
                       })
                     )}
                   </div>
+                </CardContent>
+              </Card>
+
+              {/* 7-Day Sales Trend */}
+              <Card className="border border-neutral-200 shadow-sm lg:col-span-2">
+                <CardContent className="p-4 md:p-6">
+                  <div className="mb-4 flex items-center justify-between">
+                    <div>
+                      <h3 className="font-heading font-bold text-neutral-900 text-sm md:text-lg flex items-center gap-2">
+                        <TrendingUp className="w-5 h-5 text-green-600" />
+                        7-Day Sales Trend
+                      </h3>
+                      <p className="font-sans text-xs md:text-sm text-neutral-600">
+                        Daily order totals for the past week
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-heading font-bold text-lg text-green-700">
+                        ₦{dailySales.reduce((sum, d) => sum + d.amount, 0).toLocaleString()}
+                      </p>
+                      <p className="text-xs text-neutral-500">Total this week</p>
+                    </div>
+                  </div>
+
+                  {dailySales.some(d => d.amount > 0) ? (
+                    <div className="flex items-end justify-between gap-2 h-40 mt-4">
+                      {dailySales.map((day, index) => {
+                        const maxAmount = Math.max(...dailySales.map(d => d.amount), 1);
+                        const heightPercent = (day.amount / maxAmount) * 100;
+
+                        return (
+                          <div key={index} className="flex-1 flex flex-col items-center gap-2">
+                            <div className="w-full flex-1 flex items-end">
+                              <div
+                                className="w-full bg-gradient-to-t from-green-600 to-green-400 rounded-t-lg hover:from-green-700 hover:to-green-500 transition-all cursor-pointer relative group"
+                                style={{ height: `${Math.max(heightPercent, 5)}%`, minHeight: '8px' }}
+                              >
+                                <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-neutral-800 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10">
+                                  ₦{day.amount.toLocaleString()} ({day.orders} orders)
+                                </div>
+                              </div>
+                            </div>
+                            <span className="text-xs text-neutral-600 font-medium">{day.date}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="h-40 flex items-center justify-center text-neutral-500 text-sm">
+                      No sales data for the past 7 days
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </div>
