@@ -258,11 +258,17 @@ export const CreateProductScreen: React.FC = () => {
         updated_at: new Date().toISOString()
       };
 
+      console.log('DEBUG CreateProduct - user.uid:', user.uid);
+      console.log('DEBUG CreateProduct - vendor object:', vendor);
+      console.log('DEBUG CreateProduct - vendor.id being used:', vendor.id);
+      console.log('DEBUG CreateProduct - productData:', productData);
+
       if (isEditing && id) {
         // Update existing product
         await FirestoreService.updateDocument(COLLECTIONS.PRODUCTS, id, productData);
       } else {
         // Create new product - auto-publish without admin approval
+        console.log('DEBUG CreateProduct - Creating new product with ID:', tempProductId);
         await FirestoreService.setDocument(COLLECTIONS.PRODUCTS, tempProductId, {
           ...productData,
           id: tempProductId,
@@ -272,6 +278,7 @@ export const CreateProductScreen: React.FC = () => {
           created_at: new Date().toISOString(),
           approved_at: new Date().toISOString() // Mark as approved immediately
         });
+        console.log('DEBUG CreateProduct - Product created successfully');
       }
 
       setSuccess(isEditing ? 'Product updated successfully!' : 'Product created successfully!');
