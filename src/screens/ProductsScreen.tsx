@@ -89,12 +89,9 @@ export const ProductsScreen: React.FC = () => {
       try {
         setLoading(true);
 
-        // Fetch active products
+        // Fetch products - use simpler filter to avoid composite index requirement
+        // Filter by is_active only, then filter client-side for status
         const productsData = await FirestoreService.getDocuments<any>(COLLECTIONS.PRODUCTS, {
-          filters: [
-            { field: 'is_active', operator: '==', value: true },
-            { field: 'status', operator: '==', value: 'active' }
-          ],
           orderByField: 'created_at',
           orderByDirection: 'desc'
         });
@@ -105,8 +102,20 @@ export const ProductsScreen: React.FC = () => {
           return;
         }
 
+        // Client-side filter for active products
+        // A product is visible if: (is_active === true) OR (status === 'active')
+        const activeProducts = productsData.filter(p =>
+          p.is_active === true || p.status === 'active'
+        );
+
+        if (activeProducts.length === 0) {
+          setProducts([]);
+          setLoading(false);
+          return;
+        }
+
         // Fetch vendors to map vendor names
-        const vendorIds = Array.from(new Set(productsData.map(p => p.vendor_id).filter(Boolean)));
+        const vendorIds = Array.from(new Set(activeProducts.map(p => p.vendor_id).filter(Boolean)));
         const vendorMap = new Map<string, any>();
 
         if (vendorIds.length > 0) {
@@ -117,7 +126,7 @@ export const ProductsScreen: React.FC = () => {
         }
 
         // Transform products to ProductCard format
-        const transformedProducts = productsData.map(p => transformProduct(p, vendorMap));
+        const transformedProducts = activeProducts.map(p => transformProduct(p, vendorMap));
         setProducts(transformedProducts);
       } catch (error) {
         console.error('Error fetching products:', error);
