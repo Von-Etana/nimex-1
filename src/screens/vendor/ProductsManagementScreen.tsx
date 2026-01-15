@@ -43,33 +43,54 @@ export const ProductsManagementScreen: React.FC = () => {
       let vendorId = user.uid;
       const vendor = await FirestoreService.getDocument<any>(COLLECTIONS.VENDORS, user.uid);
 
+      console.log('DEBUG ProductsManagement - user.uid:', user.uid);
+      console.log('DEBUG ProductsManagement - vendor from getDocument:', vendor);
+
       if (vendor) {
         vendorId = vendor.id || user.uid;
+        console.log('DEBUG ProductsManagement - using vendorId from vendor.id:', vendorId);
       } else {
         // Try to find vendor by user_id field
         const vendorsByUserId = await FirestoreService.getDocuments<any>(COLLECTIONS.VENDORS, {
           filters: [{ field: 'user_id', operator: '==', value: user.uid }],
           limitCount: 1
         });
+        console.log('DEBUG ProductsManagement - vendorsByUserId query result:', vendorsByUserId);
         if (vendorsByUserId.length > 0) {
           vendorId = vendorsByUserId[0].id || user.uid;
+          console.log('DEBUG ProductsManagement - using vendorId from query:', vendorId);
         }
       }
 
-      // Fetch products - try both vendor_id values
+      console.log('DEBUG ProductsManagement - Final vendorId for product query:', vendorId);
+
+      // Fetch products by vendor_id
       const productsData = await FirestoreService.getDocuments<Product>(COLLECTIONS.PRODUCTS, {
         filters: [{ field: 'vendor_id', operator: '==', value: vendorId }],
         orderByField: 'created_at',
         orderByDirection: 'desc'
       });
 
-      // Fetch categories to map names (since Firestore doesn't do joins)
-      // Optimization: Fetch only unique category IDs or fetch all categories if list is small
-      // For now, I'll fetch all categories as they are likely cached or not too many
+      console.log('DEBUG ProductsManagement - Products found:', productsData.length, productsData);
+
+      // If no products found with vendorId, also try user.uid (in case of mismatch)
+      let allProducts = productsData;
+      if (productsData.length === 0 && vendorId !== user.uid) {
+        console.log('DEBUG ProductsManagement - No products with vendorId, trying user.uid...');
+        const productsWithUserId = await FirestoreService.getDocuments<Product>(COLLECTIONS.PRODUCTS, {
+          filters: [{ field: 'vendor_id', operator: '==', value: user.uid }],
+          orderByField: 'created_at',
+          orderByDirection: 'desc'
+        });
+        console.log('DEBUG ProductsManagement - Products with user.uid:', productsWithUserId.length);
+        allProducts = productsWithUserId;
+      }
+
+      // Fetch categories to map names
       const categories = await FirestoreService.getDocuments<any>(COLLECTIONS.CATEGORIES);
       const categoryMap = new Map(categories.map(c => [c.id, c.name]));
 
-      const productsWithCategory = productsData.map(p => ({
+      const productsWithCategory = allProducts.map(p => ({
         ...p,
         category_name: p.category_id ? categoryMap.get(p.category_id) : undefined
       }));
