@@ -80,11 +80,32 @@ export const RecommendationsSection = (): JSX.Element => {
       });
 
       // Filter for active products: is_active=true OR status='active'
-      const newArrivals = (allProducts || [])
+      const activeProducts = (allProducts || [])
         .filter(p => p.is_active === true || p.status === 'active')
         .slice(0, 4);
 
-      setFreshRecommendations(newArrivals);
+      // Transform products to match ProductCard interface
+      const transformedProducts = activeProducts.map(p => ({
+        id: p.id,
+        name: p.title || p.name || 'Untitled Product',
+        price: p.price || 0,
+        originalPrice: p.compare_at_price || undefined,
+        image: p.image_url || (p.images && p.images[0]) || '/placeholder.png',
+        images: p.images || [],
+        vendor: p.vendor_name || 'Vendor',
+        vendorId: p.vendor_id || '',
+        rating: p.rating || 0,
+        reviews: p.reviews_count || 0,
+        category: p.category_name || 'General',
+        inStock: (p.stock_quantity || 0) > 0,
+        discount: p.compare_at_price ? Math.round(((p.compare_at_price - p.price) / p.compare_at_price) * 100) : undefined,
+        tags: p.tags || [],
+        video_url: p.video_url,
+        location: p.location,
+        isVerified: p.is_verified || false
+      }));
+
+      setFreshRecommendations(transformedProducts);
 
     } catch (error) {
       console.error("Error fetching recommendations:", error);
