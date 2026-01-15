@@ -3,6 +3,7 @@ import { COLLECTIONS } from '../lib/collections';
 import { logger } from '../lib/logger';
 import { Timestamp } from 'firebase/firestore';
 import type { Order, OrderItem, Vendor } from '../types/firestore';
+import { notificationService } from './notificationService';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:5001/anima-project/us-central1'; // Default to local emulator for dev, or cloud url
 
@@ -59,6 +60,17 @@ class OrderService {
 
       // Use transaction to create order and items
       await FirestoreService.runTransaction(async (transaction) => {
+        // First, validate stock for all items
+        for (const item of request.items) {
+          const product = await FirestoreService.getDocument<any>(COLLECTIONS.PRODUCTS, item.productId);
+          if (!product) {
+            throw new Error(`Product ${item.productId} not found`);
+          }
+          if ((product.stock_quantity || 0) < item.quantity) {
+            throw new Error(`Insufficient stock for ${item.productTitle}. Available: ${product.stock_quantity || 0}, Requested: ${item.quantity}`);
+          }
+        }
+
         // Create order
         await FirestoreService.setDocument(COLLECTIONS.ORDERS, orderId, {
           order_number: orderNumber,
@@ -75,7 +87,7 @@ class OrderService {
           updated_at: Timestamp.now(),
         });
 
-        // Create order items
+        // Create order items and reduce stock
         for (const item of request.items) {
           const itemId = `item_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
           await FirestoreService.setDocument(COLLECTIONS.ORDER_ITEMS, itemId, {
@@ -89,8 +101,26 @@ class OrderService {
             created_at: Timestamp.now(),
             updated_at: Timestamp.now(),
           });
+
+          // Reduce stock quantity
+          const product = await FirestoreService.getDocument<any>(COLLECTIONS.PRODUCTS, item.productId);
+          if (product) {
+            const newStock = Math.max(0, (product.stock_quantity || 0) - item.quantity);
+            await FirestoreService.updateDocument(COLLECTIONS.PRODUCTS, item.productId, {
+              stock_quantity: newStock,
+              updated_at: Timestamp.now(),
+            });
+          }
         }
       });
+
+      // Notify vendor about new order
+      await notificationService.notifyVendorNewOrder(
+        request.vendorId,
+        orderId,
+        orderNumber,
+        totalAmount
+      );
 
       return {
         success: true,
@@ -115,12 +145,25 @@ class OrderService {
     paymentMethod: string
   ): Promise<{ success: boolean; error?: string }> {
     try {
+      // Get order to fetch buyer_id for notification
+      const order = await FirestoreService.getDocument<any>(COLLECTIONS.ORDERS, orderId);
+
       await FirestoreService.updateDocument(COLLECTIONS.ORDERS, orderId, {
         payment_status: paymentStatus,
         payment_reference: paymentReference,
         payment_method: paymentMethod,
         status: paymentStatus === 'paid' ? 'confirmed' : 'cancelled',
       });
+
+      // Notify buyer about order confirmation
+      if (order && paymentStatus === 'paid') {
+        await notificationService.notifyOrderStatusChange(
+          order.buyer_id,
+          orderId,
+          order.order_number,
+          'confirmed'
+        );
+      }
 
       return { success: true };
     } catch (error) {
