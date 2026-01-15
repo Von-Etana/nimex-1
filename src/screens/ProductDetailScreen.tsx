@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Heart, Share2, MessageCircle, ShoppingCart, MapPin, Star, Shield } from 'lucide-react';
+import { ArrowLeft, Heart, Share2, MessageCircle, ShoppingCart, MapPin, Star, Shield, Zap } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Card, CardContent } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
@@ -190,6 +190,35 @@ export const ProductDetailScreen: React.FC = () => {
     navigate('/cart');
   };
 
+  const handleBuyNow = () => {
+    if (!user) {
+      navigate('/login');
+      return;
+    }
+
+    if (!product) return;
+
+    // Create cart item for checkout
+    const buyNowItem = {
+      id: Date.now().toString(),
+      product_id: product.id,
+      title: product.title,
+      price: product.price,
+      image: images[0],
+      vendor_id: product.vendor_id,
+      vendor_name: vendor?.business_name || 'Vendor',
+      quantity: 1
+    };
+
+    // Navigate directly to checkout with the item
+    navigate('/checkout', {
+      state: {
+        cartItems: [buyNowItem],
+        isBuyNow: true  // Flag to indicate this is a direct purchase
+      }
+    });
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-white flex items-center justify-center">
@@ -324,24 +353,38 @@ export const ProductDetailScreen: React.FC = () => {
               )}
             </div>
 
-            <div className="flex gap-3">
-              <Button
-                onClick={handleAddToCart}
-                className="flex-1 h-12 bg-primary-500 hover:bg-primary-600"
-              >
-                <ShoppingCart className="w-5 h-5 mr-2" />
-                Add to Cart
-              </Button>
-              <Button
-                variant="outline"
-                onClick={toggleFavorite}
-                className={`h-12 px-4 ${isFavorite ? 'text-error border-error' : ''}`}
-              >
-                <Heart className={`w-5 h-5 ${isFavorite ? 'fill-error' : ''}`} />
-              </Button>
-              <Button variant="outline" className="h-12 px-4">
-                <Share2 className="w-5 h-5" />
-              </Button>
+            <div className="flex flex-col gap-3">
+              <div className="flex gap-3">
+                <Button
+                  onClick={handleBuyNow}
+                  className="flex-1 h-12 bg-gradient-to-r from-primary-600 to-primary-500 hover:from-primary-700 hover:to-primary-600 text-white font-semibold shadow-lg"
+                >
+                  <Zap className="w-5 h-5 mr-2" />
+                  Buy Now
+                </Button>
+                <Button
+                  onClick={handleAddToCart}
+                  variant="outline"
+                  className="flex-1 h-12 border-primary-500 text-primary-500 hover:bg-primary-50"
+                >
+                  <ShoppingCart className="w-5 h-5 mr-2" />
+                  Add to Cart
+                </Button>
+              </div>
+              <div className="flex gap-3">
+                <Button
+                  variant="outline"
+                  onClick={toggleFavorite}
+                  className={`flex-1 h-12 ${isFavorite ? 'text-error border-error' : ''}`}
+                >
+                  <Heart className={`w-5 h-5 mr-2 ${isFavorite ? 'fill-error' : ''}`} />
+                  {isFavorite ? 'Saved' : 'Save'}
+                </Button>
+                <Button variant="outline" className="flex-1 h-12">
+                  <Share2 className="w-5 h-5 mr-2" />
+                  Share
+                </Button>
+              </div>
             </div>
 
             <Button
