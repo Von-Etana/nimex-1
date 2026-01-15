@@ -72,14 +72,19 @@ export const RecommendationsSection = (): JSX.Element => {
       setTopVendors(vendors);
 
       // Fetch Fresh Recommendations (New Arrivals)
-      const newArrivals = await FirestoreService.getDocuments<any>(COLLECTIONS.PRODUCTS, {
-        filters: [{ field: 'is_active', operator: '==', value: true }],
+      // Fetch all products and filter client-side to handle both is_active and status fields
+      const allProducts = await FirestoreService.getDocuments<any>(COLLECTIONS.PRODUCTS, {
         orderByField: 'created_at',
         orderByDirection: 'desc',
-        limitCount: 4
+        limitCount: 20  // Fetch more to filter from
       });
 
-      setFreshRecommendations(newArrivals || []);
+      // Filter for active products: is_active=true OR status='active'
+      const newArrivals = (allProducts || [])
+        .filter(p => p.is_active === true || p.status === 'active')
+        .slice(0, 4);
+
+      setFreshRecommendations(newArrivals);
 
     } catch (error) {
       console.error("Error fetching recommendations:", error);
