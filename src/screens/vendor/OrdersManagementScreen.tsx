@@ -41,12 +41,24 @@ export const OrdersManagementScreen: React.FC = () => {
       setLoading(true);
       if (!user) return;
 
-      // Get vendor ID
-      const vendor = await FirestoreService.getDocument<any>(COLLECTIONS.VENDORS, user.uid);
-      if (!vendor) return;
+      // Get vendor ID - use the same pattern as CreateProductScreen.tsx
+      const vendors = await FirestoreService.getDocuments<any>(COLLECTIONS.VENDORS, {
+        filters: [{ field: 'user_id', operator: '==', value: user.uid }],
+        limitCount: 1
+      });
+
+      if (vendors.length === 0) {
+        console.log('DEBUG OrdersManagement - No vendor found for user');
+        setOrders([]);
+        setLoading(false);
+        return;
+      }
+
+      const vendor = vendors[0];
+      const vendorId = vendor.id;
 
       const ordersData = await FirestoreService.getDocuments<Order>(COLLECTIONS.ORDERS, {
-        filters: [{ field: 'vendor_id', operator: '==', value: vendor.id || user.uid }],
+        filters: [{ field: 'vendor_id', operator: '==', value: vendorId }],
         orderByField: 'created_at',
         orderByDirection: 'desc'
       });
