@@ -110,6 +110,7 @@ export const HeroSection = (): JSX.Element => {
 
   const mapProducts = (products: any[]) => {
     return products.map(p => ({
+      id: p.id,  // Include the actual Firestore document ID
       image: p.image_url || "https://via.placeholder.com/150",
       title: p.name,
       price: `₦ ${p.price.toLocaleString()}`,
@@ -125,6 +126,7 @@ export const HeroSection = (): JSX.Element => {
 
   const mapVendors = (vendors: any[]) => {
     return vendors.map(v => ({
+      id: v.id,  // Include the actual Firestore document ID
       image: v.avatar_url || v.logo_url || "https://via.placeholder.com/150",
       title: v.business_name,
       price: "100+ Products",
