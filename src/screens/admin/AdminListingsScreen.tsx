@@ -284,7 +284,7 @@ export const AdminListingsScreen: React.FC = () => {
                                     </button>
                                   )}
                                   <button
-                                    onClick={() => navigate(`/products/${listing.id}`)}
+                                    onClick={() => navigate(`/product/${listing.id}`)}
                                     className="p-2 hover:bg-neutral-100 rounded-lg transition-colors"
                                     title="View details"
                                   >
@@ -364,7 +364,7 @@ export const AdminListingsScreen: React.FC = () => {
                             </button>
                           )}
                           <button
-                            onClick={() => navigate(`/products/${listing.id}`)}
+                            onClick={() => navigate(`/product/${listing.id}`)}
                             className="p-2 bg-neutral-100 rounded-lg hover:bg-neutral-200 transition-colors"
                           >
                             <Eye className="w-4 h-4 text-neutral-600" />
