@@ -47,19 +47,12 @@ export const AdminListingsScreen: React.FC = () => {
       const vendorMap = new Map<string, string>();
 
       if (vendorIds.length > 0) {
-        // Fetch vendors. If list is long, we might need to batch or fetch all.
-        // For now, fetch all vendors if > 10, or use 'in' query.
-        let vendors: any[] = [];
-        if (vendorIds.length <= 10) {
-          vendors = await FirestoreService.getDocuments('vendors', {
-            filters: [{ field: 'id', operator: 'in', value: vendorIds }]
-          });
-        } else {
-          vendors = await FirestoreService.getDocuments('vendors');
-        }
+        // Fetch all vendors since we can't filter by document ID using 'in' query
+        // The 'id' is the document ID, not a field, so filters: [{ field: 'id', operator: 'in', value: vendorIds }] won't work
+        const vendors = await FirestoreService.getDocuments<any>('vendors');
 
         vendors.forEach(v => {
-          vendorMap.set(v.id, v.business_name);
+          vendorMap.set(v.id, v.business_name || 'Unknown Vendor');
         });
       }
 
