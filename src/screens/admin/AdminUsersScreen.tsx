@@ -38,16 +38,20 @@ export const AdminUsersScreen: React.FC = () => {
     try {
       let profilesData: User[] = [];
 
+      console.log('DEBUG AdminUsersScreen: Loading users, filterType:', filterType);
+
+      // Try simpler query without orderBy to avoid index requirement
       if (filterType !== 'all') {
+        console.log('DEBUG AdminUsersScreen: Fetching with filter');
         profilesData = await FirestoreService.getDocuments<User>('profiles', {
-          filters: [{ field: 'role', operator: '==', value: filterType }],
-          orderBy: { field: 'created_at', direction: 'desc' }
+          filters: [{ field: 'role', operator: '==', value: filterType }]
         });
       } else {
-        profilesData = await FirestoreService.getDocuments<User>('profiles', {
-          orderBy: { field: 'created_at', direction: 'desc' }
-        });
+        console.log('DEBUG AdminUsersScreen: Fetching all profiles');
+        profilesData = await FirestoreService.getDocuments<User>('profiles');
       }
+
+      console.log('DEBUG AdminUsersScreen: Profiles fetched:', profilesData?.length, profilesData);
 
       if (profilesData) {
         setUsers(profilesData);
@@ -116,7 +120,7 @@ export const AdminUsersScreen: React.FC = () => {
         }
       }
 
-      await FirestoreService.createDocument('system_logs', {
+      await FirestoreService.addDocument('system_logs', {
         level: 'warning',
         source: 'admin',
         event: 'user_suspended',
@@ -150,7 +154,7 @@ export const AdminUsersScreen: React.FC = () => {
         }
       }
 
-      await FirestoreService.createDocument('system_logs', {
+      await FirestoreService.addDocument('system_logs', {
         level: 'info',
         source: 'admin',
         event: 'user_activated',
