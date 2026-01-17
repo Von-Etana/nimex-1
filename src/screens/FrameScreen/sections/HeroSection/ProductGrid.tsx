@@ -6,6 +6,7 @@ import { Eye, MapPin, CheckCircle, ArrowRight, Star, Heart } from 'lucide-react'
 import { Button } from '../../../../components/ui/button';
 
 interface Product {
+  id?: string;  // Firestore document ID
   image: string;
   title: string;
   price: string;
@@ -40,7 +41,8 @@ export const ProductGrid: React.FC<ProductGridProps> = ({
   const navigate = useNavigate();
 
   const handleProductClick = (product: Product, index: number) => {
-    const productId = `product-${index + 1}`;
+    // Use the actual Firestore document ID if available, otherwise fall back to index-based ID
+    const productId = product.id || `product-${index + 1}`;
     navigate(`/product/${productId}`, { state: { product } });
   };
 
@@ -97,10 +99,10 @@ export const ProductGrid: React.FC<ProductGridProps> = ({
                 {/* Badge */}
                 <Badge
                   className={`absolute top-2 left-2 px-2 py-0.5 rounded-md font-semibold text-[10px] shadow-sm ${product.badge.variant === 'yellow'
-                      ? 'bg-amber-400 text-amber-900'
-                      : product.badge.variant === 'green'
-                        ? 'bg-emerald-500 text-white'
-                        : 'bg-red-500 text-white'
+                    ? 'bg-amber-400 text-amber-900'
+                    : product.badge.variant === 'green'
+                      ? 'bg-emerald-500 text-white'
+                      : 'bg-red-500 text-white'
                     }`}
                 >
                   {product.badge.text}
@@ -174,8 +176,8 @@ export const ProductGrid: React.FC<ProductGridProps> = ({
                     <Star
                       key={i}
                       className={`w-3 h-3 ${i < product.rating
-                          ? 'text-amber-400 fill-amber-400'
-                          : 'text-neutral-200 fill-neutral-200'
+                        ? 'text-amber-400 fill-amber-400'
+                        : 'text-neutral-200 fill-neutral-200'
                         }`}
                     />
                   ))}
