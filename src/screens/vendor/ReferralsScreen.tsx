@@ -40,9 +40,14 @@ export const ReferralsScreen: React.FC = () => {
     if (!user) return;
 
     try {
-      const vendor = await FirestoreService.getDocument<any>(COLLECTIONS.VENDORS, user.uid);
+      // Get vendor ID - use the same pattern as CreateProductScreen.tsx
+      const vendors = await FirestoreService.getDocuments<any>(COLLECTIONS.VENDORS, {
+        filters: [{ field: 'user_id', operator: '==', value: user.uid }],
+        limitCount: 1
+      });
 
-      if (vendor) {
+      if (vendors.length > 0) {
+        const vendor = vendors[0];
         setVendorId(vendor.id);
         setReferralCode(vendor.referral_code);
 
@@ -314,11 +319,10 @@ export const ReferralsScreen: React.FC = () => {
                         </td>
                         <td className="px-4 py-3">
                           <span
-                            className={`inline-block px-2 py-1 rounded-full text-xs font-semibold ${
-                              referral.commissionPaid
+                            className={`inline-block px-2 py-1 rounded-full text-xs font-semibold ${referral.commissionPaid
                                 ? 'bg-green-100 text-green-800'
                                 : 'bg-yellow-100 text-yellow-800'
-                            }`}
+                              }`}
                           >
                             {referral.commissionPaid ? 'Paid' : 'Pending'}
                           </span>
