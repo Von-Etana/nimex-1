@@ -67,26 +67,31 @@ export const HeroSection = (): JSX.Element => {
     try {
       setLoading(true);
 
-      // Fetch Fresh Recommendations
-      const fresh = await FirestoreService.getDocuments<any>(COLLECTIONS.PRODUCTS, {
-        filters: [{ field: 'is_active', operator: '==', value: true }],
+      // Fetch products and filter client-side to avoid composite index requirement
+      const allProducts = await FirestoreService.getDocuments<any>(COLLECTIONS.PRODUCTS, {
         orderByField: 'created_at',
         orderByDirection: 'desc',
-        limitCount: 6
+        limitCount: 50  // Fetch more to filter from
       });
-      setFreshRecommendations(mapProducts(fresh));
 
-      // Fetch Top Vendors
-      const vendors = await FirestoreService.getDocuments<any>(COLLECTIONS.VENDORS, {
-        filters: [{ field: 'is_active', operator: '==', value: true }],
-        limitCount: 6
+      // Filter for active products: is_active=true OR status='active'
+      const activeProducts = (allProducts || []).filter(p =>
+        p.is_active === true || p.status === 'active'
+      ).slice(0, 6);
+
+      setFreshRecommendations(mapProducts(activeProducts));
+
+      // Fetch Top Vendors - also avoid composite index
+      const allVendors = await FirestoreService.getDocuments<any>(COLLECTIONS.VENDORS, {
+        limitCount: 50
       });
-      setTopVendorsList(mapVendors(vendors));
+      const activeVendors = (allVendors || []).filter(v => v.is_active === true).slice(0, 6);
+      setTopVendorsList(mapVendors(activeVendors));
 
-      setElectronics(mapProducts(fresh));
-      setFashion(mapProducts(fresh));
-      setHomeOffice(mapProducts(fresh));
-      setGroceries(mapProducts(fresh));
+      setElectronics(mapProducts(activeProducts));
+      setFashion(mapProducts(activeProducts));
+      setHomeOffice(mapProducts(activeProducts));
+      setGroceries(mapProducts(activeProducts));
 
     } catch (error) {
       console.error("Error fetching home data:", error);
@@ -112,11 +117,11 @@ export const HeroSection = (): JSX.Element => {
 
   const mapVendors = (vendors: any[]) => {
     return vendors.map(v => ({
-      image: v.logo_url || "https://via.placeholder.com/150",
+      image: v.avatar_url || v.logo_url || "https://via.placeholder.com/150",
       title: v.business_name,
       price: "100+ Products",
       vendor: v.business_name,
-      vendorImage: v.logo_url || "https://via.placeholder.com/50",
+      vendorImage: v.avatar_url || v.logo_url || "https://via.placeholder.com/50",
       location: v.market_location || "Lagos",
       views: "1k",
       rating: 5,
