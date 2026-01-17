@@ -74,10 +74,14 @@ export const HeroSection = (): JSX.Element => {
         limitCount: 50  // Fetch more to filter from
       });
 
+      console.log('DEBUG HeroSection: All products fetched:', allProducts?.length, allProducts);
+
       // Filter for active products: is_active=true OR status='active'
       const activeProducts = (allProducts || []).filter(p =>
         p.is_active === true || p.status === 'active'
       ).slice(0, 6);
+
+      console.log('DEBUG HeroSection: Active products after filter:', activeProducts.length, activeProducts);
 
       setFreshRecommendations(mapProducts(activeProducts));
 
@@ -85,7 +89,11 @@ export const HeroSection = (): JSX.Element => {
       const allVendors = await FirestoreService.getDocuments<any>(COLLECTIONS.VENDORS, {
         limitCount: 50
       });
+      console.log('DEBUG HeroSection: All vendors fetched:', allVendors?.length, allVendors);
+
       const activeVendors = (allVendors || []).filter(v => v.is_active === true).slice(0, 6);
+      console.log('DEBUG HeroSection: Active vendors after filter:', activeVendors.length, activeVendors);
+
       setTopVendorsList(mapVendors(activeVendors));
 
       setElectronics(mapProducts(activeProducts));
