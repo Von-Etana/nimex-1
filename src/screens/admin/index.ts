@@ -10,4 +10,4 @@ export * from './AdminSettingsScreen';
 export * from './AdminSettingsDetailScreen';
 export * from './AdminMarketersScreen';
 export * from './AdminCommissionsScreen';
-export * from './AdminWithdrawalsScreen';
+export * from './AdminWithdrawalScreen';
