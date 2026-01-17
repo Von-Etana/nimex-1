@@ -65,10 +65,12 @@ export const RecommendationsSection = (): JSX.Element => {
 
       // Fetch Trending Products
       const trending = await recommendationService.getTrendingProducts(4);
+      console.log('DEBUG: Trending products fetched:', trending.length, trending);
       setTrendingProducts(trending);
 
       // Fetch Top Vendors
       const vendors = await recommendationService.getTopVendors(4);
+      console.log('DEBUG: Top vendors fetched:', vendors.length, vendors);
       setTopVendors(vendors);
 
       // Fetch Fresh Recommendations (New Arrivals)
@@ -79,10 +81,14 @@ export const RecommendationsSection = (): JSX.Element => {
         limitCount: 20  // Fetch more to filter from
       });
 
+      console.log('DEBUG: All products fetched:', allProducts?.length, allProducts);
+
       // Filter for active products: is_active=true OR status='active'
       const activeProducts = (allProducts || [])
         .filter(p => p.is_active === true || p.status === 'active')
         .slice(0, 4);
+
+      console.log('DEBUG: Active products after filter:', activeProducts.length, activeProducts);
 
       // Transform products to match ProductCard interface
       const transformedProducts = activeProducts.map(p => ({
