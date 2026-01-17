@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Card, CardContent } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Search, CheckCircle, XCircle, Eye, Loader2 } from 'lucide-react';
@@ -16,6 +17,7 @@ interface Listing {
 }
 
 export const AdminListingsScreen: React.FC = () => {
+  const navigate = useNavigate();
   const [listings, setListings] = useState<Listing[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
@@ -281,7 +283,11 @@ export const AdminListingsScreen: React.FC = () => {
                                       <XCircle className="w-5 h-5 text-red-600" />
                                     </button>
                                   )}
-                                  <button className="p-2 hover:bg-neutral-100 rounded-lg transition-colors" title="View details">
+                                  <button
+                                    onClick={() => navigate(`/products/${listing.id}`)}
+                                    className="p-2 hover:bg-neutral-100 rounded-lg transition-colors"
+                                    title="View details"
+                                  >
                                     <Eye className="w-5 h-5 text-neutral-600" />
                                   </button>
                                 </>
@@ -357,7 +363,10 @@ export const AdminListingsScreen: React.FC = () => {
                               Reject
                             </button>
                           )}
-                          <button className="p-2 bg-neutral-100 rounded-lg hover:bg-neutral-200 transition-colors">
+                          <button
+                            onClick={() => navigate(`/products/${listing.id}`)}
+                            className="p-2 bg-neutral-100 rounded-lg hover:bg-neutral-200 transition-colors"
+                          >
                             <Eye className="w-4 h-4 text-neutral-600" />
                           </button>
                         </>
