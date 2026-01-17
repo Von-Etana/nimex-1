@@ -133,10 +133,14 @@ export const VendorAccountScreen: React.FC = () => {
         });
       }
 
-      // Load Vendor Data
-      const vendorData = await FirestoreService.getDocument<Vendor>(COLLECTIONS.VENDORS, user.uid);
+      // Load Vendor Data - use the same pattern as CreateProductScreen.tsx
+      const vendors = await FirestoreService.getDocuments<Vendor>(COLLECTIONS.VENDORS, {
+        filters: [{ field: 'user_id', operator: '==', value: user.uid }],
+        limitCount: 1
+      });
 
-      if (vendorData) {
+      if (vendors.length > 0) {
+        const vendorData = vendors[0];
         setVendor(vendorData);
 
         // Parse payout methods
