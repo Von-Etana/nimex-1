@@ -121,8 +121,8 @@ export const RecommendationsSection = (): JSX.Element => {
     >
       <div className="flex items-center gap-3 mb-3">
         <div className="w-12 h-12 rounded-full bg-neutral-100 overflow-hidden">
-          {vendor.logo_url ? (
-            <img src={vendor.logo_url} alt={vendor.business_name} className="w-full h-full object-cover" />
+          {(vendor.avatar_url || vendor.logo_url) ? (
+            <img src={vendor.avatar_url || vendor.logo_url} alt={vendor.business_name} className="w-full h-full object-cover" />
           ) : (
             <div className="w-full h-full flex items-center justify-center text-neutral-400 font-bold text-lg">
               {vendor.business_name?.charAt(0)}
