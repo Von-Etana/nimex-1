@@ -354,14 +354,26 @@ export const ProductDetailScreen: React.FC = () => {
                   Product Video
                 </h3>
                 <div className="aspect-video rounded-lg overflow-hidden bg-neutral-900">
-                  <iframe
-                    src={product.video_url.replace('watch?v=', 'embed/').replace('vimeo.com/', 'player.vimeo.com/video/')}
-                    title="Product Video"
-                    className="w-full h-full"
-                    frameBorder="0"
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                    allowFullScreen
-                  />
+                  {/* Check if it's a YouTube or Vimeo URL, otherwise use HTML5 video */}
+                  {product.video_url.includes('youtube.com') || product.video_url.includes('youtu.be') || product.video_url.includes('vimeo.com') ? (
+                    <iframe
+                      src={product.video_url.replace('watch?v=', 'embed/').replace('youtu.be/', 'youtube.com/embed/').replace('vimeo.com/', 'player.vimeo.com/video/')}
+                      title="Product Video"
+                      className="w-full h-full"
+                      frameBorder="0"
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                      allowFullScreen
+                    />
+                  ) : (
+                    <video
+                      src={product.video_url}
+                      controls
+                      className="w-full h-full object-contain"
+                      preload="metadata"
+                    >
+                      Your browser does not support the video tag.
+                    </video>
+                  )}
                 </div>
               </div>
             )}
