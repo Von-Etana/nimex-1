@@ -73,15 +73,25 @@ class RecommendationService {
    */
   async getTrendingProducts(limit: number = 20): Promise<ProductRecommendation[]> {
     try {
-      // Get products ordered by view_count
-      const products = await FirestoreService.getDocuments<Product>(COLLECTIONS.PRODUCTS, {
-        filters: [{ field: 'status', operator: '==', value: 'active' }],
-        orderByField: 'view_count',
+      // Fetch products ordered by created_at (most indexes support this)
+      // Then filter client-side for active status to avoid composite index requirement
+      const allProducts = await FirestoreService.getDocuments<Product>(COLLECTIONS.PRODUCTS, {
+        orderByField: 'created_at',
         orderByDirection: 'desc',
-        limitCount: limit
+        limitCount: 50  // Fetch more to filter from
       });
 
-      return products.map(product => ({
+      // Filter for active products
+      const activeProducts = (allProducts || []).filter(p =>
+        p.status === 'active' || p.is_active === true
+      );
+
+      // Sort by view_count client-side
+      const sortedProducts = activeProducts
+        .sort((a, b) => (b.view_count || 0) - (a.view_count || 0))
+        .slice(0, limit);
+
+      return sortedProducts.map(product => ({
         product,
         score: Math.min((product.view_count || 0) / 100, 1), // Normalize score
         reason: 'Trending this week'
@@ -98,17 +108,17 @@ class RecommendationService {
    */
   async getTopVendors(limit: number = 10): Promise<VendorRanking[]> {
     try {
-      const vendors = await FirestoreService.getDocuments<Vendor>(COLLECTIONS.VENDORS, {
-        filters: [
-          { field: 'is_active', operator: '==', value: true },
-          { field: 'subscription_status', operator: '==', value: 'active' }
-        ],
-        orderByField: 'rating', // Or total_sales
-        orderByDirection: 'desc',
-        limitCount: limit * 2
+      // Fetch vendors without composite filters to avoid index requirement
+      const allVendors = await FirestoreService.getDocuments<Vendor>(COLLECTIONS.VENDORS, {
+        limitCount: 100  // Fetch more to filter from
       });
 
-      const rankings: VendorRanking[] = vendors.map(vendor => {
+      // Filter client-side for active vendors with active subscription
+      const activeVendors = (allVendors || []).filter(vendor =>
+        vendor.is_active === true && vendor.subscription_status === 'active'
+      );
+
+      const rankings: VendorRanking[] = activeVendors.map(vendor => {
         const totalSales = vendor.total_sales || 0;
         const rating = vendor.rating || 0;
         const responseTime = vendor.response_time || 24;
