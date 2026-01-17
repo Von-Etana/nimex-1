@@ -39,58 +39,52 @@ export const ProductsManagementScreen: React.FC = () => {
 
       if (!user) return;
 
-      // Get vendor ID - try direct lookup first, then by user_id field
-      let vendorId = user.uid;
-      const vendor = await FirestoreService.getDocument<any>(COLLECTIONS.VENDORS, user.uid);
+      // Get vendor ID - use the same pattern as CreateProductScreen.tsx
+      // Query by user_id field to find the vendor document
+      const vendors = await FirestoreService.getDocuments<any>(COLLECTIONS.VENDORS, {
+        filters: [{ field: 'user_id', operator: '==', value: user.uid }],
+        limitCount: 1
+      });
 
       console.log('DEBUG ProductsManagement - user.uid:', user.uid);
-      console.log('DEBUG ProductsManagement - vendor from getDocument:', vendor);
+      console.log('DEBUG ProductsManagement - vendors query result:', vendors);
 
-      if (vendor) {
-        vendorId = vendor.id || user.uid;
-        console.log('DEBUG ProductsManagement - using vendorId from vendor.id:', vendorId);
+      let vendorId = user.uid; // Default to user.uid
+
+      if (vendors.length > 0) {
+        const vendor = vendors[0];
+        vendorId = vendor.id;
+        console.log('DEBUG ProductsManagement - using vendor.id:', vendorId);
       } else {
-        // Try to find vendor by user_id field
-        const vendorsByUserId = await FirestoreService.getDocuments<any>(COLLECTIONS.VENDORS, {
-          filters: [{ field: 'user_id', operator: '==', value: user.uid }],
-          limitCount: 1
-        });
-        console.log('DEBUG ProductsManagement - vendorsByUserId query result:', vendorsByUserId);
-        if (vendorsByUserId.length > 0) {
-          vendorId = vendorsByUserId[0].id || user.uid;
-          console.log('DEBUG ProductsManagement - using vendorId from query:', vendorId);
-        }
+        console.log('DEBUG ProductsManagement - No vendor found, using user.uid as vendorId');
       }
 
-      console.log('DEBUG ProductsManagement - Final vendorId for product query:', vendorId);
-
       // Fetch products by vendor_id
-      const productsData = await FirestoreService.getDocuments<Product>(COLLECTIONS.PRODUCTS, {
+      let productsData = await FirestoreService.getDocuments<Product>(COLLECTIONS.PRODUCTS, {
         filters: [{ field: 'vendor_id', operator: '==', value: vendorId }],
         orderByField: 'created_at',
         orderByDirection: 'desc'
       });
 
-      console.log('DEBUG ProductsManagement - Products found:', productsData.length, productsData);
+      console.log('DEBUG ProductsManagement - Products found with vendor.id:', productsData.length);
 
-      // If no products found with vendorId, also try user.uid (in case of mismatch)
-      let allProducts = productsData;
+      // Fallback: If no products found AND vendorId != user.uid, try with user.uid
+      // This handles legacy products that were created with user.uid as vendor_id
       if (productsData.length === 0 && vendorId !== user.uid) {
-        console.log('DEBUG ProductsManagement - No products with vendorId, trying user.uid...');
-        const productsWithUserId = await FirestoreService.getDocuments<Product>(COLLECTIONS.PRODUCTS, {
+        console.log('DEBUG ProductsManagement - No products found, trying with user.uid as fallback');
+        productsData = await FirestoreService.getDocuments<Product>(COLLECTIONS.PRODUCTS, {
           filters: [{ field: 'vendor_id', operator: '==', value: user.uid }],
           orderByField: 'created_at',
           orderByDirection: 'desc'
         });
-        console.log('DEBUG ProductsManagement - Products with user.uid:', productsWithUserId.length);
-        allProducts = productsWithUserId;
+        console.log('DEBUG ProductsManagement - Products found with user.uid fallback:', productsData.length);
       }
 
       // Fetch categories to map names
       const categories = await FirestoreService.getDocuments<any>(COLLECTIONS.CATEGORIES);
       const categoryMap = new Map(categories.map(c => [c.id, c.name]));
 
-      const productsWithCategory = allProducts.map(p => ({
+      const productsWithCategory = productsData.map(p => ({
         ...p,
         category_name: p.category_id ? categoryMap.get(p.category_id) : undefined
       }));
@@ -102,6 +96,7 @@ export const ProductsManagementScreen: React.FC = () => {
       setLoading(false);
     }
   };
+
 
   const toggleProductStatus = async (productId: string, currentStatus: boolean) => {
     try {
