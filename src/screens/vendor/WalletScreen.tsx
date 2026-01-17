@@ -87,9 +87,14 @@ export const WalletScreen: React.FC = () => {
     if (!user) return;
 
     try {
-      const data = await FirestoreService.getDocument<VendorData>(COLLECTIONS.VENDORS, user.uid);
-      if (data) {
-        setVendorData(data);
+      // Get vendor ID - use the same pattern as CreateProductScreen.tsx
+      const vendors = await FirestoreService.getDocuments<VendorData>(COLLECTIONS.VENDORS, {
+        filters: [{ field: 'user_id', operator: '==', value: user.uid }],
+        limitCount: 1
+      });
+
+      if (vendors.length > 0) {
+        setVendorData(vendors[0]);
       }
     } catch (err) {
       console.error('Error loading vendor data:', err);
@@ -102,11 +107,17 @@ export const WalletScreen: React.FC = () => {
     if (!user) return;
 
     try {
-      const vendorData = await FirestoreService.getDocument<any>(COLLECTIONS.VENDORS, user.uid);
-      if (!vendorData) return;
+      // Get vendor ID - use the same pattern as CreateProductScreen.tsx
+      const vendors = await FirestoreService.getDocuments<any>(COLLECTIONS.VENDORS, {
+        filters: [{ field: 'user_id', operator: '==', value: user.uid }],
+        limitCount: 1
+      });
 
+      if (vendors.length === 0) return;
+
+      const vendorData = vendors[0];
       const data = await FirestoreService.getDocuments<PayoutAccount>(COLLECTIONS.VENDOR_PAYOUT_ACCOUNTS, {
-        filters: [{ field: 'vendor_id', operator: '==', value: vendorData.id || user.uid }],
+        filters: [{ field: 'vendor_id', operator: '==', value: vendorData.id }],
         orderByField: 'is_default',
         orderByDirection: 'desc'
       });
