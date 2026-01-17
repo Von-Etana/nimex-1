@@ -75,10 +75,14 @@ export const VendorProfileSettingsScreen: React.FC = () => {
       setMarkets(marketsData || []);
 
       if (user) {
-        // Fetch Vendor Data
-        const vendorData = await FirestoreService.getDocument<VendorProfile>(COLLECTIONS.VENDORS, user.uid);
+        // Fetch Vendor Data - use the same pattern as CreateProductScreen.tsx
+        const vendors = await FirestoreService.getDocuments<VendorProfile>(COLLECTIONS.VENDORS, {
+          filters: [{ field: 'user_id', operator: '==', value: user.uid }],
+          limitCount: 1
+        });
 
-        if (vendorData) {
+        if (vendors.length > 0) {
+          const vendorData = vendors[0];
           setFormData({
             businessName: vendorData.business_name || '',
             businessDescription: vendorData.business_description || '',
@@ -133,13 +137,21 @@ export const VendorProfileSettingsScreen: React.FC = () => {
         updated_at: Timestamp.now(),
       };
 
-      // Check if vendor exists
-      const exists = await FirestoreService.documentExists(COLLECTIONS.VENDORS, user.uid);
+      // Check if vendor exists by querying user_id field (same pattern as CreateProductScreen)
+      const existingVendors = await FirestoreService.getDocuments<VendorProfile>(COLLECTIONS.VENDORS, {
+        filters: [{ field: 'user_id', operator: '==', value: user.uid }],
+        limitCount: 1
+      });
 
-      if (exists) {
-        await FirestoreService.updateDocument(COLLECTIONS.VENDORS, user.uid, vendorPayload);
+      if (existingVendors.length > 0) {
+        // Update existing vendor using its actual document ID
+        await FirestoreService.updateDocument(COLLECTIONS.VENDORS, existingVendors[0].id, vendorPayload);
       } else {
-        await FirestoreService.setDocument(COLLECTIONS.VENDORS, user.uid, vendorPayload);
+        // Create new vendor with auto-generated ID
+        await FirestoreService.addDocument(COLLECTIONS.VENDORS, {
+          ...vendorPayload,
+          created_at: Timestamp.now(),
+        });
       }
 
       setSuccess('Profile updated successfully!');
