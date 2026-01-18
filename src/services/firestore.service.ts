@@ -72,7 +72,7 @@ export class FirestoreService {
             const docSnap = await getDoc(docRef);
 
             if (docSnap.exists()) {
-                return { id: docSnap.id, ...docSnap.data() } as T;
+                return { ...docSnap.data(), id: docSnap.id } as T;
             }
             return null;
         } catch (error) {
@@ -138,7 +138,7 @@ export class FirestoreService {
 
             const documents: T[] = [];
             querySnapshot.forEach((doc) => {
-                documents.push({ id: doc.id, ...doc.data() } as T);
+                documents.push({ ...doc.data(), id: doc.id } as T);
             });
 
             return documents;
@@ -315,7 +315,7 @@ export class FirestoreService {
             docRef,
             (docSnap) => {
                 if (docSnap.exists()) {
-                    callback({ id: docSnap.id, ...docSnap.data() } as T);
+                    callback({ ...docSnap.data(), id: docSnap.id } as T);
                 } else {
                     callback(null);
                 }
@@ -366,7 +366,7 @@ export class FirestoreService {
             (querySnapshot) => {
                 const documents: T[] = [];
                 querySnapshot.forEach((doc) => {
-                    documents.push({ id: doc.id, ...doc.data() } as T);
+                    documents.push({ ...doc.data(), id: doc.id } as T);
                 });
                 callback(documents);
             },
