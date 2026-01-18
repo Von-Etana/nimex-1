@@ -147,8 +147,8 @@ export const VendorProfileSettingsScreen: React.FC = () => {
         // Update existing vendor using its actual document ID
         await FirestoreService.updateDocument(COLLECTIONS.VENDORS, existingVendors[0].id, vendorPayload);
       } else {
-        // Create new vendor with auto-generated ID
-        await FirestoreService.addDocument(COLLECTIONS.VENDORS, {
+        // Create new vendor with user.uid as document ID for consistency
+        await FirestoreService.setDocument(COLLECTIONS.VENDORS, user.uid, {
           ...vendorPayload,
           created_at: Timestamp.now(),
         });
