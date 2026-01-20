@@ -8,7 +8,7 @@ import { MainLayout } from './components/navigation';
 import { VendorLayout } from './components/vendor';
 import { AdminLayout } from './layouts/AdminLayout';
 import { FrameScreen } from './screens/FrameScreen';
-import { LoginScreen, SignupScreen } from './screens/auth';
+import { LoginScreen, SignupScreen, ForgotPasswordScreen } from './screens/auth';
 import { configValidator } from './services/configValidator';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { logger } from './lib/logger';
@@ -112,6 +112,7 @@ const App: React.FC = () => {
                 <Route path="/login" element={<LoginScreen />} />
                 <Route path="/signin" element={<LoginScreen />} />
                 <Route path="/signup" element={<SignupScreen />} />
+                <Route path="/forgot-password" element={<ForgotPasswordScreen />} />
                 <Route path="/marketer/register" element={<MarketerRegistrationScreen />} />
 
                 <Route
