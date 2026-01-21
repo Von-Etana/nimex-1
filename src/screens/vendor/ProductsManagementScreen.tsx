@@ -39,45 +39,43 @@ export const ProductsManagementScreen: React.FC = () => {
 
       if (!user) return;
 
-      // Get vendor ID - use the same pattern as CreateProductScreen.tsx
-      // Query by user_id field to find the vendor document
-      const vendors = await FirestoreService.getDocuments<any>(COLLECTIONS.VENDORS, {
-        filters: [{ field: 'user_id', operator: '==', value: user.uid }],
-        limitCount: 1
-      });
+      console.log('DEBUG ProductsManagement - Loading products for user.uid:', user.uid);
 
-      console.log('DEBUG ProductsManagement - user.uid:', user.uid);
-      console.log('DEBUG ProductsManagement - vendors query result:', vendors);
-
-      let vendorId = user.uid; // Default to user.uid
-
-      if (vendors.length > 0) {
-        const vendor = vendors[0];
-        vendorId = vendor.id;
-        console.log('DEBUG ProductsManagement - using vendor.id:', vendorId);
-      } else {
-        console.log('DEBUG ProductsManagement - No vendor found, using user.uid as vendorId');
-      }
-
-      // Fetch products by vendor_id
+      // First, try to fetch products with vendor_id === user.uid
+      // This is the expected case since vendor documents are created with user.uid as the document ID
       let productsData = await FirestoreService.getDocuments<Product>(COLLECTIONS.PRODUCTS, {
-        filters: [{ field: 'vendor_id', operator: '==', value: vendorId }],
+        filters: [{ field: 'vendor_id', operator: '==', value: user.uid }],
         orderByField: 'created_at',
         orderByDirection: 'desc'
       });
 
-      console.log('DEBUG ProductsManagement - Products found with vendor.id:', productsData.length);
+      console.log('DEBUG ProductsManagement - Products found with user.uid:', productsData.length);
 
-      // Fallback: If no products found AND vendorId != user.uid, try with user.uid
-      // This handles legacy products that were created with user.uid as vendor_id
-      if (productsData.length === 0 && vendorId !== user.uid) {
-        console.log('DEBUG ProductsManagement - No products found, trying with user.uid as fallback');
-        productsData = await FirestoreService.getDocuments<Product>(COLLECTIONS.PRODUCTS, {
-          filters: [{ field: 'vendor_id', operator: '==', value: user.uid }],
-          orderByField: 'created_at',
-          orderByDirection: 'desc'
-        });
-        console.log('DEBUG ProductsManagement - Products found with user.uid fallback:', productsData.length);
+      // If no products found, check if vendor document exists and has a different structure
+      if (productsData.length === 0) {
+        // Try to get the vendor document directly by user.uid
+        const vendorDoc = await FirestoreService.getDocument<any>(COLLECTIONS.VENDORS, user.uid);
+        console.log('DEBUG ProductsManagement - Vendor doc by id:', vendorDoc);
+
+        // Also try querying by user_id field as fallback
+        if (!vendorDoc) {
+          const vendors = await FirestoreService.getDocuments<any>(COLLECTIONS.VENDORS, {
+            filters: [{ field: 'user_id', operator: '==', value: user.uid }],
+            limitCount: 1
+          });
+          console.log('DEBUG ProductsManagement - Vendors by user_id query:', vendors);
+
+          // If vendor found via query, try its document ID
+          if (vendors.length > 0 && vendors[0].id !== user.uid) {
+            console.log('DEBUG ProductsManagement - Trying vendor.id:', vendors[0].id);
+            productsData = await FirestoreService.getDocuments<Product>(COLLECTIONS.PRODUCTS, {
+              filters: [{ field: 'vendor_id', operator: '==', value: vendors[0].id }],
+              orderByField: 'created_at',
+              orderByDirection: 'desc'
+            });
+            console.log('DEBUG ProductsManagement - Products with vendor.id:', productsData.length);
+          }
+        }
       }
 
       // Fetch categories to map names
