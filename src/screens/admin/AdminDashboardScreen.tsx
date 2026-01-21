@@ -170,12 +170,8 @@ export const AdminDashboardScreen: React.FC = () => {
         }));
         setRecentActivities(activities);
       } else {
-        // Fallback mock data for demonstration
-        setRecentActivities([
-          { id: '1', event: 'New Vendor Registration', user: 'Chinedu Okeke', timestamp: 'Just now', status: 'New' },
-          { id: '2', event: 'KYC Submission', user: 'Grace Adebayo', timestamp: '5 mins ago', status: 'Pending' },
-          { id: '3', event: 'Large Order Placed', user: 'System', timestamp: '1 hour ago', status: 'Approved' },
-        ]);
+        // No activities found
+        setRecentActivities([]);
       }
     } catch (error) {
       console.error('Error loading recent activities:', error);
