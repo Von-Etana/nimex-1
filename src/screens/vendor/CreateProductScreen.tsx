@@ -146,19 +146,11 @@ export const CreateProductScreen: React.FC = () => {
     }
   }, [isEditing, tempProductId]);
 
-  // Load vendor ID
+  // Load vendor ID - simply use user.uid since vendor docs are created with user.uid as doc ID
   useEffect(() => {
-    const loadVendorId = async () => {
-      if (!user) return;
-      const vendors = await FirestoreService.getDocuments<any>(COLLECTIONS.VENDORS, {
-        filters: [{ field: 'user_id', operator: '==', value: user.uid }],
-        limitCount: 1
-      });
-      if (vendors.length > 0) {
-        setVendorId(vendors[0].id || user.uid);
-      }
-    };
-    loadVendorId();
+    if (user) {
+      setVendorId(user.uid);
+    }
   }, [user]);
 
   const handleImagesChange = (newImages: string[]) => {
@@ -202,14 +194,14 @@ export const CreateProductScreen: React.FC = () => {
     try {
       if (!user) throw new Error('User not authenticated');
 
-      // Get vendor ID
-      const vendors = await FirestoreService.getDocuments<any>(COLLECTIONS.VENDORS, {
-        filters: [{ field: 'user_id', operator: '==', value: user.uid }],
-        limitCount: 1
-      });
+      // Use user.uid directly as vendor_id since vendor documents are created with user.uid as doc ID
+      const vendorIdToUse = user.uid;
 
-      if (vendors.length === 0) throw new Error('Vendor profile not found');
-      const vendor = vendors[0];
+      console.log('DEBUG CreateProduct - Using vendor_id:', vendorIdToUse);
+
+      // Verify vendor exists
+      const vendorDoc = await FirestoreService.getDocument<any>(COLLECTIONS.VENDORS, user.uid);
+      if (!vendorDoc) throw new Error('Vendor profile not found. Please complete onboarding first.');
 
       let finalVideoUrl = formData.video_url;
 
@@ -220,7 +212,7 @@ export const CreateProductScreen: React.FC = () => {
           const fileExt = videoFile.name.split('.').pop();
           const fileName = `video_${Date.now()}.${fileExt}`;
           // Path must match storage rules: products/{vendorId}/{productId}/{fileName}
-          const path = `products/${vendor.id}/${productStorageId}`;
+          const path = `products/${vendorIdToUse}/${productStorageId}`;
 
           const { promise } = FirebaseStorageService.uploadFileWithProgress(
             videoFile,
@@ -243,7 +235,7 @@ export const CreateProductScreen: React.FC = () => {
       }
 
       const productData = {
-        vendor_id: vendor.id,
+        vendor_id: vendorIdToUse,
         title: formData.name,
         name: formData.name,
         description: formData.description || null,
@@ -258,9 +250,6 @@ export const CreateProductScreen: React.FC = () => {
         updated_at: new Date().toISOString()
       };
 
-      console.log('DEBUG CreateProduct - user.uid:', user.uid);
-      console.log('DEBUG CreateProduct - vendor object:', vendor);
-      console.log('DEBUG CreateProduct - vendor.id being used:', vendor.id);
       console.log('DEBUG CreateProduct - productData:', productData);
 
       if (isEditing && id) {
