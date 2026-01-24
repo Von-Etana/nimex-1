@@ -644,7 +644,7 @@ export const ProductSearchScreen: React.FC = () => {
         )}
       </div>
     </div>
-    </div >
+
   );
 };
 
