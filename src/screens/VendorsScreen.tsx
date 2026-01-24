@@ -131,7 +131,8 @@ export const VendorsScreen: React.FC = () => {
       const searchResults = allVendors.filter(vendor => {
         const marketMatch = vendor.market_location?.toLowerCase().includes(searchTerm);
         const addressMatch = vendor.business_address?.toLowerCase().includes(searchTerm);
-        return marketMatch || addressMatch;
+        const nameMatch = vendor.business_name?.toLowerCase().includes(searchTerm);
+        return marketMatch || addressMatch || nameMatch;
       }).slice(0, 20);
 
       // Get profiles and review counts for search results
@@ -255,7 +256,7 @@ export const VendorsScreen: React.FC = () => {
                 type="text"
                 value={location}
                 onChange={(e) => setLocation(e.target.value)}
-                placeholder="Enter your location or address..."
+                placeholder="Search by vendor name, city, or address..."
                 className="flex-1 font-sans text-sm text-neutral-700 outline-none"
               />
             </div>
@@ -384,8 +385,8 @@ export const VendorsScreen: React.FC = () => {
               ))
             ) : vendors.length === 0 ? (
               <div className="col-span-full text-center py-12">
-                <p className="font-sans text-neutral-600 text-lg">No vendors found in your area.</p>
-                <p className="font-sans text-neutral-500 text-sm mt-2">Check back later or try a different location.</p>
+                <p className="font-sans text-neutral-600 text-lg">No vendors found matching your search.</p>
+                <p className="font-sans text-neutral-500 text-sm mt-2">Try a different name, location, or check back later.</p>
               </div>
             ) : (
               vendors.map((vendor) => (
