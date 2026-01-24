@@ -27,16 +27,16 @@ import { COLLECTIONS } from "../../../../lib/collections";
 import { Loader2 } from "lucide-react";
 
 const categories = [
-  { icon: TvIcon, title: "Electronics", color: "bg-blue-500" },
-  { icon: ShirtIcon, title: "Fashion", color: "bg-pink-500" },
-  { icon: HouseIcon, title: "Home & Office", color: "bg-amber-500" },
-  { icon: UtensilsIcon, title: "Groceries", color: "bg-green-500" },
-  { icon: BookOpenIcon, title: "Books", color: "bg-purple-500" },
-  { icon: Flower2Icon, title: "Health & Beauty", color: "bg-rose-500" },
-  { icon: CarIcon, title: "Automotive", color: "bg-slate-600" },
-  { icon: DumbbellIcon, title: "Sports", color: "bg-orange-500" },
-  { icon: BabyIcon, title: "Baby & Kids", color: "bg-cyan-500" },
-  { icon: FlaskConicalIcon, title: "Chemicals", color: "bg-indigo-500" },
+  { icon: TvIcon, title: "Electronics", id: "electronics", color: "bg-blue-500" },
+  { icon: ShirtIcon, title: "Fashion", id: "fashion", color: "bg-pink-500" },
+  { icon: HouseIcon, title: "Home & Office", id: "home-office", color: "bg-amber-500" },
+  { icon: UtensilsIcon, title: "Groceries", id: "food-beverages", color: "bg-green-500" },
+  { icon: BookOpenIcon, title: "Books", id: "books-media", color: "bg-purple-500" },
+  { icon: Flower2Icon, title: "Health & Beauty", id: "health-beauty", color: "bg-rose-500" },
+  { icon: CarIcon, title: "Automotive", id: "automobiles", color: "bg-slate-600" },
+  { icon: DumbbellIcon, title: "Sports", id: "sports-outdoors", color: "bg-orange-500" },
+  { icon: BabyIcon, title: "Baby & Kids", id: "toys-games", color: "bg-cyan-500" },
+  { icon: FlaskConicalIcon, title: "Chemicals", id: "other", color: "bg-indigo-500" },
 ];
 
 const stats = [
@@ -71,35 +71,56 @@ export const HeroSection = (): JSX.Element => {
       const allProducts = await FirestoreService.getDocuments<any>(COLLECTIONS.PRODUCTS, {
         orderByField: 'created_at',
         orderByDirection: 'desc',
-        limitCount: 50  // Fetch more to filter from
+        limitCount: 100  // Fetch more to filter from
       });
 
-      console.log('DEBUG HeroSection: All products fetched:', allProducts?.length, allProducts);
+      console.log('DEBUG HeroSection: All products fetched:', allProducts?.length);
 
       // Filter for active products: is_active=true OR status='active'
       const activeProducts = (allProducts || []).filter(p =>
         p.is_active === true || p.status === 'active'
-      ).slice(0, 6);
+      );
 
-      console.log('DEBUG HeroSection: Active products after filter:', activeProducts.length, activeProducts);
+      console.log('DEBUG HeroSection: Active products after filter:', activeProducts.length);
 
-      setFreshRecommendations(mapProducts(activeProducts));
+      // Fresh recommendations (newest active products)
+      setFreshRecommendations(mapProducts(activeProducts.slice(0, 6)));
 
-      // Fetch Top Vendors - also avoid composite index
+      // Fetch vendors
       const allVendors = await FirestoreService.getDocuments<any>(COLLECTIONS.VENDORS, {
         limitCount: 50
       });
-      console.log('DEBUG HeroSection: All vendors fetched:', allVendors?.length, allVendors);
 
       const activeVendors = (allVendors || []).filter(v => v.is_active === true).slice(0, 6);
-      console.log('DEBUG HeroSection: Active vendors after filter:', activeVendors.length, activeVendors);
-
       setTopVendorsList(mapVendors(activeVendors));
 
-      setElectronics(mapProducts(activeProducts));
-      setFashion(mapProducts(activeProducts));
-      setHomeOffice(mapProducts(activeProducts));
-      setGroceries(mapProducts(activeProducts));
+      // Filter products by category
+      // Note: We check both category_id (database ID) and category (legacy/fallback string)
+      const filterByCategory = (id: string) => {
+        return activeProducts.filter(p => {
+          const catId = p.category_id || '';
+          const catName = p.category || '';
+          return catId.toLowerCase() === id.toLowerCase() ||
+            catId.toLowerCase().includes(id.toLowerCase()) ||
+            catName.toLowerCase().includes(id.toLowerCase());
+        }).slice(0, 6);
+      };
+
+      setElectronics(mapProducts(filterByCategory('electronics')));
+      setFashion(mapProducts(filterByCategory('fashion')));
+      // Try both possible IDs for Home & Garden/Office
+      const homeProducts = [
+        ...filterByCategory('home-office'),
+        ...filterByCategory('home-garden')
+      ].slice(0, 6);
+      setHomeOffice(mapProducts(homeProducts));
+
+      // Try both possible IDs for Groceries/Food
+      const foodProducts = [
+        ...filterByCategory('food-beverages'),
+        ...filterByCategory('groceries')
+      ].slice(0, 6);
+      setGroceries(mapProducts(foodProducts));
 
     } catch (error) {
       console.error("Error fetching home data:", error);
@@ -109,33 +130,40 @@ export const HeroSection = (): JSX.Element => {
   };
 
   const mapProducts = (products: any[]) => {
-    return products.map(p => ({
-      id: p.id,  // Include the actual Firestore document ID
-      image: p.image_url || "https://via.placeholder.com/150",
-      title: p.name,
-      price: `₦ ${p.price.toLocaleString()}`,
-      vendor: "Vendor",
-      vendorImage: "https://via.placeholder.com/50",
-      location: "Lagos",
-      views: "100",
-      rating: 4.5,
-      verified: true,
-      badge: { text: "New", variant: "green" as const }
-    }));
+    return products.map(p => {
+      // Handle image array or string
+      const image = Array.isArray(p.images) && p.images.length > 0
+        ? p.images[0]
+        : (p.image_url || "/image.png");
+
+      return {
+        id: p.id,
+        image: image,
+        title: p.name || p.title || 'Untitled Product',
+        price: `₦ ${(p.price || 0).toLocaleString()}`,
+        vendor: "Vendor", // We could look up vendor name if needed, but 'Vendor' is fine for now on grid
+        vendorImage: "/image-1.png",
+        location: "Lagos",
+        views: (p.views_count || 0).toString(),
+        rating: p.rating || 4.5,
+        verified: true,
+        badge: { text: "New", variant: "green" as const }
+      };
+    });
   };
 
   const mapVendors = (vendors: any[]) => {
     return vendors.map(v => ({
-      id: v.id,  // Include the actual Firestore document ID
-      image: v.avatar_url || v.logo_url || "https://via.placeholder.com/150",
-      title: v.business_name,
+      id: v.id,
+      image: v.avatar_url || v.logo_url || "/image-1.png",
+      title: v.business_name || 'Vendor',
       price: "100+ Products",
-      vendor: v.business_name,
-      vendorImage: v.avatar_url || v.logo_url || "https://via.placeholder.com/50",
-      location: v.market_location || "Lagos",
+      vendor: v.business_name || 'Vendor',
+      vendorImage: v.avatar_url || v.logo_url || "/image-1.png",
+      location: v.market_location || v.business_address || "Lagos",
       views: "1k",
-      rating: 5,
-      verified: true,
+      rating: v.rating || 5,
+      verified: v.verification_status === 'verified',
       badge: { text: "Top Rated", variant: "yellow" as const }
     }));
   };
@@ -206,7 +234,6 @@ export const HeroSection = (): JSX.Element => {
                   />
                 </div>
 
-                {/* Category Select */}
                 <div className="flex items-center gap-3 flex-1 px-4 py-3">
                   <PackageIcon className="w-5 h-5 text-primary-500 flex-shrink-0" />
                   <select
@@ -214,9 +241,9 @@ export const HeroSection = (): JSX.Element => {
                     onChange={(e) => setSelectedCategory(e.target.value)}
                     className="w-full font-sans text-sm md:text-base text-neutral-900 outline-none bg-transparent cursor-pointer"
                   >
-                    <option>All Categories</option>
+                    <option value="All Categories">All Categories</option>
                     {categories.map((cat) => (
-                      <option key={cat.title}>{cat.title}</option>
+                      <option key={cat.id} value={cat.id}>{cat.title}</option>
                     ))}
                   </select>
                 </div>
@@ -235,13 +262,18 @@ export const HeroSection = (): JSX.Element => {
             {/* Quick Links */}
             <div className="flex flex-wrap items-center justify-center gap-3 mt-8 animate-slide-up-fade stagger-4">
               <span className="font-sans text-sm text-neutral-500">Popular:</span>
-              {['Electronics', 'Fashion', 'Groceries', 'Home'].map((term) => (
+              {[
+                { id: 'electronics', label: 'Electronics' },
+                { id: 'fashion', label: 'Fashion' },
+                { id: 'food-beverages', label: 'Groceries' },
+                { id: 'home-office', label: 'Home' }
+              ].map((item) => (
                 <button
-                  key={term}
-                  onClick={() => navigate(`/products?category=${term}`)}
+                  key={item.id}
+                  onClick={() => navigate(`/products?category=${item.id}`)}
                   className="px-4 py-2 bg-white/80 backdrop-blur-sm border border-neutral-200 rounded-full font-sans text-sm font-medium text-neutral-700 hover:bg-primary-50 hover:border-primary-200 hover:text-primary-700 transition-all duration-200"
                 >
-                  {term}
+                  {item.label}
                 </button>
               ))}
             </div>
@@ -282,7 +314,7 @@ export const HeroSection = (): JSX.Element => {
           {categories.map((category, index) => (
             <Card
               key={index}
-              onClick={() => navigate(`/products?category=${encodeURIComponent(category.title)}`)}
+              onClick={() => navigate(`/products?category=${encodeURIComponent(category.id)}`)}
               className="group cursor-pointer border-0 shadow-sm hover:shadow-premium hover:-translate-y-1 transition-all duration-300"
             >
               <CardContent className="flex flex-col items-center justify-center p-4 gap-2">
