@@ -27,16 +27,17 @@ import { COLLECTIONS } from "../../../../lib/collections";
 import { LocationPicker } from "../../../../components/maps/LocationPicker";
 import { Loader2 } from "lucide-react";
 import { calculateDistance, formatDistance } from "../../../../lib/utils";
-{ icon: TvIcon, title: "Electronics", id: "electronics", color: "bg-blue-500" },
-{ icon: ShirtIcon, title: "Fashion", id: "fashion", color: "bg-pink-500" },
-{ icon: HouseIcon, title: "Home & Office", id: "home-office", color: "bg-amber-500" },
-{ icon: UtensilsIcon, title: "Groceries", id: "food-beverages", color: "bg-green-500" },
-{ icon: BookOpenIcon, title: "Books", id: "books-media", color: "bg-purple-500" },
-{ icon: Flower2Icon, title: "Health & Beauty", id: "health-beauty", color: "bg-rose-500" },
-{ icon: CarIcon, title: "Automotive", id: "automobiles", color: "bg-slate-600" },
-{ icon: DumbbellIcon, title: "Sports", id: "sports-outdoors", color: "bg-orange-500" },
-{ icon: BabyIcon, title: "Baby & Kids", id: "toys-games", color: "bg-cyan-500" },
-{ icon: FlaskConicalIcon, title: "Chemicals", id: "other", color: "bg-indigo-500" },
+const categories = [
+  { icon: TvIcon, title: "Electronics", id: "electronics", color: "bg-blue-500" },
+  { icon: ShirtIcon, title: "Fashion", id: "fashion", color: "bg-pink-500" },
+  { icon: HouseIcon, title: "Home & Office", id: "home-office", color: "bg-amber-500" },
+  { icon: UtensilsIcon, title: "Groceries", id: "food-beverages", color: "bg-green-500" },
+  { icon: BookOpenIcon, title: "Books", id: "books-media", color: "bg-purple-500" },
+  { icon: Flower2Icon, title: "Health & Beauty", id: "health-beauty", color: "bg-rose-500" },
+  { icon: CarIcon, title: "Automotive", id: "automobiles", color: "bg-slate-600" },
+  { icon: DumbbellIcon, title: "Sports", id: "sports-outdoors", color: "bg-orange-500" },
+  { icon: BabyIcon, title: "Baby & Kids", id: "toys-games", color: "bg-cyan-500" },
+  { icon: FlaskConicalIcon, title: "Chemicals", id: "other", color: "bg-indigo-500" },
 ];
 
 const stats = [
