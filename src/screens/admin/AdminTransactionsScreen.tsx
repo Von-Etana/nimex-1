@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent } from '../../components/ui/card';
-import { Button } from '../../components/ui/button';
-import { Search, Eye, DollarSign, CreditCard, Truck, Shield } from 'lucide-react';
+import { Search, Eye, DollarSign, CreditCard, Shield } from 'lucide-react';
 import { FirestoreService } from '../../services/firestore.service';
 import { logger } from '../../lib/logger';
 
@@ -73,27 +72,31 @@ export const AdminTransactionsScreen: React.FC = () => {
       const vendorsMap = new Map();
       const escrowMap = new Map();
 
-      // Fetch Orders
-      if (orderIds.length > 0) {
-        const allOrders = await FirestoreService.getDocuments('orders');
-        allOrders.forEach(o => ordersMap.set(o.id, o));
+      // Parallel Fetching
+      const [orders, profiles, vendors] = await Promise.all([
+        orderIds.length > 0 ? FirestoreService.getDocumentsByIds<any>('orders', orderIds) : [],
+        buyerIds.length > 0 ? FirestoreService.getDocumentsByIds<any>('profiles', buyerIds) : [],
+        vendorIds.length > 0 ? FirestoreService.getDocumentsByIds<any>('vendors', vendorIds) : [],
+      ]);
 
-        // Fetch Escrow Transactions (assuming they are linked by order_id)
-        const allEscrow = await FirestoreService.getDocuments('escrow_transactions');
-        allEscrow.forEach(e => escrowMap.set(e.order_id, e));
+      // Fetch Escrow by Order ID (Chunked)
+      const distinctOrderIds = [...new Set(orderIds)];
+      const escrowChunks = [];
+      // Firestore 'in' limit is 10
+      for (let i = 0; i < distinctOrderIds.length; i += 10) {
+        const chunk = distinctOrderIds.slice(i, i + 10);
+        if (chunk.length > 0) {
+          escrowChunks.push(FirestoreService.getDocuments<any>('escrow_transactions', { filters: [{ field: 'order_id', operator: 'in', value: chunk }] }));
+        }
       }
+      const escrowResults = await Promise.all(escrowChunks);
+      const allEscrow = escrowResults.flat();
 
-      // Fetch Profiles
-      if (buyerIds.length > 0) {
-        const allProfiles = await FirestoreService.getDocuments('profiles');
-        allProfiles.forEach(p => profilesMap.set(p.id, p));
-      }
-
-      // Fetch Vendors
-      if (vendorIds.length > 0) {
-        const allVendors = await FirestoreService.getDocuments('vendors');
-        allVendors.forEach(v => vendorsMap.set(v.id, v));
-      }
+      // Map Data
+      orders.forEach(o => ordersMap.set(o.id, o));
+      profiles.forEach(p => profilesMap.set(p.id, p));
+      vendors.forEach(v => vendorsMap.set(v.id, v));
+      allEscrow.forEach(e => escrowMap.set(e.order_id, e));
 
       const mappedTransactions = transactionsData.map((t: any) => ({
         ...t,
