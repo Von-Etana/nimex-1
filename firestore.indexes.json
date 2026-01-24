@@ -41,6 +41,34 @@
             "queryScope": "COLLECTION",
             "fields": [
                 {
+                    "fieldPath": "vendor_id",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "created_at",
+                    "order": "DESCENDING"
+                }
+            ]
+        },
+        {
+            "collectionGroup": "products",
+            "queryScope": "COLLECTION",
+            "fields": [
+                {
+                    "fieldPath": "vendor_id",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "views_count",
+                    "order": "DESCENDING"
+                }
+            ]
+        },
+        {
+            "collectionGroup": "products",
+            "queryScope": "COLLECTION",
+            "fields": [
+                {
                     "fieldPath": "status",
                     "order": "ASCENDING"
                 },
@@ -56,6 +84,34 @@
             "fields": [
                 {
                     "fieldPath": "user_id",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "created_at",
+                    "order": "DESCENDING"
+                }
+            ]
+        },
+        {
+            "collectionGroup": "orders",
+            "queryScope": "COLLECTION",
+            "fields": [
+                {
+                    "fieldPath": "buyer_id",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "created_at",
+                    "order": "DESCENDING"
+                }
+            ]
+        },
+        {
+            "collectionGroup": "orders",
+            "queryScope": "COLLECTION",
+            "fields": [
+                {
+                    "fieldPath": "vendor_id",
                     "order": "ASCENDING"
                 },
                 {
@@ -152,6 +208,94 @@
                 },
                 {
                     "fieldPath": "vendor_count",
+                    "order": "DESCENDING"
+                }
+            ]
+        },
+        {
+            "collectionGroup": "payment_transactions",
+            "queryScope": "COLLECTION",
+            "fields": [
+                {
+                    "fieldPath": "vendor_id",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "created_at",
+                    "order": "DESCENDING"
+                }
+            ]
+        },
+        {
+            "collectionGroup": "vendor_payout_accounts",
+            "queryScope": "COLLECTION",
+            "fields": [
+                {
+                    "fieldPath": "vendor_id",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "is_default",
+                    "order": "DESCENDING"
+                }
+            ]
+        },
+        {
+            "collectionGroup": "escrow_transactions",
+            "queryScope": "COLLECTION",
+            "fields": [
+                {
+                    "fieldPath": "vendor_id",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "held_at",
+                    "order": "DESCENDING"
+                }
+            ]
+        },
+        {
+            "collectionGroup": "escrow_transactions",
+            "queryScope": "COLLECTION",
+            "fields": [
+                {
+                    "fieldPath": "vendor_id",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "status",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "held_at",
+                    "order": "DESCENDING"
+                }
+            ]
+        },
+        {
+            "collectionGroup": "referrals",
+            "queryScope": "COLLECTION",
+            "fields": [
+                {
+                    "fieldPath": "referrer_vendor_id",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "created_at",
+                    "order": "DESCENDING"
+                }
+            ]
+        },
+        {
+            "collectionGroup": "marketer_commissions",
+            "queryScope": "COLLECTION",
+            "fields": [
+                {
+                    "fieldPath": "marketer_id",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "created_at",
                     "order": "DESCENDING"
                 }
             ]
