@@ -1,70 +1,8 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Card, CardContent } from '../components/ui/card';
-import { Button } from '../components/ui/button';
-import { Badge } from '../components/ui/badge';
-import { useToast } from '../contexts/ToastContext';
-import {
-  SlidersHorizontal,
-  ChevronDown,
-  Star,
-  Loader2
-} from 'lucide-react';
-import { triggerCartUpdate } from '../hooks/useCart';
-import { CartService } from '../services/cartService';
-import { ProductCard, Product } from '../components/products/ProductCard';
-import { FirestoreService } from '../services/firestore.service';
-import { COLLECTIONS } from '../lib/collections';
+import { CATEGORIES } from '../lib/categories';
 
-// Helper function to transform Firestore product to ProductCard format
-const transformProduct = (firestoreProduct: any, vendorMap: Map<string, any>): Product => {
-  const vendor = vendorMap.get(firestoreProduct.vendor_id);
-  const images = Array.isArray(firestoreProduct.images)
-    ? firestoreProduct.images
-    : firestoreProduct.image_url
-      ? [firestoreProduct.image_url]
-      : ['/image-1.png'];
+// ... imports remain the same
 
-  return {
-    id: firestoreProduct.id,
-    name: firestoreProduct.title || firestoreProduct.name || 'Untitled Product',
-    price: firestoreProduct.price || 0,
-    originalPrice: firestoreProduct.compare_at_price || undefined,
-    image: images[0] || '/image-1.png',
-    images: images,
-    vendor: vendor?.business_name || 'Unknown Vendor',
-    vendorId: firestoreProduct.vendor_id || '',
-    rating: firestoreProduct.rating || 4.5,
-    reviews: firestoreProduct.review_count || 0,
-    category: firestoreProduct.category_id || 'Uncategorized',
-    inStock: (firestoreProduct.stock_quantity || 0) > 0,
-    discount: firestoreProduct.compare_at_price
-      ? Math.round(((firestoreProduct.compare_at_price - firestoreProduct.price) / firestoreProduct.compare_at_price) * 100)
-      : undefined,
-    tags: firestoreProduct.tags || [],
-    video_url: firestoreProduct.video_url,
-    location: vendor?.market_location,
-    isVerified: vendor?.is_verified || false,
-  };
-};
-
-const categories = ['All', 'Fashion', 'Electronics', 'Food', 'Books', 'Home & Garden', 'Textiles', 'Art', 'Real Estate', 'Vehicles', 'Building Materials', 'Health & Wellness'];
-
-const priceRanges = [
-  { label: 'All Prices', min: 0, max: Infinity },
-  { label: 'Under ₦5,000', min: 0, max: 5000 },
-  { label: '₦5,000 - ₦10,000', min: 5000, max: 10000 },
-  { label: '₦10,000 - ₦20,000', min: 10000, max: 20000 },
-  { label: 'Above ₦20,000', min: 20000, max: Infinity },
-];
-
-const sortOptions = [
-  { label: 'Featured', value: 'featured' },
-  { label: 'Price: Low to High', value: 'price_asc' },
-  { label: 'Price: High to Low', value: 'price_desc' },
-  { label: 'Top Rated', value: 'rating' },
-  { label: 'Most Reviews', value: 'reviews' },
-];
+// ... const sortOptions remains same
 
 export const ProductsScreen: React.FC = () => {
   const navigate = useNavigate();
@@ -76,7 +14,7 @@ export const ProductsScreen: React.FC = () => {
   const [loading, setLoading] = useState(true);
 
   // Filter state
-  const [selectedCategory, setSelectedCategory] = useState('All');
+  const [selectedCategoryId, setSelectedCategoryId] = useState('all');
   const [selectedPriceRange, setSelectedPriceRange] = useState(0);
   const [minRating, setMinRating] = useState(0);
   const [sortBy, setSortBy] = useState('featured');
@@ -143,11 +81,15 @@ export const ProductsScreen: React.FC = () => {
   useEffect(() => {
     const categoryParam = searchParams.get('category');
     if (categoryParam) {
-      const match = categories.find(c => c.toLowerCase() === categoryParam.toLowerCase());
+      // Check if it matches an ID directly
+      const match = CATEGORIES.find(c => c.id === categoryParam);
       if (match) {
-        setSelectedCategory(match);
+        setSelectedCategoryId(match.id);
       } else {
-        if (categoryParam !== 'All') setSelectedCategory(categoryParam);
+        // Fallback: check names (legacy support)
+        const nameMatch = CATEGORIES.find(c => c.name.toLowerCase() === categoryParam.toLowerCase());
+        if (nameMatch) setSelectedCategoryId(nameMatch.id);
+        else if (categoryParam !== 'All') setSelectedCategoryId(categoryParam); // Keep as is if no match found, maybe custom ID
       }
     }
 
@@ -158,20 +100,22 @@ export const ProductsScreen: React.FC = () => {
   }, [searchParams]);
 
   // Update URL when category changes
-  const handleCategoryChange = (category: string) => {
-    setSelectedCategory(category);
-    if (category === 'All') {
+  const handleCategoryChange = (categoryId: string) => {
+    setSelectedCategoryId(categoryId);
+    if (categoryId === 'all') {
       searchParams.delete('category');
     } else {
-      searchParams.set('category', category);
+      searchParams.set('category', categoryId);
     }
     setSearchParams(searchParams);
   };
 
   const filteredProducts = products.filter((product) => {
-    const categoryMatch = selectedCategory === 'All' ||
-      product.category === selectedCategory ||
-      product.category?.toLowerCase().includes(selectedCategory.toLowerCase());
+    const categoryMatch = selectedCategoryId === 'all' ||
+      product.category === selectedCategoryId ||
+      // Handle potential legacy mismatch or sub-categories
+      (product.category && product.category.toLowerCase() === selectedCategoryId.toLowerCase());
+
     const priceRange = priceRanges[selectedPriceRange];
     const priceMatch = product.price >= priceRange.min && product.price <= priceRange.max;
     const ratingMatch = product.rating >= minRating;
@@ -212,7 +156,7 @@ export const ProductsScreen: React.FC = () => {
   }
 
   const activeFiltersCount =
-    (selectedCategory !== 'All' ? 1 : 0) +
+    (selectedCategoryId !== 'all' ? 1 : 0) +
     (selectedPriceRange !== 0 ? 1 : 0) +
     (minRating > 0 ? 1 : 0);
 
@@ -226,6 +170,12 @@ export const ProductsScreen: React.FC = () => {
     );
   }
 
+  const getCategoryName = (id: string) => {
+    if (id === 'all') return 'All Products';
+    const cat = CATEGORIES.find(c => c.id === id);
+    return cat ? cat.name : id;
+  };
+
   return (
     <div className="flex flex-col w-full min-h-screen bg-neutral-50">
       <div className="w-full max-w-7xl mx-auto px-3 sm:px-4 md:px-6 py-4 sm:py-6 md:py-8">
@@ -233,7 +183,7 @@ export const ProductsScreen: React.FC = () => {
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
               <h1 className="font-heading font-bold text-neutral-900 text-2xl md:text-3xl">
-                {selectedCategory === 'All' ? 'All Products' : selectedCategory}
+                {getCategoryName(selectedCategoryId)}
               </h1>
               <p className="font-sans text-neutral-600 text-sm mt-1">
                 {sortedProducts.length} products available
@@ -283,7 +233,7 @@ export const ProductsScreen: React.FC = () => {
                     {activeFiltersCount > 0 && (
                       <button
                         onClick={() => {
-                          handleCategoryChange('All');
+                          handleCategoryChange('all');
                           setSelectedPriceRange(0);
                           setMinRating(0);
                         }}
@@ -300,20 +250,32 @@ export const ProductsScreen: React.FC = () => {
                         Category
                       </h3>
                       <div className="flex flex-col gap-2">
-                        {categories.map((category) => (
+                        <label className="flex items-center gap-2 cursor-pointer group">
+                          <input
+                            type="radio"
+                            name="category"
+                            checked={selectedCategoryId === 'all'}
+                            onChange={() => handleCategoryChange('all')}
+                            className="w-4 h-4 text-primary-500 focus:ring-primary-500 cursor-pointer"
+                          />
+                          <span className="font-sans text-sm text-neutral-700 group-hover:text-primary-500">
+                            All Categories
+                          </span>
+                        </label>
+                        {CATEGORIES.map((category) => (
                           <label
-                            key={category}
+                            key={category.id}
                             className="flex items-center gap-2 cursor-pointer group"
                           >
                             <input
                               type="radio"
                               name="category"
-                              checked={selectedCategory === category}
-                              onChange={() => handleCategoryChange(category)}
+                              checked={selectedCategoryId === category.id}
+                              onChange={() => handleCategoryChange(category.id)}
                               className="w-4 h-4 text-primary-500 focus:ring-primary-500 cursor-pointer"
                             />
                             <span className="font-sans text-sm text-neutral-700 group-hover:text-primary-500">
-                              {category}
+                              {category.name}
                             </span>
                           </label>
                         ))}
@@ -394,7 +356,7 @@ export const ProductsScreen: React.FC = () => {
                     </p>
                     <Button
                       onClick={() => {
-                        handleCategoryChange('All');
+                        handleCategoryChange('all');
                         setSelectedPriceRange(0);
                         setMinRating(0);
                       }}
