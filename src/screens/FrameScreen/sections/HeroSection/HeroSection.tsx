@@ -24,19 +24,19 @@ import { Card, CardContent } from "../../../../components/ui/card";
 import { ProductGrid } from "./ProductGrid";
 import { FirestoreService } from "../../../../services/firestore.service";
 import { COLLECTIONS } from "../../../../lib/collections";
+import { LocationPicker } from "../../../../components/maps/LocationPicker";
 import { Loader2 } from "lucide-react";
-
-const categories = [
-  { icon: TvIcon, title: "Electronics", id: "electronics", color: "bg-blue-500" },
-  { icon: ShirtIcon, title: "Fashion", id: "fashion", color: "bg-pink-500" },
-  { icon: HouseIcon, title: "Home & Office", id: "home-office", color: "bg-amber-500" },
-  { icon: UtensilsIcon, title: "Groceries", id: "food-beverages", color: "bg-green-500" },
-  { icon: BookOpenIcon, title: "Books", id: "books-media", color: "bg-purple-500" },
-  { icon: Flower2Icon, title: "Health & Beauty", id: "health-beauty", color: "bg-rose-500" },
-  { icon: CarIcon, title: "Automotive", id: "automobiles", color: "bg-slate-600" },
-  { icon: DumbbellIcon, title: "Sports", id: "sports-outdoors", color: "bg-orange-500" },
-  { icon: BabyIcon, title: "Baby & Kids", id: "toys-games", color: "bg-cyan-500" },
-  { icon: FlaskConicalIcon, title: "Chemicals", id: "other", color: "bg-indigo-500" },
+import { calculateDistance, formatDistance } from "../../../../lib/utils";
+{ icon: TvIcon, title: "Electronics", id: "electronics", color: "bg-blue-500" },
+{ icon: ShirtIcon, title: "Fashion", id: "fashion", color: "bg-pink-500" },
+{ icon: HouseIcon, title: "Home & Office", id: "home-office", color: "bg-amber-500" },
+{ icon: UtensilsIcon, title: "Groceries", id: "food-beverages", color: "bg-green-500" },
+{ icon: BookOpenIcon, title: "Books", id: "books-media", color: "bg-purple-500" },
+{ icon: Flower2Icon, title: "Health & Beauty", id: "health-beauty", color: "bg-rose-500" },
+{ icon: CarIcon, title: "Automotive", id: "automobiles", color: "bg-slate-600" },
+{ icon: DumbbellIcon, title: "Sports", id: "sports-outdoors", color: "bg-orange-500" },
+{ icon: BabyIcon, title: "Baby & Kids", id: "toys-games", color: "bg-cyan-500" },
+{ icon: FlaskConicalIcon, title: "Chemicals", id: "other", color: "bg-indigo-500" },
 ];
 
 const stats = [
@@ -51,7 +51,11 @@ export const HeroSection = (): JSX.Element => {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [location, setLocation] = useState("");
+  const [userLocationCoords, setUserLocationCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [selectedCategory, setSelectedCategory] = useState("All Categories");
+
+  const [rawVendors, setRawVendors] = useState<any[]>([]); // Store raw vendor data
+  const [nearbyVendors, setNearbyVendors] = useState<any[]>([]);
   const [freshRecommendations, setFreshRecommendations] = useState<any[]>([]);
   const [topVendorsList, setTopVendorsList] = useState<any[]>([]);
   const [electronics, setElectronics] = useState<any[]>([]);
@@ -62,6 +66,35 @@ export const HeroSection = (): JSX.Element => {
   React.useEffect(() => {
     fetchHomeData();
   }, []);
+
+  // Filter nearby vendors whenever user location or vendors list changes
+  React.useEffect(() => {
+    if (userLocationCoords && rawVendors.length > 0) {
+      const vendorsWithDist = rawVendors.map(v => {
+        const vLat = v.businessLat || v.location?.lat;
+        const vLng = v.businessLng || v.location?.lng;
+
+        let dist = Infinity;
+        if (vLat && vLng) {
+          dist = calculateDistance(userLocationCoords.lat, userLocationCoords.lng, vLat, vLng);
+        }
+        return { ...v, _distance: dist };
+      });
+
+      // Filter: < 50km
+      const nearby = vendorsWithDist
+        .filter(v => v._distance < 50000)
+        .sort((a, b) => a._distance - b._distance)
+        .slice(0, 6);
+
+      setNearbyVendors(mapVendors(nearby).map((v, i) => ({
+        ...v,
+        badge: { text: formatDistance(nearby[i]._distance), variant: "blue" as const } // Overwrite badge with distance
+      })));
+    } else {
+      setNearbyVendors([]);
+    }
+  }, [userLocationCoords, rawVendors]);
 
   const fetchHomeData = async () => {
     try {
@@ -91,8 +124,9 @@ export const HeroSection = (): JSX.Element => {
         limitCount: 50
       });
 
-      const activeVendors = (allVendors || []).filter(v => v.is_active === true).slice(0, 6);
-      setTopVendorsList(mapVendors(activeVendors));
+      const activeVendors = (allVendors || []).filter(v => v.is_active === true);
+      setRawVendors(activeVendors); // Store for location filtering
+      setTopVendorsList(mapVendors(activeVendors.slice(0, 6)));
 
       // Filter products by category
       // Note: We check both category_id (database ID) and category (legacy/fallback string)
@@ -224,13 +258,17 @@ export const HeroSection = (): JSX.Element => {
 
                 {/* Location Input */}
                 <div className="flex items-center gap-3 flex-1 px-4 py-3 border-b md:border-b-0 md:border-r border-neutral-100">
-                  <MapPin className="w-5 h-5 text-primary-500 flex-shrink-0" />
-                  <input
-                    type="text"
-                    value={location}
-                    onChange={(e) => setLocation(e.target.value)}
+                  <LocationPicker
+                    variant="search"
                     placeholder="Location"
-                    className="w-full font-sans text-sm md:text-base text-neutral-900 placeholder-neutral-400 outline-none bg-transparent"
+                    initialLocation={location ? { address: location, lat: 0, lng: 0 } : undefined}
+                    onLocationSelect={(loc) => {
+                      setLocation(loc.address);
+                      if (loc.lat && loc.lng) {
+                        setUserLocationCoords({ lat: loc.lat, lng: loc.lng });
+                      }
+                    }}
+                    className="w-full"
                   />
                 </div>
 
@@ -367,6 +405,16 @@ export const HeroSection = (): JSX.Element => {
           </div>
         ) : (
           <div className="flex flex-col gap-16">
+            {/* Nearby Vendors Section - Only shows if user has location set and found matches */}
+            {nearbyVendors.length > 0 && (
+              <ProductGrid
+                title="Vendors Near You"
+                subtitle={`Found ${nearbyVendors.length} vendors near ${location || 'you'}`}
+                products={nearbyVendors}
+                icon={<MapPin className="w-5 h-5 text-red-500" />}
+              />
+            )}
+
             <ProductGrid
               title="Fresh Recommendations"
               subtitle="Newly added products you might love"
