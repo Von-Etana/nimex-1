@@ -265,30 +265,16 @@ export const VendorProfileSettingsScreen: React.FC = () => {
                 General Business Address
               </label>
               <div className="space-y-3">
-                <input
-                  type="text"
-                  value={formData.businessAddress}
-                  onChange={(e) => setFormData({ ...formData, businessAddress: e.target.value })}
-                  className="w-full h-10 md:h-12 px-3 md:px-4 rounded-lg border border-neutral-200 font-sans text-sm md:text-base text-neutral-900 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                  placeholder="e.g., Ikeja, Lagos"
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setShowLocationPicker(!showLocationPicker)}
-                  className="w-full"
-                >
-                  <MapPin className="w-4 h-4 mr-2" />
-                  {showLocationPicker ? 'Hide Map' : 'Pick Location on Map'}
-                </Button>
-                {showLocationPicker && (
+                <div className="space-y-3">
                   <LocationPicker
+                    variant="default"
+                    placeholder="Seach for your business address"
                     initialLocation={
                       formData.businessLat && formData.businessLng
                         ? {
                           lat: formData.businessLat,
                           lng: formData.businessLng,
-                          address: formData.businessAddress || '',
+                          address: formData.businessAddress || ''
                         }
                         : undefined
                     }
@@ -300,9 +286,8 @@ export const VendorProfileSettingsScreen: React.FC = () => {
                         businessLng: location.lng,
                       });
                     }}
-                    placeholder="Search for your business location in Nigeria"
                   />
-                )}
+                </div>
               </div>
             </div>
           </CardContent>
