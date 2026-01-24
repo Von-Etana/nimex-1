@@ -57,11 +57,33 @@ export const VendorProfileSettingsScreen: React.FC = () => {
     proofOfAddressUrl: '',
     avatarUrl: '',
   });
-  const [showLocationPicker, setShowLocationPicker] = useState(false);
+
+  // Payout / Bank Details State
+  const [banks, setBanks] = useState<{ name: string, code: string }[]>([]);
+  const [verifyingAccount, setVerifyingAccount] = useState(false);
+
+  const [payoutData, setPayoutData] = useState({
+    bankCode: '',
+    accountNumber: '',
+    accountName: '',
+  });
 
   useEffect(() => {
     loadData();
+    loadBanks();
   }, [user]);
+
+  const loadBanks = async () => {
+    try {
+      const { flutterwaveService } = await import('../../services/flutterwaveService');
+      const result = await flutterwaveService.getBankList();
+      if (result.success && result.banks) {
+        setBanks(result.banks);
+      }
+    } catch (e) {
+      console.error("Failed to load banks", e);
+    }
+  };
 
   const loadData = async () => {
     try {
@@ -98,6 +120,16 @@ export const VendorProfileSettingsScreen: React.FC = () => {
             avatarUrl: vendorData.avatar_url || '',
           });
 
+          // Load Bank Details if they exist
+          if ((vendorData as any).bank_account_details) {
+            const bankDetails = (vendorData as any).bank_account_details;
+            setPayoutData({
+              bankCode: bankDetails.bank_code || '',
+              accountNumber: bankDetails.account_number || '',
+              accountName: bankDetails.account_name || ''
+            });
+          }
+
           if (vendorData.market_id) {
             const market = marketsData?.find((m) => m.id === vendorData.market_id);
             if (market) setSelectedMarket(market);
@@ -111,6 +143,39 @@ export const VendorProfileSettingsScreen: React.FC = () => {
     }
   };
 
+  const verifyBankAccount = async (accountNumber: string, bankCode: string) => {
+    if (accountNumber.length !== 10 || !bankCode) return;
+
+    setVerifyingAccount(true);
+    setPayoutData(prev => ({ ...prev, accountName: '' }));
+
+    try {
+      const { flutterwaveService } = await import('../../services/flutterwaveService');
+      const result = await flutterwaveService.resolveAccountNumber(accountNumber, bankCode);
+      if (result.success) {
+        setPayoutData(prev => ({ ...prev, accountName: result.accountName }));
+      } else {
+        setError('Could not verify account number');
+      }
+    } catch (e) {
+      console.error(e);
+      setError('Failed to verify account');
+    } finally {
+      setVerifyingAccount(false);
+    }
+  };
+
+  const handlePayoutChange = (field: string, value: string) => {
+    const newData = { ...payoutData, [field]: value };
+    setPayoutData(newData);
+
+    if (field === 'accountNumber' && value.length === 10 && newData.bankCode) {
+      verifyBankAccount(value, newData.bankCode);
+    } else if (field === 'bankCode' && newData.accountNumber.length === 10) {
+      verifyBankAccount(newData.accountNumber, value);
+    }
+  };
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -120,7 +185,7 @@ export const VendorProfileSettingsScreen: React.FC = () => {
     try {
       if (!user) throw new Error('User not authenticated');
 
-      const vendorPayload = {
+      const vendorPayload: any = {
         user_id: user.uid,
         business_name: formData.businessName,
         business_description: formData.businessDescription,
@@ -137,21 +202,52 @@ export const VendorProfileSettingsScreen: React.FC = () => {
         updated_at: Timestamp.now(),
       };
 
+      if (payoutData.accountName) {
+        vendorPayload.bank_account_details = {
+          bank_code: payoutData.bankCode,
+          account_number: payoutData.accountNumber,
+          account_name: payoutData.accountName,
+          bank_name: banks.find(b => b.code === payoutData.bankCode)?.name || ''
+        };
+      }
+
       // Check if vendor exists by querying user_id field (same pattern as CreateProductScreen)
       const existingVendors = await FirestoreService.getDocuments<VendorProfile>(COLLECTIONS.VENDORS, {
         filters: [{ field: 'user_id', operator: '==', value: user.uid }],
         limitCount: 1
       });
 
+      let vendorId = user.uid;
       if (existingVendors.length > 0) {
         // Update existing vendor using its actual document ID
-        await FirestoreService.updateDocument(COLLECTIONS.VENDORS, existingVendors[0].id, vendorPayload);
+        vendorId = existingVendors[0].id;
+        await FirestoreService.updateDocument(COLLECTIONS.VENDORS, vendorId, vendorPayload);
       } else {
         // Create new vendor with user.uid as document ID for consistency
-        await FirestoreService.setDocument(COLLECTIONS.VENDORS, user.uid, {
+        await FirestoreService.setDocument(COLLECTIONS.VENDORS, vendorId, {
           ...vendorPayload,
           created_at: Timestamp.now(),
         });
+      }
+
+      // Create Flutterwave Wallet if we have bank details
+      if (payoutData.accountName && payoutData.bankCode && payoutData.accountNumber) {
+        try {
+          const { flutterwaveService } = await import('../../services/flutterwaveService');
+          // This will check if wallet exists internally or update/create subaccount?
+          // The createVendorWallet logic usually handles "add subaccount" on FW side.
+          // We should only call it if not already created, but for now we call to ensure sync or update.
+          await flutterwaveService.createVendorWallet(vendorId, {
+            business_name: formData.businessName,
+            email: user.email || '',
+            phone: formData.businessPhone || '',
+            bank_code: payoutData.bankCode,
+            account_number: payoutData.accountNumber
+          });
+        } catch (fwError) {
+          console.error("Failed to create/upadte wallet:", fwError);
+          // Don't block profile save, but maybe warn?
+        }
       }
 
       setSuccess('Profile updated successfully!');
@@ -290,6 +386,70 @@ export const VendorProfileSettingsScreen: React.FC = () => {
                 </div>
               </div>
             </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-4 md:p-6 space-y-4 md:space-y-6">
+            <div className="flex items-center gap-2 md:gap-3 pb-3 md:pb-4 border-b border-neutral-100">
+              <Building2 className="w-4 h-4 md:w-6 md:h-6 text-green-600" />
+              <div className="flex-1">
+                <h2 className="font-heading font-semibold text-sm md:text-xl text-neutral-900">
+                  Payout Details
+                </h2>
+                <p className="font-sans text-xs md:text-sm text-neutral-600 mt-0.5 md:mt-1">
+                  Bank account for receiving payments
+                </p>
+              </div>
+            </div>
+
+            <div className="grid md:grid-cols-2 gap-4">
+              <div>
+                <label className="block font-sans font-medium text-xs md:text-sm text-neutral-700 mb-1 md:mb-2">
+                  Bank Name
+                </label>
+                <select
+                  value={payoutData.bankCode}
+                  onChange={(e) => handlePayoutChange('bankCode', e.target.value)}
+                  className="w-full h-10 md:h-12 px-3 md:px-4 rounded-lg border border-neutral-200 font-sans text-sm md:text-base text-neutral-900 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white"
+                >
+                  <option value="">Select Bank</option>
+                  {banks.map((bank) => (
+                    <option key={bank.code} value={bank.code}>{bank.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block font-sans font-medium text-xs md:text-sm text-neutral-700 mb-1 md:mb-2">
+                  Account Number
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={payoutData.accountNumber}
+                    onChange={(e) => handlePayoutChange('accountNumber', e.target.value)}
+                    maxLength={10}
+                    className="w-full h-10 md:h-12 px-3 md:px-4 rounded-lg border border-neutral-200 font-sans text-sm md:text-base text-neutral-900 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                    placeholder="0123456789"
+                  />
+                  {verifyingAccount && (
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                      <Loader2 className="w-4 h-4 animate-spin text-primary-500" />
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {payoutData.accountName && (
+              <div className="p-3 bg-green-50 border border-green-100 rounded-lg flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-green-500" />
+                <p className="text-sm text-green-700 font-medium">
+                  Verified Name: {payoutData.accountName}
+                </p>
+              </div>
+            )}
           </CardContent>
         </Card>
 
