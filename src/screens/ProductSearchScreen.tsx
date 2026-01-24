@@ -11,6 +11,7 @@ import { googleMapsService } from '../services/googleMapsService';
 import { recommendationService } from '../services/recommendationService';
 import { useAuth } from '../contexts/AuthContext';
 import { CATEGORIES } from '../lib/categories';
+import { LocationPicker } from '../components/maps/LocationPicker';
 
 interface Product {
   id: string;
@@ -143,6 +144,7 @@ export const ProductSearchScreen: React.FC = () => {
       (error) => {
         console.error('Geolocation error:', error);
         setIsLocating(false);
+        alert('Unable to retrieve your location. Please check your browser permissions.');
       }
     );
   };
@@ -369,27 +371,20 @@ export const ProductSearchScreen: React.FC = () => {
               </div>
               <div className="w-[1px] h-8 bg-neutral-200 mx-2 hidden md:block"></div>
               <div className="flex-1 relative hidden md:block">
-                <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400" />
-                <input
-                  type="text"
-                  value={locationFilter}
-                  onChange={(e) => handleLocationInputChange(e.target.value)}
+                <LocationPicker
+                  variant="search"
                   placeholder="Location..."
-                  className="w-full pl-9 pr-4 py-2 bg-transparent border-none focus:ring-0 font-sans text-neutral-900 placeholder:text-neutral-500 h-10"
+                  className="w-full"
+                  initialLocation={locationFilter ? { address: locationFilter, lat: 0, lng: 0 } : undefined}
+                  onLocationSelect={(loc) => {
+                    handleLocationInputChange(loc.address);
+                    // Also center map if we have coordinates
+                    if (map && loc.lat && loc.lng) {
+                      map.setCenter({ lat: loc.lat, lng: loc.lng });
+                      map.setZoom(13);
+                    }
+                  }}
                 />
-                {showLocationSuggestions && locationSuggestions.length > 0 && (
-                  <div className="absolute top-full left-0 right-0 z-20 bg-white border border-neutral-200 rounded-lg shadow-xl mt-2 max-h-48 overflow-y-auto">
-                    {locationSuggestions.map((suggestion, index) => (
-                      <button
-                        key={index}
-                        onClick={() => selectLocationSuggestion(suggestion)}
-                        className="w-full px-3 py-2 text-left hover:bg-neutral-50 font-sans text-sm text-neutral-700 border-b border-neutral-100 last:border-b-0"
-                      >
-                        {suggestion}
-                      </button>
-                    ))}
-                  </div>
-                )}
               </div>
               <Button
                 onClick={() => detectUserLocation()}
@@ -477,183 +472,179 @@ export const ProductSearchScreen: React.FC = () => {
                     />
                   </div>
 
-                  import {CATEGORIES} from '../lib/collections'; // Import from lib/categories actually, path fix needed
+                </div>
 
-                  // ... existing imports
+                <div>
+                  <label className="block font-sans font-medium text-sm text-neutral-700 mb-2">
+                    Category
+                  </label>
+                  <select
+                    value={category}
+                    onChange={(e) => updateFilter('category', e.target.value)}
+                    className="w-full h-10 px-3 rounded-lg border border-neutral-200 font-sans text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                  >
+                    <option value="">All Categories</option>
+                    {CATEGORIES.map((cat) => (
+                      <option key={cat.id} value={cat.id}>{cat.name}</option>
+                    ))}
+                  </select>
+                </div>
 
-                  // ...
+                <div>
+                  <label className="block font-sans font-medium text-sm text-neutral-700 mb-2">
+                    Sort By
+                  </label>
+                  <select
+                    value={sortBy}
+                    onChange={(e) => updateFilter('sortBy', e.target.value)}
+                    className="w-full h-10 px-3 rounded-lg border border-neutral-200 font-sans text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                  >
+                    <option value="relevance">Relevance</option>
+                    <option value="price_low">Price: Low to High</option>
+                    <option value="price_high">Price: High to Low</option>
+                    <option value="newest">Newest First</option>
+                    <option value="rating">Highest Rated</option>
+                  </select>
+                </div>
 
-                  <div>
-                    <label className="block font-sans font-medium text-sm text-neutral-700 mb-2">
-                      Category
-                    </label>
-                    <select
-                      value={category}
-                      onChange={(e) => updateFilter('category', e.target.value)}
-                      className="w-full h-10 px-3 rounded-lg border border-neutral-200 font-sans text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
-                    >
-                      <option value="">All Categories</option>
-                      {CATEGORIES.map((cat) => (
-                        <option key={cat.id} value={cat.id}>{cat.name}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block font-sans font-medium text-sm text-neutral-700 mb-2">
-                      Sort By
-                    </label>
-                    <select
-                      value={sortBy}
-                      onChange={(e) => updateFilter('sortBy', e.target.value)}
-                      className="w-full h-10 px-3 rounded-lg border border-neutral-200 font-sans text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
-                    >
-                      <option value="relevance">Relevance</option>
-                      <option value="price_low">Price: Low to High</option>
-                      <option value="price_high">Price: High to Low</option>
-                      <option value="newest">Newest First</option>
-                      <option value="rating">Highest Rated</option>
-                    </select>
-                  </div>
-
-                  {/* Mobile Location Input (visible only on mobile if not provided in hero) */}
-                  <div className="md:hidden">
-                    <label className="block font-sans font-medium text-sm text-neutral-700 mb-2">
-                      Location
-                    </label>
-                    <div className="relative">
-                      <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400" />
-                      <input
-                        type="text"
-                        value={locationFilter}
-                        onChange={(e) => handleLocationInputChange(e.target.value)}
-                        placeholder="City, State..."
-                        className="w-full pl-9 pr-3 h-10 rounded-lg border border-neutral-200 font-sans text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-                      />
-                    </div>
+                {/* Mobile Location Input (visible only on mobile if not provided in hero) */}
+                <div className="md:hidden">
+                  <label className="block font-sans font-medium text-sm text-neutral-700 mb-2">
+                    Location
+                  </label>
+                  <div className="relative">
+                    <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400" />
+                    <input
+                      type="text"
+                      value={locationFilter}
+                      onChange={(e) => handleLocationInputChange(e.target.value)}
+                      placeholder="City, State..."
+                      className="w-full pl-9 pr-3 h-10 rounded-lg border border-neutral-200 font-sans text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    />
                   </div>
                 </div>
-              </CardContent>
+              </div>
+            </CardContent>
             </Card>
           )}
 
-          {!query && user && (
-            <div className="mb-6">
-              <Button
-                variant="outline"
-                onClick={() => setShowRecommendations(!showRecommendations)}
-                className="mb-4"
-              >
-                <TrendingUp className="w-4 h-4 mr-2" />
-                {showRecommendations ? 'Hide' : 'Show'} Recommendations
-              </Button>
+        {!query && user && (
+          <div className="mb-6">
+            <Button
+              variant="outline"
+              onClick={() => setShowRecommendations(!showRecommendations)}
+              className="mb-4"
+            >
+              <TrendingUp className="w-4 h-4 mr-2" />
+              {showRecommendations ? 'Hide' : 'Show'} Recommendations
+            </Button>
 
-              {showRecommendations && (
-                <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4">
-                  {/* Personalized Recommendations */}
-                  {recommendedProducts.length > 0 && (
-                    <div>
-                      <h3 className="font-heading font-semibold text-lg text-neutral-900 mb-3 flex items-center gap-2">
-                        <Award className="w-5 h-5 text-primary-500" />
-                        Recommended for You
-                      </h3>
-                      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-                        {recommendedProducts.slice(0, 6).map((product) => (
-                          <ProductCard key={product.id} product={product} navigate={navigate} user={user} />
-                        ))}
-                      </div>
+            {showRecommendations && (
+              <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4">
+                {/* Personalized Recommendations */}
+                {recommendedProducts.length > 0 && (
+                  <div>
+                    <h3 className="font-heading font-semibold text-lg text-neutral-900 mb-3 flex items-center gap-2">
+                      <Award className="w-5 h-5 text-primary-500" />
+                      Recommended for You
+                    </h3>
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                      {recommendedProducts.slice(0, 6).map((product) => (
+                        <ProductCard key={product.id} product={product} navigate={navigate} user={user} />
+                      ))}
                     </div>
-                  )}
+                  </div>
+                )}
 
-                  {/* Trending Products */}
-                  {trendingProducts.length > 0 && (
-                    <div>
-                      <h3 className="font-heading font-semibold text-lg text-neutral-900 mb-3 flex items-center gap-2">
-                        <TrendingUp className="w-5 h-5 text-orange-500" />
-                        Trending This Week
-                      </h3>
-                      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-                        {trendingProducts.slice(0, 6).map((product) => (
-                          <ProductCard key={product.id} product={product} navigate={navigate} user={user} />
-                        ))}
-                      </div>
+                {/* Trending Products */}
+                {trendingProducts.length > 0 && (
+                  <div>
+                    <h3 className="font-heading font-semibold text-lg text-neutral-900 mb-3 flex items-center gap-2">
+                      <TrendingUp className="w-5 h-5 text-orange-500" />
+                      Trending This Week
+                    </h3>
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                      {trendingProducts.slice(0, 6).map((product) => (
+                        <ProductCard key={product.id} product={product} navigate={navigate} user={user} />
+                      ))}
                     </div>
-                  )}
+                  </div>
+                )}
 
-                  {/* Top Vendors */}
-                  {topVendors.length > 0 && (
-                    <div>
-                      <h3 className="font-heading font-semibold text-lg text-neutral-900 mb-3 flex items-center gap-2">
-                        <Award className="w-5 h-5 text-yellow-500" />
-                        Top Rated Vendors
-                      </h3>
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        {topVendors.slice(0, 4).map((vendor) => (
-                          <Card
-                            key={vendor.id}
-                            onClick={() => navigate(`/vendor/${vendor.id}`)}
-                            className="cursor-pointer hover:shadow-lg transition-all border-neutral-100 hover:border-primary-100 group"
-                          >
-                            <CardContent className="p-4 text-center">
-                              <div className="w-16 h-16 bg-neutral-100 rounded-full mx-auto mb-3 flex items-center justify-center group-hover:bg-primary-50 transition-colors">
-                                <span className="font-heading font-bold text-lg text-neutral-700 group-hover:text-primary-600">
-                                  {vendor.business_name?.charAt(0)?.toUpperCase() || 'V'}
-                                </span>
-                              </div>
-                              <h4 className="font-sans font-medium text-neutral-900 text-sm mb-1 truncate">
-                                {vendor.business_name || 'Vendor'}
-                              </h4>
-                              <p className="font-sans text-xs text-neutral-500 truncate">
-                                {vendor.market_location || 'Location'}
-                              </p>
-                            </CardContent>
-                          </Card>
-                        ))}
-                      </div>
+                {/* Top Vendors */}
+                {topVendors.length > 0 && (
+                  <div>
+                    <h3 className="font-heading font-semibold text-lg text-neutral-900 mb-3 flex items-center gap-2">
+                      <Award className="w-5 h-5 text-yellow-500" />
+                      Top Rated Vendors
+                    </h3>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      {topVendors.slice(0, 4).map((vendor) => (
+                        <Card
+                          key={vendor.id}
+                          onClick={() => navigate(`/vendor/${vendor.id}`)}
+                          className="cursor-pointer hover:shadow-lg transition-all border-neutral-100 hover:border-primary-100 group"
+                        >
+                          <CardContent className="p-4 text-center">
+                            <div className="w-16 h-16 bg-neutral-100 rounded-full mx-auto mb-3 flex items-center justify-center group-hover:bg-primary-50 transition-colors">
+                              <span className="font-heading font-bold text-lg text-neutral-700 group-hover:text-primary-600">
+                                {vendor.business_name?.charAt(0)?.toUpperCase() || 'V'}
+                              </span>
+                            </div>
+                            <h4 className="font-sans font-medium text-neutral-900 text-sm mb-1 truncate">
+                              {vendor.business_name || 'Vendor'}
+                            </h4>
+                            <p className="font-sans text-xs text-neutral-500 truncate">
+                              {vendor.market_location || 'Location'}
+                            </p>
+                          </CardContent>
+                        </Card>
+                      ))}
                     </div>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-          {/* Results Grid */}
-          {loading ? (
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6">
-              {[...Array(8)].map((_, i) => (
-                <Card key={i} className="animate-pulse border-none shadow-sm bg-white">
-                  <CardContent className="p-0">
-                    <div className="w-full h-48 bg-neutral-100 rounded-t-lg" />
-                    <div className="p-4 space-y-3">
-                      <div className="h-4 bg-neutral-100 rounded w-3/4" />
-                      <div className="h-4 bg-neutral-100 rounded w-1/2" />
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          ) : products.length === 0 ? (
-            <div className="text-center py-16 bg-white rounded-lg border border-neutral-100 shadow-sm">
-              <div className="w-20 h-20 bg-neutral-50 rounded-full flex items-center justify-center mx-auto mb-4">
-                <SearchIcon className="w-8 h-8 text-neutral-300" />
+                  </div>
+                )}
               </div>
-              <h3 className="font-heading font-semibold text-xl text-neutral-900 mb-2">
-                No products found
-              </h3>
-              <p className="font-sans text-neutral-500 mb-6 max-w-sm mx-auto">
-                We couldn't find any products matching your search criteria. Try adjusting your search or filters.
-              </p>
-              <Button onClick={clearFilters} variant="outline">Clear Filters</Button>
+            )}
+          </div>
+        )}
+        {/* Results Grid */}
+        {loading ? (
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6">
+            {[...Array(8)].map((_, i) => (
+              <Card key={i} className="animate-pulse border-none shadow-sm bg-white">
+                <CardContent className="p-0">
+                  <div className="w-full h-48 bg-neutral-100 rounded-t-lg" />
+                  <div className="p-4 space-y-3">
+                    <div className="h-4 bg-neutral-100 rounded w-3/4" />
+                    <div className="h-4 bg-neutral-100 rounded w-1/2" />
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        ) : products.length === 0 ? (
+          <div className="text-center py-16 bg-white rounded-lg border border-neutral-100 shadow-sm">
+            <div className="w-20 h-20 bg-neutral-50 rounded-full flex items-center justify-center mx-auto mb-4">
+              <SearchIcon className="w-8 h-8 text-neutral-300" />
             </div>
-          ) : (
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6">
-              {products.map((product) => (
-                <ProductCard key={product.id} product={product} navigate={navigate} user={user} />
-              ))}
-            </div>
-          )}
-        </div>
+            <h3 className="font-heading font-semibold text-xl text-neutral-900 mb-2">
+              No products found
+            </h3>
+            <p className="font-sans text-neutral-500 mb-6 max-w-sm mx-auto">
+              We couldn't find any products matching your search criteria. Try adjusting your search or filters.
+            </p>
+            <Button onClick={clearFilters} variant="outline">Clear Filters</Button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6">
+            {products.map((product) => (
+              <ProductCard key={product.id} product={product} navigate={navigate} user={user} />
+            ))}
+          </div>
+        )}
       </div>
     </div>
+    </div >
   );
 };
 
