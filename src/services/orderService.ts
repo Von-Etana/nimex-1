@@ -145,18 +145,56 @@ class OrderService {
     paymentMethod: string
   ): Promise<{ success: boolean; error?: string }> {
     try {
-      // Get order to fetch buyer_id for notification
+      // Get order to fetch buyer_id and details for escrow
       const order = await FirestoreService.getDocument<any>(COLLECTIONS.ORDERS, orderId);
 
-      await FirestoreService.updateDocument(COLLECTIONS.ORDERS, orderId, {
-        payment_status: paymentStatus,
-        payment_reference: paymentReference,
-        payment_method: paymentMethod,
-        status: paymentStatus === 'paid' ? 'confirmed' : 'cancelled',
+      if (!order) {
+        throw new Error('Order not found');
+      }
+
+      await FirestoreService.runTransaction(async (transaction) => {
+        // Update order status
+        await FirestoreService.updateDocument(COLLECTIONS.ORDERS, orderId, {
+          payment_status: paymentStatus,
+          payment_reference: paymentReference,
+          payment_method: paymentMethod,
+          status: paymentStatus === 'paid' ? 'confirmed' : 'cancelled',
+          updated_at: Timestamp.now(),
+        });
+
+        // Create Escrow Transaction if paid
+        if (paymentStatus === 'paid') {
+          const escrowId = `escrow_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+          const platformFeeRecord = await FirestoreService.getDocuments(COLLECTIONS.COMMISSION_SETTINGS, {
+            filters: [{ field: 'type', operator: '==', value: 'default_platform_fee' }],
+            limitCount: 1
+          });
+
+          let platformFeePercentage = 0.05; // Default 5%
+          if (platformFeeRecord.length > 0) {
+            platformFeePercentage = (platformFeeRecord[0] as any).commission_amount / 100;
+          }
+
+          const platformFee = Math.round(order.total_amount * platformFeePercentage);
+          const vendorAmount = order.total_amount - platformFee;
+
+          await FirestoreService.setDocument(COLLECTIONS.ESCROW_TRANSACTIONS, escrowId, {
+            order_id: orderId,
+            buyer_id: order.buyer_id,
+            vendor_id: order.vendor_id,
+            amount: order.total_amount,
+            platform_fee: platformFee,
+            vendor_amount: vendorAmount,
+            status: 'held',
+            held_at: Timestamp.now(),
+            created_at: Timestamp.now(),
+            updated_at: Timestamp.now(),
+          });
+        }
       });
 
       // Notify buyer about order confirmation
-      if (order && paymentStatus === 'paid') {
+      if (paymentStatus === 'paid') {
         await notificationService.notifyOrderStatusChange(
           order.buyer_id,
           orderId,
@@ -192,6 +230,14 @@ class OrderService {
 
       const delivery = deliveries[0];
 
+      // Find Escrow Record
+      const escrowTransactions = await FirestoreService.getDocuments(COLLECTIONS.ESCROW_TRANSACTIONS, {
+        filters: [{ field: 'order_id', operator: '==', value: request.orderId }],
+        limitCount: 1
+      });
+
+      const escrowTransaction = escrowTransactions.length > 0 ? escrowTransactions[0] : null;
+
       await FirestoreService.runTransaction(async (transaction) => {
         // Update delivery status
         await FirestoreService.updateDocument(COLLECTIONS.DELIVERIES, delivery.id, {
@@ -199,10 +245,43 @@ class OrderService {
           actual_delivery_date: Timestamp.now(),
         });
 
-        // Create escrow release record
+        // Release Escrow
+        if (escrowTransaction) {
+          await FirestoreService.updateDocument(COLLECTIONS.ESCROW_TRANSACTIONS, escrowTransaction.id, {
+            status: 'released',
+            released_at: Timestamp.now(),
+            release_reason: 'delivery_confirmed_by_buyer'
+          });
+
+          // Credit Vendor Wallet (Logic could be moved to a trigger, but implementing here for directness)
+          // Fetch vendor to update wallet
+          const vendor = await FirestoreService.getDocument<any>(COLLECTIONS.VENDORS, escrowTransaction.vendor_id);
+          if (vendor) {
+            const newBalance = (vendor.wallet_balance || 0) + escrowTransaction.vendor_amount;
+            await FirestoreService.updateDocument(COLLECTIONS.VENDORS, escrowTransaction.vendor_id, {
+              wallet_balance: newBalance,
+              updated_at: Timestamp.now()
+            });
+
+            // Log Wallet Transaction
+            const walletTxId = `wtx_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+            await FirestoreService.setDocument('wallet_transactions', walletTxId, {
+              vendor_id: escrowTransaction.vendor_id,
+              type: 'sale',
+              amount: escrowTransaction.vendor_amount,
+              balance_after: newBalance,
+              reference: escrowTransaction.id,
+              description: `Earnings from Order #${request.orderId}`,
+              status: 'completed',
+              created_at: Timestamp.now()
+            });
+          }
+        }
+
+        // Create escrow release record (audit trail)
         const releaseId = `release_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
         await FirestoreService.setDocument('escrow_releases', releaseId, {
-          escrow_transaction_id: delivery.id, // Assuming delivery ID is linked to escrow? Or should check escrow_transactions table logic
+          escrow_transaction_id: escrowTransaction?.id || 'unknown',
           release_type: 'manual_buyer',
           buyer_confirmed_delivery: true,
           delivery_confirmed_at: Timestamp.now(),
