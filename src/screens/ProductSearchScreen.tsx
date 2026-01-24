@@ -10,6 +10,7 @@ import { COLLECTIONS } from '../lib/collections';
 import { googleMapsService } from '../services/googleMapsService';
 import { recommendationService } from '../services/recommendationService';
 import { useAuth } from '../contexts/AuthContext';
+import { CATEGORIES } from '../lib/categories';
 
 interface Product {
   id: string;
@@ -474,6 +475,28 @@ export const ProductSearchScreen: React.FC = () => {
                       placeholder="Max"
                       className="w-full h-10 px-3 rounded-lg border border-neutral-200 font-sans text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 transition-shadow"
                     />
+                  </div>
+
+                  import {CATEGORIES} from '../lib/collections'; // Import from lib/categories actually, path fix needed
+
+                  // ... existing imports
+
+                  // ...
+
+                  <div>
+                    <label className="block font-sans font-medium text-sm text-neutral-700 mb-2">
+                      Category
+                    </label>
+                    <select
+                      value={category}
+                      onChange={(e) => updateFilter('category', e.target.value)}
+                      className="w-full h-10 px-3 rounded-lg border border-neutral-200 font-sans text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                    >
+                      <option value="">All Categories</option>
+                      {CATEGORIES.map((cat) => (
+                        <option key={cat.id} value={cat.id}>{cat.name}</option>
+                      ))}
+                    </select>
                   </div>
 
                   <div>
