@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
-import { Search, Eye, Shield, DollarSign, Clock, CheckCircle, XCircle, Loader2 } from 'lucide-react';
+import { Search, Eye, Shield, Clock, CheckCircle, XCircle, Loader2 } from 'lucide-react';
 import { FirestoreService } from '../../services/firestore.service';
 import { logger } from '../../lib/logger';
 
@@ -71,27 +71,37 @@ export const AdminEscrowScreen: React.FC = () => {
       const vendorsMap = new Map();
       const deliveriesMap = new Map();
 
-      // Fetch Orders
-      if (orderIds.length > 0) {
-        const allOrders = await FirestoreService.getDocuments('orders');
-        allOrders.forEach(o => ordersMap.set(o.id, o));
+      // Fetch related data in parallel using specific IDs
+      const [orders, profiles, vendors] = await Promise.all([
+        orderIds.length > 0 ? FirestoreService.getDocumentsByIds<any>('orders', orderIds) : [],
+        buyerIds.length > 0 ? FirestoreService.getDocumentsByIds<any>('profiles', buyerIds) : [],
+        vendorIds.length > 0 ? FirestoreService.getDocumentsByIds<any>('vendors', vendorIds) : [],
+      ]);
 
-        // Fetch Deliveries
-        const allDeliveries = await FirestoreService.getDocuments('deliveries');
-        allDeliveries.forEach(d => deliveriesMap.set(d.order_id, d));
-      }
+      // Manual fetch for deliveries since we don't have a helper for "where field in list" chunking yet
+      // For this specific screen, let's just use the `getDocumentsByIds` pattern locally if needed, 
+      // but simpler: just fetch deliveries for the visible list? 
+      // Actually, let's just fetch all deliveries for now as a compromise IF the count is low, 
+      // OR better: skip deliveries map for the main list if not critical, or fetch on demand? 
+      // The table shows "Delivery Status" via `transaction.deliveries`.
+      // Let's implement a quick chunked fetch for deliveries here.
 
-      // Fetch Profiles
-      if (buyerIds.length > 0) {
-        const allProfiles = await FirestoreService.getDocuments('profiles');
-        allProfiles.forEach(p => profilesMap.set(p.id, p));
+      const distinctOrderIds = [...new Set(orderIds)];
+      const deliveryChunks = [];
+      for (let i = 0; i < distinctOrderIds.length; i += 10) {
+        const chunk = distinctOrderIds.slice(i, i + 10);
+        if (chunk.length > 0) {
+          deliveryChunks.push(FirestoreService.getDocuments('deliveries', { filters: [{ field: 'order_id', operator: 'in', value: chunk }] }));
+        }
       }
+      const deliveryResults = await Promise.all(deliveryChunks);
+      const allDeliveries = deliveryResults.flat();
 
-      // Fetch Vendors
-      if (vendorIds.length > 0) {
-        const allVendors = await FirestoreService.getDocuments('vendors');
-        allVendors.forEach(v => vendorsMap.set(v.id, v));
-      }
+
+      orders.forEach(o => ordersMap.set(o.id, o));
+      profiles.forEach(p => profilesMap.set(p.id, p));
+      vendors.forEach(v => vendorsMap.set(v.id, v));
+      allDeliveries.forEach((d: any) => deliveriesMap.set(d.order_id, d)); // Deliveries map by order_id
 
       const mappedTransactions = transactionsData.map((t: any) => ({
         ...t,
