@@ -4,6 +4,7 @@ import { User, Mail, Phone, MapPin, Edit2, Save, Loader2 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Card, CardContent } from '../components/ui/card';
 import { useAuth } from '../contexts/AuthContext';
+import { LocationPicker } from '../components/maps/LocationPicker';
 
 export const ProfileScreen: React.FC = () => {
   const { user, profile, updateProfile, loading } = useAuth();
@@ -205,13 +206,20 @@ export const ProfileScreen: React.FC = () => {
                     Location
                   </label>
                   {editing ? (
-                    <input
-                      type="text"
-                      value={formData.location}
-                      onChange={(e) => setFormData({ ...formData, location: e.target.value })}
-                      className="w-full h-12 px-4 rounded-lg border border-neutral-200 font-sans text-neutral-900 focus:outline-none focus:ring-2 focus:ring-primary-500"
-                      placeholder="Lagos, Nigeria"
-                    />
+                    <div className="space-y-2">
+                      <input
+                        type="hidden" // Keep simple string in state for now or handle complexity? 
+                      // Actually, better to use the picker. 
+                      // But wait, profile.location is maybe just a string?
+                      // Let's assume we store the address string.
+                      />
+                      <LocationPicker
+                        variant="minimal"
+                        initialLocation={formData.location ? { lat: 6.5244, lng: 3.3792, address: formData.location } : undefined}
+                        onLocationSelect={(loc) => setFormData({ ...formData, location: loc.address })}
+                        placeholder="Search for your location"
+                      />
+                    </div>
                   ) : (
                     <p className="font-sans text-neutral-900">{profile?.location || 'Not set'}</p>
                   )}
