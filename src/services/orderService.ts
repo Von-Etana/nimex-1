@@ -58,61 +58,58 @@ class OrderService {
       // Generate IDs
       const orderId = `order_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
-      // Use transaction to create order and items
-      await FirestoreService.runTransaction(async (transaction) => {
-        // First, validate stock for all items
-        for (const item of request.items) {
-          const product = await FirestoreService.getDocument<any>(COLLECTIONS.PRODUCTS, item.productId);
-          if (!product) {
-            throw new Error(`Product ${item.productId} not found`);
-          }
-          if ((product.stock_quantity || 0) < item.quantity) {
-            throw new Error(`Insufficient stock for ${item.productTitle}. Available: ${product.stock_quantity || 0}, Requested: ${item.quantity}`);
-          }
+      // First, validate stock for all items
+      for (const item of request.items) {
+        const product = await FirestoreService.getDocument<any>(COLLECTIONS.PRODUCTS, item.productId);
+        if (!product) {
+          throw new Error(`Product ${item.productId} not found`);
         }
+        if ((product.stock_quantity || 0) < item.quantity) {
+          throw new Error(`Insufficient stock for ${item.productTitle}. Available: ${product.stock_quantity || 0}, Requested: ${item.quantity}`);
+        }
+      }
 
-        // Create order
-        await FirestoreService.setDocument(COLLECTIONS.ORDERS, orderId, {
-          order_number: orderNumber,
-          buyer_id: request.buyerId,
-          vendor_id: request.vendorId,
-          delivery_address_id: request.deliveryAddressId, // Note: This field needs to be in Order type if we use it
-          status: 'pending',
-          subtotal,
-          shipping_fee: request.deliveryCost,
-          total_amount: totalAmount,
-          payment_status: 'pending',
-          notes: request.notes || null,
+      // Create order
+      await FirestoreService.setDocument(COLLECTIONS.ORDERS, orderId, {
+        order_number: orderNumber,
+        buyer_id: request.buyerId,
+        vendor_id: request.vendorId,
+        delivery_address_id: request.deliveryAddressId,
+        status: 'pending',
+        subtotal,
+        shipping_fee: request.deliveryCost,
+        total_amount: totalAmount,
+        payment_status: 'pending',
+        notes: request.notes || null,
+        created_at: Timestamp.now(),
+        updated_at: Timestamp.now(),
+      });
+
+      // Create order items and reduce stock
+      for (const item of request.items) {
+        const itemId = `item_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        await FirestoreService.setDocument(COLLECTIONS.ORDER_ITEMS, itemId, {
+          order_id: orderId,
+          product_id: item.productId,
+          product_title: item.productTitle,
+          product_image: item.productImage,
+          quantity: item.quantity,
+          unit_price: item.unitPrice,
+          total_price: item.unitPrice * item.quantity,
           created_at: Timestamp.now(),
           updated_at: Timestamp.now(),
         });
 
-        // Create order items and reduce stock
-        for (const item of request.items) {
-          const itemId = `item_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-          await FirestoreService.setDocument(COLLECTIONS.ORDER_ITEMS, itemId, {
-            order_id: orderId,
-            product_id: item.productId,
-            product_title: item.productTitle,
-            product_image: item.productImage,
-            quantity: item.quantity,
-            unit_price: item.unitPrice,
-            total_price: item.unitPrice * item.quantity,
-            created_at: Timestamp.now(),
+        // Reduce stock quantity
+        const product = await FirestoreService.getDocument<any>(COLLECTIONS.PRODUCTS, item.productId);
+        if (product) {
+          const newStock = Math.max(0, (product.stock_quantity || 0) - item.quantity);
+          await FirestoreService.updateDocument(COLLECTIONS.PRODUCTS, item.productId, {
+            stock_quantity: newStock,
             updated_at: Timestamp.now(),
           });
-
-          // Reduce stock quantity
-          const product = await FirestoreService.getDocument<any>(COLLECTIONS.PRODUCTS, item.productId);
-          if (product) {
-            const newStock = Math.max(0, (product.stock_quantity || 0) - item.quantity);
-            await FirestoreService.updateDocument(COLLECTIONS.PRODUCTS, item.productId, {
-              stock_quantity: newStock,
-              updated_at: Timestamp.now(),
-            });
-          }
         }
-      });
+      }
 
       // Notify vendor about new order
       await notificationService.notifyVendorNewOrder(
