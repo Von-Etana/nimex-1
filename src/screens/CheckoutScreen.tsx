@@ -223,7 +223,12 @@ export const CheckoutScreen: React.FC = () => {
       const failedOrders = orderResults.filter((result) => !result.success);
 
       if (failedOrders.length > 0) {
-        throw new Error('Failed to create some orders');
+        // Get specific error messages from failed orders
+        const errorMessages = failedOrders
+          .map((order) => order.error)
+          .filter(Boolean)
+          .join(', ');
+        throw new Error(errorMessages || 'Failed to create some orders');
       }
 
       const firstOrder = orderResults[0];
