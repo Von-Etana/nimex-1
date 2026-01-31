@@ -61,17 +61,39 @@ export const LoginScreen: React.FC = () => {
     }
   }, [user, profile, navigate, location]);
 
+  // Track if we're waiting for profile to load
+  const profileLoadTimeout = useRef<NodeJS.Timeout | null>(null);
+
   // Reset loading state if user exists but profile is null (profile fetch failed or doesn't exist)
   useEffect(() => {
     if (user && !profile && !authLoading && signInAttempted.current) {
-      // User is authenticated but has no profile - this could mean:
-      // 1. Profile doesn't exist in Firestore
-      // 2. Profile fetch failed
-      setLoading(false);
-      setGoogleLoading(false);
-      setError('Account not found. Your profile may not exist in the system. Please contact support.');
-      signInAttempted.current = false;
+      // User is authenticated but has no profile yet
+      // Wait a bit longer for profile to load before showing error
+      // This handles the race condition where Firebase auth completes before profile fetch
+      if (!profileLoadTimeout.current) {
+        profileLoadTimeout.current = setTimeout(() => {
+          // Re-check conditions - profile may have loaded during the wait
+          if (signInAttempted.current && !profile) {
+            setLoading(false);
+            setGoogleLoading(false);
+            setError('Account not found. Your profile may not exist in the system. Please contact support.');
+            signInAttempted.current = false;
+          }
+          profileLoadTimeout.current = null;
+        }, 5000); // Give 5 seconds for profile to load
+      }
+    } else if (profile && profileLoadTimeout.current) {
+      // Profile loaded, clear the timeout
+      clearTimeout(profileLoadTimeout.current);
+      profileLoadTimeout.current = null;
     }
+
+    return () => {
+      if (profileLoadTimeout.current) {
+        clearTimeout(profileLoadTimeout.current);
+        profileLoadTimeout.current = null;
+      }
+    };
   }, [user, profile, authLoading]);
 
   // Cleanup timeout on unmount
