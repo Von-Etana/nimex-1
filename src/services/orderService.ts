@@ -59,10 +59,12 @@ class OrderService {
       const orderId = `order_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
       // First, validate stock for all items
+      logger.info('Validating stock for items', { itemCount: request.items.length });
       for (const item of request.items) {
+        logger.info('Checking product', { productId: item.productId });
         const product = await FirestoreService.getDocument<any>(COLLECTIONS.PRODUCTS, item.productId);
         if (!product) {
-          throw new Error(`Product ${item.productId} not found`);
+          throw new Error(`Product "${item.productTitle}" not found in database`);
         }
         if ((product.stock_quantity || 0) < item.quantity) {
           throw new Error(`Insufficient stock for ${item.productTitle}. Available: ${product.stock_quantity || 0}, Requested: ${item.quantity}`);
@@ -70,6 +72,7 @@ class OrderService {
       }
 
       // Create order
+      logger.info('Creating order', { orderId, orderNumber });
       await FirestoreService.setDocument(COLLECTIONS.ORDERS, orderId, {
         order_number: orderNumber,
         buyer_id: request.buyerId,
@@ -86,6 +89,7 @@ class OrderService {
       });
 
       // Create order items and reduce stock
+      logger.info('Creating order items');
       for (const item of request.items) {
         const itemId = `item_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
         await FirestoreService.setDocument(COLLECTIONS.ORDER_ITEMS, itemId, {
@@ -111,13 +115,17 @@ class OrderService {
         }
       }
 
-      // Notify vendor about new order
-      await notificationService.notifyVendorNewOrder(
-        request.vendorId,
-        orderId,
-        orderNumber,
-        totalAmount
-      );
+      // Notify vendor about new order (non-blocking, don't fail order if notification fails)
+      try {
+        await notificationService.notifyVendorNewOrder(
+          request.vendorId,
+          orderId,
+          orderNumber,
+          totalAmount
+        );
+      } catch (notifyError) {
+        logger.warn('Failed to notify vendor about new order, but order was created successfully', notifyError);
+      }
 
       return {
         success: true,
