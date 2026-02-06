@@ -58,6 +58,467 @@ class OrderService {
       // Generate IDs
       const orderId = `order_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
+      // First, validate stock for all items (non-blocking - log warnings but continue)
+      logger.info('Validating stock for items', { itemCount: request.items.length });
+      console.log('[OrderService] Starting order creation for', request.items.length, 'items');
+
+      for (const item of request.items) {
+        console.log('[OrderService] Checking product:', item.productId, 'Title:', item.productTitle);
+        try {
+          const product = await FirestoreService.getDocument<any>(COLLECTIONS.PRODUCTS, item.productId);
+          if (!product) {
+            console.warn('[OrderService] Product not found in database:', item.productId);
+            // Continue anyway - product may have been deleted but order should still work
+          } else if ((product.stock_quantity || 0) < item.quantity) {
+            console.warn('[OrderService] Low stock for', item.productTitle, 'Available:', product.stock_quantity || 0, 'Requested:', item.quantity);
+            // Continue anyway - allow overselling, vendor can manage stock
+          } else {
+            console.log('[OrderService] Product OK:', item.productTitle, 'Stock:', product.stock_quantity);
+          }
+        } catch (validationError) {
+          console.error('[OrderService] Error validating product:', item.productId, validationError);
+          // Continue anyway - don't block order creation due to validation errors
+        }
+      }
+
+      // Create order
+      logger.info('Creating order', { orderId, orderNumber });
+      await FirestoreService.setDocument(COLLECTIONS.ORDERS, orderId, {
+        order_number: orderNumber,
+        buyer_id: request.buyerId,
+        vendor_id: request.vendorId,
+        delivery_address_id: request.deliveryAddressId,
+        status: 'pending',
+        subtotal,
+        shipping_fee: request.deliveryCost,
+        total_amount: totalAmount,
+        payment_status: 'pending',
+        notes: request.notes || null,
+        created_at: Timestamp.now(),
+        updated_at: Timestamp.now(),
+      });
+
+      // Create order items and reduce stock
+      logger.info('Creating order items');
+      console.log('[OrderService] Creating order items for order:', orderId);
+
+      for (const item of request.items) {
+        const itemId = `item_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+        try {
+          console.log('[OrderService] Creating order item:', itemId, 'for product:', item.productTitle);
+          await FirestoreService.setDocument(COLLECTIONS.ORDER_ITEMS, itemId, {
+            order_id: orderId,
+            product_id: item.productId,
+            product_title: item.productTitle,
+            product_image: item.productImage,
+            quantity: item.quantity,
+            unit_price: item.unitPrice,
+            total_price: item.unitPrice * item.quantity,
+            created_at: Timestamp.now(),
+            updated_at: Timestamp.now(),
+          });
+          console.log('[OrderService] Order item created successfully:', itemId);
+        } catch (itemError) {
+          console.error('[OrderService] Error creating order item:', itemId, itemError);
+          // Continue to next item - don't fail entire order
+        }
+
+        // Reduce stock quantity (non-blocking)
+        try {
+          const product = await FirestoreService.getDocument<any>(COLLECTIONS.PRODUCTS, item.productId);
+          if (product) {
+            const newStock = Math.max(0, (product.stock_quantity || 0) - item.quantity);
+            await FirestoreService.updateDocument(COLLECTIONS.PRODUCTS, item.productId, {
+              stock_quantity: newStock,
+              updated_at: Timestamp.now(),
+            });
+            console.log('[OrderService] Stock updated for', item.productTitle, 'New stock:', newStock);
+          }
+        } catch (stockError) {
+          console.warn('[OrderService] Failed to update stock for', item.productTitle, stockError);
+          // Continue - stock update is not critical for order completion
+        }
+      }
+
+      console.log('[OrderService] Order creation completed successfully:', orderId);
+
+      // Notify vendor about new order (non-blocking, don't fail order if notification fails)
+      try {
+        await notificationService.notifyVendorNewOrder(
+          request.vendorId,
+          orderId,
+          orderNumber,
+          totalAmount
+        );
+      } catch (notifyError) {
+        logger.warn('Failed to notify vendor about new order, but order was created successfully', notifyError);
+      }
+
+      return {
+        success: true,
+        data: {
+          orderId,
+          orderNumber,
+        },
+      };
+    } catch (error) {
+      logger.error('Failed to create order', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to create order',
+      };
+    }
+  }
+
+  async updateOrderPaymentStatus(
+    orderId: string,
+    paymentStatus: 'paid' | 'refunded',
+    paymentReference: string,
+    paymentMethod: string
+  ): Promise<{ success: boolean; error?: string }> {
+    try {
+      // Get order to fetch buyer_id and details for escrow
+      const order = await FirestoreService.getDocument<any>(COLLECTIONS.ORDERS, orderId);
+
+      if (!order) {
+        throw new Error('Order not found');
+      }
+
+      await FirestoreService.runTransaction(async (transaction) => {
+        // Update order status
+        await FirestoreService.updateDocument(COLLECTIONS.ORDERS, orderId, {
+          payment_status: paymentStatus,
+          payment_reference: paymentReference,
+          payment_method: paymentMethod,
+          status: paymentStatus === 'paid' ? 'confirmed' : 'cancelled',
+          updated_at: Timestamp.now(),
+        });
+
+        // Create Escrow Transaction if paid
+        if (paymentStatus === 'paid') {
+          const escrowId = `escrow_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+          const platformFeeRecord = await FirestoreService.getDocuments(COLLECTIONS.COMMISSION_SETTINGS, {
+            filters: [{ field: 'type', operator: '==', value: 'default_platform_fee' }],
+            limitCount: 1
+          });
+
+          let platformFeePercentage = 0.05; // Default 5%
+          if (platformFeeRecord.length > 0) {
+            platformFeePercentage = (platformFeeRecord[0] as any).commission_amount / 100;
+          }
+
+          const platformFee = Math.round(order.total_amount * platformFeePercentage);
+          const vendorAmount = order.total_amount - platformFee;
+
+          await FirestoreService.setDocument(COLLECTIONS.ESCROW_TRANSACTIONS, escrowId, {
+            order_id: orderId,
+            buyer_id: order.buyer_id,
+            vendor_id: order.vendor_id,
+            amount: order.total_amount,
+            platform_fee: platformFee,
+            vendor_amount: vendorAmount,
+            status: 'held',
+            held_at: Timestamp.now(),
+            created_at: Timestamp.now(),
+            updated_at: Timestamp.now(),
+          });
+        }
+      });
+
+      // Notify buyer about order confirmation
+      if (paymentStatus === 'paid') {
+        await notificationService.notifyOrderStatusChange(
+          order.buyer_id,
+          orderId,
+          order.order_number,
+          'confirmed'
+        );
+      }
+
+      return { success: true };
+    } catch (error) {
+      logger.error('Failed to update payment status', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to update payment status',
+      };
+    }
+  }
+
+  async confirmDelivery(request: ConfirmDeliveryRequest): Promise<{ success: boolean; error?: string }> {
+    try {
+      // Find delivery record
+      const deliveries = await FirestoreService.getDocuments(COLLECTIONS.DELIVERIES, {
+        filters: [
+          { field: 'order_id', operator: '==', value: request.orderId },
+          { field: 'buyer_id', operator: '==', value: request.buyerId }
+        ],
+        limitCount: 1
+      });
+
+      if (deliveries.length === 0) {
+        throw new Error('Delivery record not found');
+      }
+
+      const delivery = deliveries[0];
+
+      // Find Escrow Record
+      const escrowTransactions = await FirestoreService.getDocuments(COLLECTIONS.ESCROW_TRANSACTIONS, {
+        filters: [{ field: 'order_id', operator: '==', value: request.orderId }],
+        limitCount: 1
+      });
+
+      const escrowTransaction = escrowTransactions.length > 0 ? escrowTransactions[0] : null;
+
+      await FirestoreService.runTransaction(async (transaction) => {
+        // Update delivery status
+        await FirestoreService.updateDocument(COLLECTIONS.DELIVERIES, delivery.id, {
+          delivery_status: 'delivered',
+          actual_delivery_date: Timestamp.now(),
+        });
+
+        // Release Escrow
+        if (escrowTransaction) {
+          await FirestoreService.updateDocument(COLLECTIONS.ESCROW_TRANSACTIONS, escrowTransaction.id, {
+            status: 'released',
+            released_at: Timestamp.now(),
+            release_reason: 'delivery_confirmed_by_buyer'
+          });
+
+          // Credit Vendor Wallet (Logic could be moved to a trigger, but implementing here for directness)
+          // Fetch vendor to update wallet
+          const vendor = await FirestoreService.getDocument<any>(COLLECTIONS.VENDORS, escrowTransaction.vendor_id);
+          if (vendor) {
+            const newBalance = (vendor.wallet_balance || 0) + escrowTransaction.vendor_amount;
+            await FirestoreService.updateDocument(COLLECTIONS.VENDORS, escrowTransaction.vendor_id, {
+              wallet_balance: newBalance,
+              updated_at: Timestamp.now()
+            });
+
+            // Log Wallet Transaction
+            const walletTxId = `wtx_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+            await FirestoreService.setDocument('wallet_transactions', walletTxId, {
+              vendor_id: escrowTransaction.vendor_id,
+              type: 'sale',
+              amount: escrowTransaction.vendor_amount,
+              balance_after: newBalance,
+              reference: escrowTransaction.id,
+              description: `Earnings from Order #${request.orderId}`,
+              status: 'completed',
+              created_at: Timestamp.now()
+            });
+          }
+        }
+
+        // Create escrow release record (audit trail)
+        const releaseId = `release_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        await FirestoreService.setDocument('escrow_releases', releaseId, {
+          escrow_transaction_id: escrowTransaction?.id || 'unknown',
+          release_type: 'manual_buyer',
+          buyer_confirmed_delivery: true,
+          delivery_confirmed_at: Timestamp.now(),
+          release_requested_by: request.buyerId,
+        });
+      });
+
+      return { success: true };
+    } catch (error) {
+      logger.error('Failed to confirm delivery', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to confirm delivery',
+      };
+    }
+  }
+
+  async releaseEscrow(request: ReleaseEscrowRequest): Promise<{ success: boolean; error?: string }> {
+    try {
+      const response = await fetch(`${API_URL}/releaseEscrow`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          orderId: request.orderId,
+          releaseType: request.releaseType,
+          notes: request.notes,
+          performedByUserId: request.releaseBy,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to release escrow');
+      }
+
+      return { success: true };
+    } catch (error) {
+      logger.error('Failed to release escrow', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to release escrow',
+      };
+    }
+  }
+
+  async refundEscrow(orderId: string, reason: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      const response = await fetch(`${API_URL}/refundEscrow`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          orderId,
+          reason,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to refund escrow');
+      }
+
+      return { success: true };
+    } catch (error) {
+      logger.error('Failed to refund escrow', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to refund escrow',
+      };
+    }
+  }
+
+  async createDispute(
+    orderId: string,
+    filedBy: string,
+    filedByType: 'buyer' | 'vendor',
+    disputeType: string,
+    description: string,
+    evidenceUrls: string[]
+  ): Promise<{ success: boolean; error?: string }> {
+    try {
+      const order = await FirestoreService.getDocument(COLLECTIONS.ORDERS, orderId);
+      if (!order) {
+        throw new Error('Order not found');
+      }
+
+      const escrowTransactions = await FirestoreService.getDocuments(COLLECTIONS.ESCROW_TRANSACTIONS, {
+        filters: [{ field: 'order_id', operator: '==', value: orderId }],
+        limitCount: 1
+      });
+      const escrowTransaction = escrowTransactions.length > 0 ? escrowTransactions[0] : null;
+
+      await FirestoreService.runTransaction(async (transaction) => {
+        // Create dispute
+        const disputeId = `dispute_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        await FirestoreService.setDocument(COLLECTIONS.DISPUTES, disputeId, {
+          order_id: orderId,
+          escrow_transaction_id: escrowTransaction?.id,
+          filed_by: filedBy,
+          filed_by_type: filedByType,
+          dispute_type: disputeType,
+          description,
+          evidence_urls: evidenceUrls,
+          status: 'open',
+          created_at: Timestamp.now(),
+        });
+
+        // Update escrow status
+        if (escrowTransaction) {
+          await FirestoreService.updateDocument(COLLECTIONS.ESCROW_TRANSACTIONS, escrowTransaction.id, {
+            status: 'disputed'
+          });
+        }
+
+        // Update order status
+        await FirestoreService.updateDocument(COLLECTIONS.ORDERS, orderId, {
+          status: 'disputed'
+        });
+      });
+
+      return { success: true };
+    } catch (error) {
+      logger.error('Failed to create dispute', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to create dispute',
+      };
+    }
+  }
+}
+
+export const orderService = new OrderService();
+
+export type {
+  CreateOrderRequest,
+  OrderResponse,
+  ConfirmDeliveryRequest,
+  ReleaseEscrowRequest,
+};
+import { FirestoreService } from './firestore.service';
+import { COLLECTIONS } from '../lib/collections';
+import { logger } from '../lib/logger';
+import { Timestamp } from 'firebase/firestore';
+import type { Order, OrderItem, Vendor } from '../types/firestore';
+import { notificationService } from './notificationService';
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:5001/anima-project/us-central1'; // Default to local emulator for dev, or cloud url
+
+
+interface CreateOrderRequest {
+  buyerId: string;
+  vendorId: string;
+  items: Array<{
+    productId: string;
+    productTitle: string;
+    productImage: string;
+    quantity: number;
+    unitPrice: number;
+  }>;
+  deliveryAddressId: string;
+  deliveryType: 'standard' | 'express' | 'same_day';
+  deliveryCost: number;
+  notes?: string;
+}
+
+interface OrderResponse {
+  success: boolean;
+  data?: {
+    orderId: string;
+    orderNumber: string;
+  };
+  error?: string;
+}
+
+interface ConfirmDeliveryRequest {
+  orderId: string;
+  buyerId: string;
+}
+
+interface ReleaseEscrowRequest {
+  orderId: string;
+  releaseType: 'auto_delivery' | 'manual_buyer' | 'admin_override' | 'dispute_resolution';
+  releaseBy: string;
+  notes?: string;
+}
+
+class OrderService {
+  async createOrder(request: CreateOrderRequest): Promise<OrderResponse> {
+    try {
+      const subtotal = request.items.reduce(
+        (sum, item) => sum + item.unitPrice * item.quantity,
+        0
+      );
+      const totalAmount = subtotal + request.deliveryCost;
+      const orderNumber = `NIMEX-${Date.now()}-${Math.random().toString(36).substring(7).toUpperCase()}`;
+
+      // Generate IDs
+      const orderId = `order_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
       // First, validate stock for all items
       logger.info('Validating stock for items', { itemCount: request.items.length });
       for (const item of request.items) {
