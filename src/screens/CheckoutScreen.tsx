@@ -192,6 +192,9 @@ export const CheckoutScreen: React.FC = () => {
     setError('');
 
     try {
+      console.log('[Checkout] Starting checkout with', cartItems.length, 'items');
+      console.log('[Checkout] Cart items:', JSON.stringify(cartItems, null, 2));
+
       const vendorItems = cartItems.reduce((acc, item) => {
         if (!acc[item.vendor_id]) {
           acc[item.vendor_id] = [];
@@ -200,7 +203,11 @@ export const CheckoutScreen: React.FC = () => {
         return acc;
       }, {} as Record<string, CartItem[]>);
 
+      console.log('[Checkout] Grouped by vendors:', Object.keys(vendorItems).length, 'vendors');
+
       const orderPromises = Object.entries(vendorItems).map(async ([vendorId, items]) => {
+        console.log('[Checkout] Creating order for vendor:', vendorId, 'with', items.length, 'items');
+
         const orderResult = await orderService.createOrder({
           buyerId: user.uid,
           vendorId,
@@ -216,13 +223,17 @@ export const CheckoutScreen: React.FC = () => {
           deliveryCost,
         });
 
+        console.log('[Checkout] Order result for vendor', vendorId, ':', orderResult);
         return orderResult;
       });
 
       const orderResults = await Promise.all(orderPromises);
+      console.log('[Checkout] All order results:', orderResults);
+
       const failedOrders = orderResults.filter((result) => !result.success);
 
       if (failedOrders.length > 0) {
+        console.error('[Checkout] Failed orders:', failedOrders);
         // Get specific error messages from failed orders
         const errorMessages = failedOrders
           .map((order) => order.error)
