@@ -9,8 +9,8 @@ import { FirestoreService } from '../services/firestore.service';
 import { COLLECTIONS } from '../lib/collections';
 import { orderService } from '../services/orderService';
 import { flutterwaveService } from '../services/flutterwaveService';
-import { deliveryService } from '../services/deliveryService';
 import { emailNotificationService } from '../services/emailNotificationService';
+import { giglService } from '../services/giglService';
 
 interface CartItem {
   id: string;
@@ -105,25 +105,27 @@ export const CheckoutScreen: React.FC = () => {
     setError('');
 
     try {
-      const totalWeight = cartItems.length * 1;
+      const totalWeight = cartItems.length * 1; // Approx 1kg per item for now
 
-      const result = await deliveryService.calculateDeliveryCost(
-        'Lagos',
-        'Lagos',
-        selectedAddress.city,
-        selectedAddress.state,
-        totalWeight,
+      // Use GIGL Service instead of static deliveryService
+      const result = await giglService.getDeliveryQuote({
+        pickupState: 'Lagos', // Default vendor location (should be dynamic in future)
+        pickupCity: 'Ikeja',
+        deliveryState: selectedAddress.state,
+        deliveryCity: selectedAddress.city,
+        weight: totalWeight,
         deliveryType
-      );
+      });
 
-      if (result.success && result.cost) {
-        setDeliveryCost(result.cost);
+      if (result.success && result.data) {
+        setDeliveryCost(result.data.estimatedCost);
       } else {
-        setDeliveryCost(deliveryType === 'standard' ? 2000 : deliveryType === 'express' ? 3000 : 4500);
+        console.warn('GIGL Quote Failed, falling back to standard rates:', result.error);
+        setDeliveryCost(deliveryType === 'standard' ? 2500 : deliveryType === 'express' ? 4000 : 6000);
       }
     } catch (err) {
       console.error('Error calculating delivery cost:', err);
-      setDeliveryCost(deliveryType === 'standard' ? 2000 : deliveryType === 'express' ? 3000 : 4500);
+      setDeliveryCost(deliveryType === 'standard' ? 2500 : deliveryType === 'express' ? 4000 : 6000);
     } finally {
       setIsCalculatingCost(false);
     }

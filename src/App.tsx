@@ -52,6 +52,7 @@ const ContactScreen = React.lazy(() => import('./screens/ContactScreen').then(mo
 const AdsManagementScreen = React.lazy(() => import('./screens/vendor').then(module => ({ default: module.AdsManagementScreen })));
 const VendorDashboardScreen = React.lazy(() => import('./screens/vendor').then(module => ({ default: module.VendorDashboardScreen })));
 const OrdersManagementScreen = React.lazy(() => import('./screens/vendor').then(module => ({ default: module.OrdersManagementScreen })));
+const VendorOrderDetailsScreen = React.lazy(() => import('./screens/vendor/VendorOrderDetailsScreen').then(module => ({ default: module.VendorOrderDetailsScreen })));
 const VendorProfileSettingsScreen = React.lazy(() => import('./screens/vendor').then(module => ({ default: module.VendorProfileSettingsScreen })));
 const ProductsManagementScreen = React.lazy(() => import('./screens/vendor').then(module => ({ default: module.ProductsManagementScreen })));
 const CreateProductScreen = React.lazy(() => import('./screens/vendor').then(module => ({ default: module.CreateProductScreen })));
@@ -343,6 +344,16 @@ const App: React.FC = () => {
                     <ProtectedRoute>
                       <VendorLayout>
                         <OrdersManagementScreen />
+                      </VendorLayout>
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/vendor/orders/:orderId"
+                  element={
+                    <ProtectedRoute>
+                      <VendorLayout>
+                        <VendorOrderDetailsScreen />
                       </VendorLayout>
                     </ProtectedRoute>
                   }

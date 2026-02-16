@@ -649,3 +649,10 @@ export const sendTermiiSms = functions.https.onCall(async (request: any) => {
         throw new functions.https.HttpsError('internal', error.message || "Failed to send SMS");
     }
 });
+
+// Export GIGL Functions
+import * as gigl from './gigl';
+export const getGiglShippingQuote = gigl.getGiglShippingQuote;
+export const createGiglShipment = gigl.createGiglShipment;
+export const trackGiglShipment = gigl.trackGiglShipment;
+export const getGiglServiceAreas = gigl.getGiglServiceAreas;

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Card, CardContent } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Search, ChevronDown } from 'lucide-react';
@@ -24,6 +25,7 @@ type FilterStatus = 'all' | 'pending' | 'in_progress' | 'completed' | 'disputed'
 // Removed mockOrders
 
 export const OrdersManagementScreen: React.FC = () => {
+  const navigate = useNavigate();
   const { user } = useAuth();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
@@ -246,7 +248,10 @@ export const OrdersManagementScreen: React.FC = () => {
                               </span>
                             </td>
                             <td className="px-6 py-4">
-                              <button className="p-2 hover:bg-neutral-100 rounded-lg transition-colors">
+                              <button
+                                onClick={() => navigate(`/vendor/orders/${order.id}`)}
+                                className="p-2 hover:bg-neutral-100 rounded-lg transition-colors"
+                              >
                                 <ChevronDown className="w-5 h-5 text-neutral-600" />
                               </button>
                             </td>
@@ -310,7 +315,10 @@ export const OrdersManagementScreen: React.FC = () => {
                       </div>
                     </div>
 
-                    <button className="w-full mt-3 py-2 bg-neutral-100 hover:bg-neutral-200 text-neutral-900 rounded-lg font-sans text-sm transition-colors">
+                    <button
+                      onClick={() => navigate(`/vendor/orders/${order.id}`)}
+                      className="w-full mt-3 py-2 bg-neutral-100 hover:bg-neutral-200 text-neutral-900 rounded-lg font-sans text-sm transition-colors"
+                    >
                       View Details
                     </button>
                   </CardContent>

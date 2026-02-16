@@ -31,3 +31,4 @@ ADMIN_CREDENTIALS.md
 *service-account*.json
 firebase-adminsdk*.json
 .env
+set_env_vars.bat
