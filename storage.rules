@@ -1,0 +1,109 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    function isValidImageSize() {
+      return request.resource.size < 5 * 1024 * 1024; // 5MB
+    }
+    
+    function isValidFileSize() {
+      return request.resource.size < 10 * 1024 * 1024; // 10MB
+    }
+    
+    function isImageFile() {
+      return request.resource.contentType.matches('image/.*');
+    }
+    
+    function isValidVideoSize() {
+      return request.resource.size < 50 * 1024 * 1024; // 50MB
+    }
+
+    function isVideoFile() {
+      return request.resource.contentType.matches('video/.*');
+    }
+
+    // Product media (images and videos) - public read, authenticated write
+    // Path pattern: products/{vendorId}/{productId}/{fileName}
+    match /products/{vendorId}/{productId}/{fileName} {
+      allow read: if true;
+      allow write: if isAuthenticated() && (
+        (isImageFile() && isValidImageSize()) || 
+        (isVideoFile() && isValidVideoSize())
+      );
+    }
+    
+    // User avatars - authenticated read, owner write
+    match /avatars/{userId}/{fileName} {
+      allow read: if isAuthenticated();
+      allow write: if isOwner(userId) && isValidImageSize() && isImageFile();
+    }
+    
+    // Vendor documents - vendor only
+    match /vendors/{vendorId}/{allPaths=**} {
+      allow read: if isAuthenticated() && (
+        request.auth.uid == vendorId ||
+        firestore.get(/databases/(default)/documents/profiles/$(request.auth.uid)).data.role == 'admin'
+      );
+      allow write: if isOwner(vendorId) && isValidFileSize();
+    }
+    
+    // Vendor logos/banners - public read, vendor write
+    match /vendor-media/{vendorId}/{fileName} {
+      allow read: if true;
+      allow write: if isOwner(vendorId) && isValidImageSize() && isImageFile();
+    }
+    
+    // Order documents - buyer and vendor
+    match /orders/{orderId}/{fileName} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && isValidFileSize();
+    }
+    
+    // Support ticket attachments - ticket owner and admin
+    match /support/{ticketId}/{fileName} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && isValidFileSize();
+    }
+    
+    // KYC documents - owner and admin only
+    match /kyc/{userId}/{fileName} {
+      allow read: if isAuthenticated() && (
+        request.auth.uid == userId ||
+        firestore.get(/databases/(default)/documents/profiles/$(request.auth.uid)).data.role == 'admin'
+      );
+      allow write: if isOwner(userId) && isValidFileSize();
+    }
+    
+    // Chat attachments - authenticated users
+    match /chat/{conversationId}/{fileName} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && isValidFileSize();
+    }
+    
+    // Temporary uploads - authenticated users (auto-delete after 24h)
+    match /temp/{userId}/{fileName} {
+      allow read, write: if isOwner(userId) && isValidFileSize();
+    }
+    
+    // Public assets - public read, admin write
+    match /public/{allPaths=**} {
+      allow read: if true;
+      allow write: if isAuthenticated() && 
+        firestore.get(/databases/(default)/documents/profiles/$(request.auth.uid)).data.role == 'admin';
+    }
+    
+    // Default - deny all
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
