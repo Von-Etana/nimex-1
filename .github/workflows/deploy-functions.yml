@@ -20,7 +20,7 @@ jobs:
           node-version: '20'
 
       - name: Install Dependencies
-        run: cd functions && npm ci
+        run: cd functions && npm ci && npm run build
 
       - name: Deploy to Firebase
         uses: w9jds/firebase-action@master
