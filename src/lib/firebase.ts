@@ -3,6 +3,7 @@ import { getAuth, connectAuthEmulator, Auth, GoogleAuthProvider } from 'firebase
 import { getFirestore, connectFirestoreEmulator, Firestore } from 'firebase/firestore';
 import { getStorage, connectStorageEmulator, FirebaseStorage } from 'firebase/storage';
 import { getAnalytics, Analytics } from 'firebase/analytics';
+import { getFunctions, connectFunctionsEmulator, Functions } from 'firebase/functions';
 import { logger } from './logger';
 
 // Firebase configuration interface
@@ -43,6 +44,7 @@ let app: FirebaseApp;
 let auth: Auth;
 let db: Firestore;
 let storage: FirebaseStorage;
+let functions: Functions;
 let analytics: Analytics | null = null;
 
 try {
@@ -60,6 +62,7 @@ try {
     auth = getAuth(app);
     db = getFirestore(app);
     storage = getStorage(app);
+    functions = getFunctions(app, 'europe-west1'); // Or your region
 
     // Initialize Analytics (only in browser environment)
     if (typeof window !== 'undefined') {
@@ -75,6 +78,7 @@ try {
             connectAuthEmulator(auth, 'http://localhost:9099');
             connectFirestoreEmulator(db, 'localhost', 8080);
             connectStorageEmulator(storage, 'localhost', 9199);
+            connectFunctionsEmulator(functions, 'localhost', 5001);
             logger.info('Connected to Firebase emulators');
         } catch (e) {
             // Ignore errors if already connected
@@ -87,4 +91,4 @@ try {
     throw error;
 }
 
-export { app, auth, db, storage, analytics, GoogleAuthProvider };
+export { app, auth, db, storage, functions, analytics, GoogleAuthProvider };

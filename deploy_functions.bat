@@ -18,12 +18,20 @@ if %errorlevel% neq 0 (
 )
 
 echo.
-echo 2. Deploying Functions...
-cd functions
-echo Deploying: sendTermiiSms, paystackWebhook, releaseEscrow
+echo 2. Building Functions...
+call npm run build
+if %errorlevel% neq 0 (
+    echo Build failed. Exiting.
+    pause
+    exit /b %errorlevel%
+)
+cd ..
+
+echo 3. Deploying Functions...
+echo Deploying: sendTermiiSms, paystackWebhook, releaseEscrow, verifyPayment, initializePayment
 echo            getGiglShippingQuote, createGiglShipment, trackGiglShipment, getGiglServiceAreas
 echo.
-call firebase deploy --only functions:sendTermiiSms,functions:paystackWebhook,functions:releaseEscrow,functions:getGiglShippingQuote,functions:createGiglShipment,functions:trackGiglShipment,functions:getGiglServiceAreas
+call firebase deploy --only functions
 
 if %errorlevel% neq 0 (
     echo.

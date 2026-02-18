@@ -36,7 +36,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.sendTermiiSms = exports.refundEscrow = exports.releaseEscrow = exports.verifyPayment = exports.initializePayment = exports.paystackWebhook = void 0;
+exports.getGiglServiceAreas = exports.trackGiglShipment = exports.createGiglShipment = exports.getGiglShippingQuote = exports.sendEmail = exports.sendTermiiSms = exports.refundEscrow = exports.releaseEscrow = exports.verifyPayment = exports.initializePayment = exports.paystackWebhook = void 0;
 const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
 const axios_1 = __importDefault(require("axios"));
@@ -608,4 +608,44 @@ exports.sendTermiiSms = functions.https.onCall(async (request) => {
         throw new functions.https.HttpsError('internal', error.message || "Failed to send SMS");
     }
 });
+/**
+ * Send Email (SendGrid) - Callable Function
+ * Secure endpoint to send emails from client
+ */
+exports.sendEmail = functions.https.onCall(async (request) => {
+    var _a, _b;
+    const data = request.data || request;
+    const { to, subject, html } = data;
+    if (!to || !subject || !html) {
+        throw new functions.https.HttpsError('invalid-argument', 'Recipient (to), subject, and html content are required');
+    }
+    const apiKey = process.env.SENDGRID_API_KEY || ((_a = functions.config().sendgrid) === null || _a === void 0 ? void 0 : _a.api_key) || process.env.VITE_SENDGRID_API_KEY;
+    if (!apiKey) {
+        throw new functions.https.HttpsError('failed-precondition', 'SendGrid API key not configured');
+    }
+    try {
+        await axios_1.default.post('https://api.sendgrid.com/v3/mail/send', {
+            personalizations: [{ to: [{ email: to }] }],
+            from: { email: 'noreply@nimex.ng', name: 'NIMEX' },
+            subject,
+            content: [{ type: 'text/html', value: html }]
+        }, {
+            headers: {
+                'Authorization': `Bearer ${apiKey}`,
+                'Content-Type': 'application/json'
+            }
+        });
+        return { success: true };
+    }
+    catch (error) {
+        console.error("SendGrid error:", ((_b = error.response) === null || _b === void 0 ? void 0 : _b.data) || error.message);
+        throw new functions.https.HttpsError('internal', "Failed to send email via SendGrid");
+    }
+});
+// Export GIGL Functions
+const gigl = __importStar(require("./gigl"));
+exports.getGiglShippingQuote = gigl.getGiglShippingQuote;
+exports.createGiglShipment = gigl.createGiglShipment;
+exports.trackGiglShipment = gigl.trackGiglShipment;
+exports.getGiglServiceAreas = gigl.getGiglServiceAreas;
 //# sourceMappingURL=index.js.map

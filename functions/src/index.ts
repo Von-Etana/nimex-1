@@ -650,9 +650,57 @@ export const sendTermiiSms = functions.https.onCall(async (request: any) => {
     }
 });
 
+/**
+ * Send Email (SendGrid) - Callable Function
+ * Secure endpoint to send emails from client
+ */
+export const sendEmail = functions.https.onCall(async (request: any) => {
+    const data = request.data || request;
+    const { to, subject, html } = data;
+
+    if (!to || !subject || !html) {
+        throw new functions.https.HttpsError('invalid-argument', 'Recipient (to), subject, and html content are required');
+    }
+
+    const apiKey = process.env.SENDGRID_API_KEY || functions.config().sendgrid?.api_key || process.env.VITE_SENDGRID_API_KEY;
+
+    if (!apiKey) {
+        throw new functions.https.HttpsError('failed-precondition', 'SendGrid API key not configured');
+    }
+
+    try {
+        await axios.post('https://api.sendgrid.com/v3/mail/send', {
+            personalizations: [{ to: [{ email: to }] }],
+            from: { email: 'noreply@nimex.ng', name: 'NIMEX' },
+            subject,
+            content: [{ type: 'text/html', value: html }]
+        }, {
+            headers: {
+                'Authorization': `Bearer ${apiKey}`,
+                'Content-Type': 'application/json'
+            }
+        });
+
+        return { success: true };
+    } catch (error: any) {
+        console.error("SendGrid error:", error.response?.data || error.message);
+        throw new functions.https.HttpsError('internal', "Failed to send email via SendGrid");
+    }
+});
+
 // Export GIGL Functions
 import * as gigl from './gigl';
 export const getGiglShippingQuote = gigl.getGiglShippingQuote;
 export const createGiglShipment = gigl.createGiglShipment;
 export const trackGiglShipment = gigl.trackGiglShipment;
 export const getGiglServiceAreas = gigl.getGiglServiceAreas;
+
+// Export Flutterwave Functions
+import * as flw from './flutterwave';
+export const initializeFlutterwavePayment = flw.initializeFlutterwavePayment;
+export const verifyFlutterwavePayment = flw.verifyFlutterwavePayment;
+export const createFlutterwaveVirtualAccount = flw.createFlutterwaveVirtualAccount;
+export const createFlutterwaveSubaccount = flw.createFlutterwaveSubaccount;
+export const processFlutterwaveWithdrawal = flw.processFlutterwaveWithdrawal;
+export const getFlutterwaveBankList = flw.getFlutterwaveBankList;
+export const resolveFlutterwaveAccount = flw.resolveFlutterwaveAccount;

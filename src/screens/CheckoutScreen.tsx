@@ -258,10 +258,10 @@ export const CheckoutScreen: React.FC = () => {
         email: user.email || '',
         amount: totalAmount,
         orderId: firstOrder.data.orderId,
-        name: user.displayName || 'Customer',
         metadata: {
           order_ids: orderResults.map((r) => r.data?.orderId).filter(Boolean),
           buyer_id: user.uid,
+          type: 'order',
         },
       });
 
@@ -276,12 +276,13 @@ export const CheckoutScreen: React.FC = () => {
           const verifyResult = await flutterwaveService.verifyPayment(response.transaction_id || response.tx_ref);
 
           if (verifyResult.success) {
+            const reference = response.tx_ref || response.flw_ref || paymentResult.data!.tx_ref;
             for (const orderResult of orderResults) {
               if (orderResult.data) {
                 await orderService.updateOrderPaymentStatus(
                   orderResult.data.orderId,
                   'paid',
-                  response.tx_ref,
+                  reference,
                   'flutterwave'
                 );
               }

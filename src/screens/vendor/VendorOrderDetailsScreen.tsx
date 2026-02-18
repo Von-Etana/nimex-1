@@ -7,6 +7,7 @@ import {
     Clock,
     AlertCircle,
     ChevronLeft,
+    CheckCircle,
     ShoppingBag,
     CreditCard,
     User,

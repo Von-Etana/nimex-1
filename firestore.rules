@@ -254,7 +254,7 @@ service cloud.firestore {
     // Orders - buyer and vendor can read, buyer can create (requires verified email)
     match /orders/{orderId} {
       allow read: if isAuthenticated() && (
-        resource.data.user_id == request.auth.uid ||
+        resource.data.buyer_id == request.auth.uid ||
         resource.data.vendor_id == request.auth.uid ||
         isAdmin()
       );
@@ -265,7 +265,7 @@ service cloud.firestore {
       allow update: if isAuthenticated() && (
         isAdmin() ||
         (
-          (resource.data.user_id == request.auth.uid || resource.data.vendor_id == request.auth.uid) &&
+          (resource.data.buyer_id == request.auth.uid || resource.data.vendor_id == request.auth.uid) &&
           // Prevent changing critical fields
           request.resource.data.payment_status == resource.data.payment_status &&
           request.resource.data.escrow_status == resource.data.escrow_status &&
@@ -273,6 +273,18 @@ service cloud.firestore {
           request.resource.data.shipping_fee == resource.data.shipping_fee
         )
       );
+      allow delete: if isAdmin();
+    }
+
+    // Order Items - associated with orders
+    match /order_items/{itemId} {
+      allow read: if isAuthenticated() && (
+        get(/databases/$(database)/documents/orders/$(resource.data.order_id)).data.buyer_id == request.auth.uid ||
+        get(/databases/$(database)/documents/orders/$(resource.data.order_id)).data.vendor_id == request.auth.uid ||
+        isAdmin()
+      );
+      allow create: if isAuthenticated() && isEmailVerified();
+      allow update: if false; // Order items should be immutable after creation
       allow delete: if isAdmin();
     }
     

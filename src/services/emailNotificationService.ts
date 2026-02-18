@@ -4,12 +4,14 @@
  */
 
 import { logger } from '../lib/logger';
+import { functions } from '../lib/firebase';
+import { httpsCallable } from 'firebase/functions';
 
 // Email templates
 const EMAIL_TEMPLATES = {
-    orderConfirmation: (data: OrderConfirmationData) => ({
-        subject: `Order Confirmed - #${data.orderNumber}`,
-        html: `
+  orderConfirmation: (data: OrderConfirmationData) => ({
+    subject: `Order Confirmed - #${data.orderNumber}`,
+    html: `
       <!DOCTYPE html>
       <html>
       <head>
@@ -68,11 +70,11 @@ const EMAIL_TEMPLATES = {
       </body>
       </html>
     `
-    }),
+  }),
 
-    orderStatusUpdate: (data: OrderStatusData) => ({
-        subject: `Order Update - #${data.orderNumber} is ${data.status}`,
-        html: `
+  orderStatusUpdate: (data: OrderStatusData) => ({
+    subject: `Order Update - #${data.orderNumber} is ${data.status}`,
+    html: `
       <!DOCTYPE html>
       <html>
       <head>
@@ -103,11 +105,11 @@ const EMAIL_TEMPLATES = {
       </body>
       </html>
     `
-    }),
+  }),
 
-    referralNotification: (data: ReferralNotificationData) => ({
-        subject: `New Referral! ${data.vendorName} signed up using your link`,
-        html: `
+  referralNotification: (data: ReferralNotificationData) => ({
+    subject: `New Referral! ${data.vendorName} signed up using your link`,
+    html: `
       <!DOCTYPE html>
       <html>
       <head>
@@ -147,11 +149,11 @@ const EMAIL_TEMPLATES = {
       </body>
       </html>
     `
-    }),
+  }),
 
-    welcomeEmail: (data: WelcomeEmailData) => ({
-        subject: `Welcome to NIMEX! Let's get started`,
-        html: `
+  welcomeEmail: (data: WelcomeEmailData) => ({
+    subject: `Welcome to NIMEX! Let's get started`,
+    html: `
       <!DOCTYPE html>
       <html>
       <head>
@@ -212,192 +214,171 @@ const EMAIL_TEMPLATES = {
       </body>
       </html>
     `
-    })
+  })
 };
 
 // Helper functions
 function getStatusColor(status: string): string {
-    const colors: Record<string, string> = {
-        pending: '#fef3c7',
-        confirmed: '#dbeafe',
-        processing: '#e0e7ff',
-        shipped: '#cffafe',
-        delivered: '#dcfce7',
-        cancelled: '#fee2e2'
-    };
-    return colors[status] || '#f1f5f9';
+  const colors: Record<string, string> = {
+    pending: '#fef3c7',
+    confirmed: '#dbeafe',
+    processing: '#e0e7ff',
+    shipped: '#cffafe',
+    delivered: '#dcfce7',
+    cancelled: '#fee2e2'
+  };
+  return colors[status] || '#f1f5f9';
 }
 
 function getStatusEmoji(status: string): string {
-    const emojis: Record<string, string> = {
-        pending: '⏳',
-        confirmed: '✅',
-        processing: '📦',
-        shipped: '🚚',
-        delivered: '🎉',
-        cancelled: '❌'
-    };
-    return emojis[status] || '📋';
+  const emojis: Record<string, string> = {
+    pending: '⏳',
+    confirmed: '✅',
+    processing: '📦',
+    shipped: '🚚',
+    delivered: '🎉',
+    cancelled: '❌'
+  };
+  return emojis[status] || '📋';
 }
 
 function getStatusMessage(status: string): string {
-    const messages: Record<string, string> = {
-        pending: 'Your order is awaiting confirmation from the vendor.',
-        confirmed: 'Great news! The vendor has confirmed your order.',
-        processing: 'Your order is being prepared for shipment.',
-        shipped: 'Your order is on its way! Track the delivery for updates.',
-        delivered: 'Your order has been delivered. Enjoy your purchase!',
-        cancelled: 'Your order has been cancelled. Contact support for assistance.'
-    };
-    return messages[status] || 'Your order status has been updated.';
+  const messages: Record<string, string> = {
+    pending: 'Your order is awaiting confirmation from the vendor.',
+    confirmed: 'Great news! The vendor has confirmed your order.',
+    processing: 'Your order is being prepared for shipment.',
+    shipped: 'Your order is on its way! Track the delivery for updates.',
+    delivered: 'Your order has been delivered. Enjoy your purchase!',
+    cancelled: 'Your order has been cancelled. Contact support for assistance.'
+  };
+  return messages[status] || 'Your order status has been updated.';
 }
 
 // Type definitions
 interface OrderConfirmationData {
-    orderNumber: string;
-    totalAmount: number;
-    items: Array<{ title: string; quantity: number; price: number }>;
-    trackingUrl: string;
+  orderNumber: string;
+  totalAmount: number;
+  items: Array<{ title: string; quantity: number; price: number }>;
+  trackingUrl: string;
 }
 
 interface OrderStatusData {
-    orderNumber: string;
-    status: string;
-    trackingUrl: string;
+  orderNumber: string;
+  status: string;
+  trackingUrl: string;
 }
 
 interface ReferralNotificationData {
-    marketerName: string;
-    vendorName: string;
-    commissionAmount: number;
-    dashboardUrl: string;
+  marketerName: string;
+  vendorName: string;
+  commissionAmount: number;
+  dashboardUrl: string;
 }
 
 interface WelcomeEmailData {
-    fullName: string;
-    loginUrl: string;
+  fullName: string;
+  loginUrl: string;
 }
 
 // Email Notification Service
 class EmailNotificationService {
-    private baseUrl: string;
+  private baseUrl: string;
 
-    constructor() {
-        this.baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://nimex.ng';
+  constructor() {
+    this.baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://nimex.ng';
+  }
+
+  async sendOrderConfirmation(
+    email: string,
+    orderNumber: string,
+    totalAmount: number,
+    items: Array<{ title: string; quantity: number; price: number }>
+  ): Promise<boolean> {
+    try {
+      const template = EMAIL_TEMPLATES.orderConfirmation({
+        orderNumber,
+        totalAmount,
+        items,
+        trackingUrl: `${this.baseUrl}/orders/${orderNumber}`
+      });
+
+      return await this.sendEmail(email, template.subject, template.html);
+    } catch (error) {
+      logger.error('Failed to send order confirmation email:', error);
+      return false;
     }
+  }
 
-    async sendOrderConfirmation(
-        email: string,
-        orderNumber: string,
-        totalAmount: number,
-        items: Array<{ title: string; quantity: number; price: number }>
-    ): Promise<boolean> {
-        try {
-            const template = EMAIL_TEMPLATES.orderConfirmation({
-                orderNumber,
-                totalAmount,
-                items,
-                trackingUrl: `${this.baseUrl}/orders/${orderNumber}`
-            });
+  async sendOrderStatusUpdate(
+    email: string,
+    orderNumber: string,
+    status: string
+  ): Promise<boolean> {
+    try {
+      const template = EMAIL_TEMPLATES.orderStatusUpdate({
+        orderNumber,
+        status,
+        trackingUrl: `${this.baseUrl}/orders/${orderNumber}`
+      });
 
-            return await this.sendEmail(email, template.subject, template.html);
-        } catch (error) {
-            logger.error('Failed to send order confirmation email:', error);
-            return false;
-        }
+      return await this.sendEmail(email, template.subject, template.html);
+    } catch (error) {
+      logger.error('Failed to send order status email:', error);
+      return false;
     }
+  }
 
-    async sendOrderStatusUpdate(
-        email: string,
-        orderNumber: string,
-        status: string
-    ): Promise<boolean> {
-        try {
-            const template = EMAIL_TEMPLATES.orderStatusUpdate({
-                orderNumber,
-                status,
-                trackingUrl: `${this.baseUrl}/orders/${orderNumber}`
-            });
+  async sendReferralNotification(
+    email: string,
+    marketerName: string,
+    vendorName: string,
+    commissionAmount: number
+  ): Promise<boolean> {
+    try {
+      const template = EMAIL_TEMPLATES.referralNotification({
+        marketerName,
+        vendorName,
+        commissionAmount,
+        dashboardUrl: `${this.baseUrl}/marketer/dashboard`
+      });
 
-            return await this.sendEmail(email, template.subject, template.html);
-        } catch (error) {
-            logger.error('Failed to send order status email:', error);
-            return false;
-        }
+      return await this.sendEmail(email, template.subject, template.html);
+    } catch (error) {
+      logger.error('Failed to send referral notification email:', error);
+      return false;
     }
+  }
 
-    async sendReferralNotification(
-        email: string,
-        marketerName: string,
-        vendorName: string,
-        commissionAmount: number
-    ): Promise<boolean> {
-        try {
-            const template = EMAIL_TEMPLATES.referralNotification({
-                marketerName,
-                vendorName,
-                commissionAmount,
-                dashboardUrl: `${this.baseUrl}/marketer/dashboard`
-            });
+  async sendWelcomeEmail(email: string, fullName: string): Promise<boolean> {
+    try {
+      const template = EMAIL_TEMPLATES.welcomeEmail({
+        fullName,
+        loginUrl: `${this.baseUrl}/login`
+      });
 
-            return await this.sendEmail(email, template.subject, template.html);
-        } catch (error) {
-            logger.error('Failed to send referral notification email:', error);
-            return false;
-        }
+      return await this.sendEmail(email, template.subject, template.html);
+    } catch (error) {
+      logger.error('Failed to send welcome email:', error);
+      return false;
     }
+  }
 
-    async sendWelcomeEmail(email: string, fullName: string): Promise<boolean> {
-        try {
-            const template = EMAIL_TEMPLATES.welcomeEmail({
-                fullName,
-                loginUrl: `${this.baseUrl}/login`
-            });
+  private async sendEmail(to: string, subject: string, html: string): Promise<boolean> {
+    try {
+      const sendEmailFn = httpsCallable(functions, 'sendEmail');
+      const response = await sendEmailFn({ to, subject, html });
 
-            return await this.sendEmail(email, template.subject, template.html);
-        } catch (error) {
-            logger.error('Failed to send welcome email:', error);
-            return false;
-        }
+      const result = response.data as { success: boolean };
+      if (result.success) {
+        logger.info('Email sent successfully via backend to:', to);
+        return true;
+      }
+      return false;
+    } catch (error) {
+      logger.error('Email send error via backend:', error);
+      return false;
     }
-
-    private async sendEmail(to: string, subject: string, html: string): Promise<boolean> {
-        try {
-            // Use SendGrid API via environment variables
-            const apiKey = import.meta.env.VITE_SENDGRID_API_KEY;
-
-            if (!apiKey) {
-                logger.warn('SendGrid API key not configured, email not sent');
-                return false;
-            }
-
-            const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${apiKey}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    personalizations: [{ to: [{ email: to }] }],
-                    from: { email: 'noreply@nimex.ng', name: 'NIMEX' },
-                    subject,
-                    content: [{ type: 'text/html', value: html }]
-                })
-            });
-
-            if (!response.ok) {
-                const error = await response.text();
-                logger.error('SendGrid API error:', error);
-                return false;
-            }
-
-            logger.info('Email sent successfully to:', to);
-            return true;
-        } catch (error) {
-            logger.error('Email send error:', error);
-            return false;
-        }
-    }
+  }
 }
 
 export const emailNotificationService = new EmailNotificationService();
