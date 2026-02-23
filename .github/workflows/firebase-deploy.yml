@@ -32,6 +32,5 @@ jobs:
         with:
           args: deploy
         env:
-          # We use GCP_SA_KEY for the service account based on the action documentation
-          # Mapping it to the secret name we request the user to create
-          GCP_SA_KEY: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          # We use FIREBASE_TOKEN for authentication
+          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
