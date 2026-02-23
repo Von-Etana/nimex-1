@@ -30,7 +30,7 @@ jobs:
       - name: Deploy to Firebase
         uses: w9jds/firebase-action@master
         with:
-          args: deploy
+          args: deploy --force
         env:
           # We use FIREBASE_TOKEN for authentication
           FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
