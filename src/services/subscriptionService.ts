@@ -16,7 +16,7 @@ export const SUBSCRIPTION_TIERS: SubscriptionTier[] = [
   {
     plan: 'monthly',
     name: 'Monthly',
-    price: 1250,
+    price: 1550,
     duration: 1,
     features: [
       'Basic marketplace access',

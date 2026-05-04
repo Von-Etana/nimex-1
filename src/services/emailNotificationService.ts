@@ -7,6 +7,18 @@ import { logger } from '../lib/logger';
 import { functions } from '../lib/firebase';
 import { httpsCallable } from 'firebase/functions';
 
+// Sanitize inputs to prevent XSS in emails
+const sanitizeHtml = (str: string) => {
+  if (!str) return '';
+  return String(str).replace(/[&<>"']/g, (match) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#x27;'
+  }[match] || match));
+};
+
 // Email templates
 const EMAIL_TEMPLATES = {
   orderConfirmation: (data: OrderConfirmationData) => ({
@@ -34,14 +46,14 @@ const EMAIL_TEMPLATES = {
               
               <div style="background: #f1f5f9; border-radius: 8px; padding: 20px; margin-bottom: 20px;">
                 <p style="margin: 0 0 10px; color: #64748b; font-size: 14px;">Order Number</p>
-                <p style="margin: 0; color: #1e293b; font-size: 20px; font-weight: bold;">#${data.orderNumber}</p>
+                <p style="margin: 0; color: #1e293b; font-size: 20px; font-weight: bold;">#${sanitizeHtml(data.orderNumber)}</p>
               </div>
               
               <h3 style="color: #1e293b; margin: 0 0 15px;">Order Summary</h3>
               <table style="width: 100%; border-collapse: collapse;">
                 ${data.items.map(item => `
                   <tr style="border-bottom: 1px solid #e2e8f0;">
-                    <td style="padding: 12px 0; color: #475569;">${item.title}</td>
+                    <td style="padding: 12px 0; color: #475569;">${sanitizeHtml(item.title)}</td>
                     <td style="padding: 12px 0; color: #64748b; text-align: center;">x${item.quantity}</td>
                     <td style="padding: 12px 0; color: #1e293b; text-align: right; font-weight: 600;">₦${(item.price * item.quantity).toLocaleString()}</td>
                   </tr>
@@ -57,7 +69,7 @@ const EMAIL_TEMPLATES = {
               </div>
               
               <div style="margin-top: 30px; text-align: center;">
-                <a href="${data.trackingUrl}" style="display: inline-block; background: #006400; color: white; padding: 14px 30px; border-radius: 8px; text-decoration: none; font-weight: 600;">Track Your Order</a>
+                <a href="${encodeURI(data.trackingUrl)}" style="display: inline-block; background: #006400; color: white; padding: 14px 30px; border-radius: 8px; text-decoration: none; font-weight: 600;">Track Your Order</a>
               </div>
             </div>
             
@@ -93,12 +105,12 @@ const EMAIL_TEMPLATES = {
                 <span style="font-size: 28px;">${getStatusEmoji(data.status)}</span>
               </div>
               
-              <h2 style="color: #1e293b; margin: 0 0 10px;">Order ${data.status.charAt(0).toUpperCase() + data.status.slice(1)}</h2>
-              <p style="color: #64748b; margin: 0 0 20px;">Order #${data.orderNumber}</p>
+              <h2 style="color: #1e293b; margin: 0 0 10px;">Order ${sanitizeHtml(data.status.charAt(0).toUpperCase() + data.status.slice(1))}</h2>
+              <p style="color: #64748b; margin: 0 0 20px;">Order #${sanitizeHtml(data.orderNumber)}</p>
               
-              <p style="color: #475569; margin: 0 0 30px;">${getStatusMessage(data.status)}</p>
+              <p style="color: #475569; margin: 0 0 30px;">${sanitizeHtml(getStatusMessage(data.status))}</p>
               
-              <a href="${data.trackingUrl}" style="display: inline-block; background: #006400; color: white; padding: 14px 30px; border-radius: 8px; text-decoration: none; font-weight: 600;">View Order Details</a>
+              <a href="${encodeURI(data.trackingUrl)}" style="display: inline-block; background: #006400; color: white; padding: 14px 30px; border-radius: 8px; text-decoration: none; font-weight: 600;">View Order Details</a>
             </div>
           </div>
         </div>
@@ -124,7 +136,7 @@ const EMAIL_TEMPLATES = {
             </div>
             
             <div style="padding: 30px;">
-              <h2 style="color: #1e293b; margin: 0 0 20px;">Great news, ${data.marketerName}!</h2>
+              <h2 style="color: #1e293b; margin: 0 0 20px;">Great news, ${sanitizeHtml(data.marketerName)}!</h2>
               
               <p style="color: #475569; margin: 0 0 20px;">
                 A new vendor has signed up using your referral link!
@@ -132,7 +144,7 @@ const EMAIL_TEMPLATES = {
               
               <div style="background: #f1f5f9; border-radius: 8px; padding: 20px; margin-bottom: 20px;">
                 <p style="margin: 0 0 5px; color: #64748b; font-size: 14px;">Vendor</p>
-                <p style="margin: 0; color: #1e293b; font-size: 18px; font-weight: bold;">${data.vendorName}</p>
+                <p style="margin: 0; color: #1e293b; font-size: 18px; font-weight: bold;">${sanitizeHtml(data.vendorName)}</p>
               </div>
               
               <div style="background: #f0fdf4; border-radius: 8px; padding: 20px; text-align: center;">
@@ -141,7 +153,7 @@ const EMAIL_TEMPLATES = {
               </div>
               
               <div style="margin-top: 30px; text-align: center;">
-                <a href="${data.dashboardUrl}" style="display: inline-block; background: #006400; color: white; padding: 14px 30px; border-radius: 8px; text-decoration: none; font-weight: 600;">View Dashboard</a>
+                <a href="${encodeURI(data.dashboardUrl)}" style="display: inline-block; background: #006400; color: white; padding: 14px 30px; border-radius: 8px; text-decoration: none; font-weight: 600;">View Dashboard</a>
               </div>
             </div>
           </div>
@@ -169,7 +181,7 @@ const EMAIL_TEMPLATES = {
             </div>
             
             <div style="padding: 30px;">
-              <h2 style="color: #1e293b; margin: 0 0 20px;">Hi ${data.fullName}! 👋</h2>
+              <h2 style="color: #1e293b; margin: 0 0 20px;">Hi ${sanitizeHtml(data.fullName)}! 👋</h2>
               
               <p style="color: #475569; margin: 0 0 20px; line-height: 1.6;">
                 Thanks for joining NIMEX! We're excited to have you as part of our growing community of buyers and sellers.
@@ -202,7 +214,7 @@ const EMAIL_TEMPLATES = {
               </div>
               
               <div style="margin-top: 30px; text-align: center;">
-                <a href="${data.loginUrl}" style="display: inline-block; background: #006400; color: white; padding: 16px 40px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 16px;">Start Shopping</a>
+                <a href="${encodeURI(data.loginUrl)}" style="display: inline-block; background: #006400; color: white; padding: 16px 40px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 16px;">Start Shopping</a>
               </div>
             </div>
             

@@ -8,6 +8,8 @@ import { termiiService } from '../services/termiiService';
 import { useAuth } from '../contexts/AuthContext';
 import { getFriendlyErrorMessage } from '../utils/errorHandling';
 
+import { auth } from '../lib/firebase.config';
+
 export const MarketerRegistrationScreen: React.FC = () => {
   const navigate = useNavigate();
   const { signUp } = useAuth();
@@ -66,10 +68,6 @@ export const MarketerRegistrationScreen: React.FC = () => {
       if (authError) {
         throw authError;
       }
-
-      // Get the user ID from the Firebase auth instance
-      // Import auth directly to get the current user
-      const { auth } = await import('../lib/firebase.config');
 
       // Wait a moment for auth state to update if needed
       let userId = auth.currentUser?.uid;

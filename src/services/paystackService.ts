@@ -258,24 +258,9 @@ class PaystackService {
           };
         }
       } catch (e) {
-        console.warn('Backend unreachable, assuming successful payment (Client-Side Verification)');
+        console.error('Backend unreachable for payment verification:', e);
+        return { success: false, error: 'Backend verification failed' };
       }
-
-      // Fallback: Assume success if we got here (callback from Paystack means success)
-      // In a real app, this is insecure, but required for frontend-only
-      return {
-        success: true,
-        data: {
-          reference: reference,
-          amount: 0, // Unknown without checking API
-          status: 'success',
-          paidAt: new Date().toISOString(),
-          channel: 'paystack_inline',
-          customer: {
-            email: 'user@example.com' // Placeholder
-          }
-        }
-      };
 
     } catch (error) {
       console.error('Failed to verify payment:', error);

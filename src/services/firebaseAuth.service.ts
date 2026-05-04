@@ -30,7 +30,7 @@ export interface SignUpData {
     email: string;
     password: string;
     fullName: string;
-    role: UserRole;
+    role: Exclude<UserRole, 'admin'>;
 }
 
 export interface SignInData {

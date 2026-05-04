@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { Mail, X, RefreshCw } from 'lucide-react';
+import { Mail, X, RefreshCw, CheckCircle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { Button } from './ui/button';
+import { auth } from '../lib/firebase.config';
 
 interface EmailVerificationBannerProps {
     className?: string;
@@ -12,6 +13,7 @@ export const EmailVerificationBanner: React.FC<EmailVerificationBannerProps> = (
     const [dismissed, setDismissed] = useState(false);
     const [sending, setSending] = useState(false);
     const [sent, setSent] = useState(false);
+    const [checking, setChecking] = useState(false);
     const [error, setError] = useState('');
 
     // Don't show if user is not logged in, email is verified, or banner is dismissed
@@ -41,6 +43,28 @@ export const EmailVerificationBanner: React.FC<EmailVerificationBannerProps> = (
         }
     };
 
+    const handleCheckVerification = async () => {
+        setChecking(true);
+        setError('');
+        try {
+            const currentUser = auth.currentUser;
+            if (currentUser) {
+                await currentUser.reload();
+                if (currentUser.emailVerified) {
+                    // Force page reload to update all auth state
+                    window.location.reload();
+                } else {
+                    setError('Email not yet verified. Please check your inbox.');
+                    setTimeout(() => setError(''), 3000);
+                }
+            }
+        } catch {
+            setError('Could not check status. Try again.');
+        } finally {
+            setChecking(false);
+        }
+    };
+
     return (
         <div className={`bg-amber-50 border-b border-amber-200 px-4 py-3 ${className}`}>
             <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
@@ -62,6 +86,21 @@ export const EmailVerificationBanner: React.FC<EmailVerificationBannerProps> = (
                     {error && (
                         <span className="text-xs text-red-600">{error}</span>
                     )}
+
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleCheckVerification}
+                        disabled={checking}
+                        className="text-green-700 hover:text-green-900 hover:bg-green-100 text-xs"
+                    >
+                        {checking ? (
+                            <RefreshCw className="w-4 h-4 animate-spin mr-1" />
+                        ) : (
+                            <CheckCircle className="w-4 h-4 mr-1" />
+                        )}
+                        I've verified
+                    </Button>
 
                     {sent ? (
                         <span className="text-xs text-green-600 font-medium">Email sent!</span>
@@ -94,3 +133,4 @@ export const EmailVerificationBanner: React.FC<EmailVerificationBannerProps> = (
         </div>
     );
 };
+

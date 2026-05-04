@@ -35,8 +35,9 @@ var __importStar = (this && this.__importStar) || (function () {
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
+var _a;
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getGiglServiceAreas = exports.trackGiglShipment = exports.createGiglShipment = exports.getGiglShippingQuote = exports.sendEmail = exports.sendTermiiSms = exports.refundEscrow = exports.releaseEscrow = exports.verifyPayment = exports.initializePayment = exports.paystackWebhook = void 0;
+exports.resolveFlutterwaveAccount = exports.getFlutterwaveBankList = exports.processFlutterwaveWithdrawal = exports.createFlutterwaveSubaccount = exports.createFlutterwaveVirtualAccount = exports.verifyFlutterwavePayment = exports.onChatMessageNotifyRecipient = exports.onOrderStatusUpdateNotifyBuyer = exports.onOrderCreateNotifyVendor = exports.initializeFlutterwavePayment = exports.getGiglServiceAreas = exports.trackGiglShipment = exports.createGiglShipment = exports.getGiglShippingQuote = exports.sendEmail = exports.sendTermiiSms = exports.refundEscrow = exports.releaseEscrow = exports.verifyPayment = exports.initializePayment = exports.paystackWebhook = void 0;
 const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
 const axios_1 = __importDefault(require("axios"));
@@ -48,11 +49,20 @@ dotenv.config();
 // Initialize Firebase Admin
 admin.initializeApp();
 const db = admin.firestore();
-// CORS Handler
-const corsHandler = (0, cors_1.default)({ origin: true });
+// CORS Handler - Restrict to known origins
+const allowedOrigins = [
+    "https://nimex.ng",
+    "https://www.nimex.ng",
+    "https://nimex-ecommerce.web.app",
+    "https://nimex-ecommerce.firebaseapp.com",
+    ...(process.env.NODE_ENV !== "production" ? ["http://localhost:5173", "http://localhost:3000"] : []),
+];
+const corsHandler = (0, cors_1.default)({ origin: allowedOrigins });
 // Configuration
-// In production, use functions.config().paystack.secret_key
-const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY || "sk_test_placeholder";
+const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY || ((_a = functions.config().paystack) === null || _a === void 0 ? void 0 : _a.secret_key);
+if (!PAYSTACK_SECRET_KEY) {
+    console.error("CRITICAL: PAYSTACK_SECRET_KEY is not configured. Payment functions will fail.");
+}
 const paystackClient = axios_1.default.create({
     baseURL: "https://api.paystack.co",
     headers: {
@@ -60,6 +70,20 @@ const paystackClient = axios_1.default.create({
         "Content-Type": "application/json",
     },
 });
+// Helper: Verify Firebase Auth Token from Authorization header
+async function verifyAuthToken(req) {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+        throw { status: 401, message: "Missing or invalid Authorization header" };
+    }
+    const idToken = authHeader.split("Bearer ")[1];
+    try {
+        return await admin.auth().verifyIdToken(idToken);
+    }
+    catch (_a) {
+        throw { status: 401, message: "Invalid or expired auth token" };
+    }
+}
 // Helper: Wrap CORS and Error Handling
 const wrapCors = (req, res, handler) => {
     return corsHandler(req, res, async () => {
@@ -68,8 +92,8 @@ const wrapCors = (req, res, handler) => {
         }
         catch (error) {
             console.error("Function Error:", error);
-            const status = error.response ? error.response.status : 500;
-            const message = error.response ? error.response.data.message : error.message;
+            const status = error.status || (error.response ? error.response.status : 500);
+            const message = error.message || (error.response ? error.response.data.message : "Internal error");
             res.status(status).json({ success: false, error: message });
         }
     });
@@ -171,45 +195,70 @@ async function handleChargeSuccess(data) {
 async function handleSubscriptionPayment(reference, amount, data) {
     var _a;
     try {
-        // Extract vendor ID and plan from reference: NIMEX-SUB-{vendorId}-{plan}-{timestamp}
-        const parts = reference.split("-");
-        if (parts.length >= 4 && parts[1] === "SUB") {
-            const vendorId = parts[2];
-            const plan = parts[3];
-            // Get plan duration
-            const planDurations = {
-                monthly: 1,
-                quarterly: 3,
-                semi_annual: 6,
-                annual: 12,
-            };
-            const durationMonths = planDurations[plan] || 1;
-            const startDate = new Date();
-            const endDate = new Date();
-            endDate.setMonth(endDate.getMonth() + durationMonths);
-            // Update vendor subscription status
-            await db.collection("vendors").doc(vendorId).update({
-                subscription_plan: plan,
-                subscription_status: "active",
-                subscription_start_date: startDate.toISOString(),
-                subscription_end_date: endDate.toISOString(),
-                updated_at: admin.firestore.FieldValue.serverTimestamp(),
-            });
-            // Log transaction for admin dashboard
-            await db.collection("payment_transactions").add({
-                amount: amount,
-                payment_status: "paid",
-                payment_method: "paystack",
-                payment_reference: reference,
-                created_at: admin.firestore.FieldValue.serverTimestamp(),
-                vendor_id: vendorId,
-                buyer_id: vendorId,
-                type: "subscription",
-                description: `Subscription Payment - ${plan} Plan`,
-                customer_email: ((_a = data.customer) === null || _a === void 0 ? void 0 : _a.email) || "",
-            });
-            console.log(`Subscription activated for vendor ${vendorId}: ${plan} plan until ${endDate.toISOString()}`);
+        const metadata = data.metadata || {};
+        // Extract vendor ID and plan from metadata (fallback to reference for legacy compatibility)
+        let vendorId = metadata.vendor_id;
+        let plan = metadata.plan;
+        if (!vendorId || !plan) {
+            const parts = reference.split("-");
+            if (parts.length >= 4 && parts[1] === "SUB") {
+                vendorId = parts[2];
+                plan = parts[3];
+            }
+            else {
+                console.error("Could not parse subscription details from metadata or reference");
+                return;
+            }
         }
+        // Server-side price validation
+        const planPrices = {
+            monthly: 1550,
+            quarterly: 3550,
+            semi_annual: 6550,
+            annual: 10550,
+        };
+        const expectedPrice = planPrices[plan];
+        if (!expectedPrice) {
+            console.error(`Invalid subscription plan: ${plan}`);
+            return;
+        }
+        if (amount < expectedPrice) {
+            console.error(`Insufficient payment for ${plan} plan. Paid: ${amount}, Expected: ${expectedPrice}`);
+            return;
+        }
+        // Get plan duration
+        const planDurations = {
+            monthly: 1,
+            quarterly: 3,
+            semi_annual: 6,
+            annual: 12,
+        };
+        const durationMonths = planDurations[plan] || 1;
+        const startDate = new Date();
+        const endDate = new Date();
+        endDate.setMonth(endDate.getMonth() + durationMonths);
+        // Update vendor subscription status
+        await db.collection("vendors").doc(vendorId).update({
+            subscription_plan: plan,
+            subscription_status: "active",
+            subscription_start_date: startDate.toISOString(),
+            subscription_end_date: endDate.toISOString(),
+            updated_at: admin.firestore.FieldValue.serverTimestamp(),
+        });
+        // Log transaction for admin dashboard
+        await db.collection("payment_transactions").add({
+            amount: amount,
+            payment_status: "paid",
+            payment_method: "paystack",
+            payment_reference: reference,
+            created_at: admin.firestore.FieldValue.serverTimestamp(),
+            vendor_id: vendorId,
+            buyer_id: vendorId,
+            type: "subscription",
+            description: `Subscription Payment - ${plan} Plan`,
+            customer_email: ((_a = data.customer) === null || _a === void 0 ? void 0 : _a.email) || "",
+        });
+        console.log(`Subscription activated for vendor ${vendorId}: ${plan} plan until ${endDate.toISOString()}`);
     }
     catch (error) {
         console.error("Error handling subscription payment:", error);
@@ -222,6 +271,16 @@ async function handleSubscriptionPayment(reference, amount, data) {
 async function handleOrderPayment(reference, amount, data) {
     var _a;
     try {
+        // Idempotency check: skip if this reference was already processed
+        const existingTx = await db.collection("payment_transactions")
+            .where("payment_reference", "==", reference)
+            .where("type", "==", "order")
+            .limit(1)
+            .get();
+        if (!existingTx.empty) {
+            console.log(`Order payment already processed for reference: ${reference}, skipping.`);
+            return;
+        }
         const metadata = data.metadata || {};
         const orderId = metadata.order_id;
         if (orderId) {
@@ -376,6 +435,8 @@ async function logPaymentEvent(reference, status, data) {
  */
 exports.initializePayment = functions.https.onRequest(async (req, res) => {
     wrapCors(req, res, async () => {
+        // Verify caller is authenticated
+        await verifyAuthToken(req);
         const { email, amount, reference, callback_url, metadata } = req.body;
         if (!email || !amount) {
             res.status(400).json({ success: false, error: "Email and amount are required" });
@@ -383,7 +444,7 @@ exports.initializePayment = functions.https.onRequest(async (req, res) => {
         }
         const response = await paystackClient.post("/transaction/initialize", {
             email,
-            amount: amount.toString(), // Paystack expects string or number (in kobo)
+            amount: amount.toString(),
             reference,
             callback_url,
             metadata,
@@ -396,6 +457,8 @@ exports.initializePayment = functions.https.onRequest(async (req, res) => {
  */
 exports.verifyPayment = functions.https.onRequest(async (req, res) => {
     wrapCors(req, res, async () => {
+        // Verify caller is authenticated
+        await verifyAuthToken(req);
         const { reference } = req.body;
         if (!reference) {
             res.status(400).json({ success: false, error: "Reference is required" });
@@ -404,9 +467,6 @@ exports.verifyPayment = functions.https.onRequest(async (req, res) => {
         const response = await paystackClient.get(`/transaction/verify/${reference}`);
         const data = response.data.data;
         if (data.status === "success") {
-            // Check if this was a subscription payment/order and update DB if needed?
-            // For now, return verification to client, client calls next step or we handle webhook.
-            // Best practice: Use Webhooks. But for this migration, we mirror current flow.
             res.json({ success: true, data });
         }
         else {
@@ -420,10 +480,24 @@ exports.verifyPayment = functions.https.onRequest(async (req, res) => {
  */
 exports.releaseEscrow = functions.https.onRequest(async (req, res) => {
     wrapCors(req, res, async () => {
-        const { orderId, releaseType, notes, performedByUserId: _performedByUserId } = req.body;
+        var _a;
+        // Verify caller is authenticated and is admin or relevant party
+        const decodedToken = await verifyAuthToken(req);
+        const callerUid = decodedToken.uid;
+        const { orderId, releaseType, notes } = req.body;
         // Verify Inputs
         if (!orderId)
             throw new Error("Order ID is required");
+        // Verify caller is admin or the buyer/vendor of this order
+        const orderCheck = await db.collection("orders").doc(orderId).get();
+        if (!orderCheck.exists)
+            throw { status: 404, message: "Order not found" };
+        const orderInfo = orderCheck.data();
+        const callerProfile = await db.collection("profiles").doc(callerUid).get();
+        const isAdmin = callerProfile.exists && ((_a = callerProfile.data()) === null || _a === void 0 ? void 0 : _a.role) === "admin";
+        if (!isAdmin && callerUid !== orderInfo.user_id && callerUid !== orderInfo.vendor_id) {
+            throw { status: 403, message: "Not authorized to release escrow for this order" };
+        }
         // Transactional Consistency
         await db.runTransaction(async (transaction) => {
             var _a;
@@ -451,14 +525,13 @@ exports.releaseEscrow = functions.https.onRequest(async (req, res) => {
                 release_reason: notes || "Delivery Confirmed",
                 release_type: releaseType // 'manual_buyer', 'auto', etc.
             });
-            // 4. Update Vendor Balance
-            const currentBalance = ((_a = vendorDoc.data()) === null || _a === void 0 ? void 0 : _a.wallet_balance) || 0;
+            // 4. Update Vendor Balance (atomic increment to prevent race conditions)
             const creditAmount = Number(escrowData.vendor_amount);
-            const newBalance = currentBalance + creditAmount;
             transaction.update(vendorRef, {
-                wallet_balance: newBalance,
-                total_sales: admin.firestore.FieldValue.increment(1) // Optional: increment sales count
+                wallet_balance: admin.firestore.FieldValue.increment(creditAmount),
+                total_sales: admin.firestore.FieldValue.increment(1)
             });
+            const newBalance = (((_a = vendorDoc.data()) === null || _a === void 0 ? void 0 : _a.wallet_balance) || 0) + creditAmount;
             // 5. Create Wallet Transaction Record
             const txRef = db.collection("wallet_transactions").doc();
             transaction.set(txRef, {
@@ -518,9 +591,24 @@ exports.releaseEscrow = functions.https.onRequest(async (req, res) => {
  */
 exports.refundEscrow = functions.https.onRequest(async (req, res) => {
     wrapCors(req, res, async () => {
-        const { orderId, reason, performedByUserId } = req.body;
+        var _a;
+        // Verify caller is authenticated and authorized
+        const decodedToken = await verifyAuthToken(req);
+        const callerUid = decodedToken.uid;
+        const { orderId, reason } = req.body;
         if (!orderId)
             throw new Error("Order ID is required");
+        // Verify caller is admin or the buyer of this order
+        const orderCheck = await db.collection("orders").doc(orderId).get();
+        if (!orderCheck.exists)
+            throw { status: 404, message: "Order not found" };
+        const orderInfo = orderCheck.data();
+        const callerProfile = await db.collection("profiles").doc(callerUid).get();
+        const isAdmin = callerProfile.exists && ((_a = callerProfile.data()) === null || _a === void 0 ? void 0 : _a.role) === "admin";
+        if (!isAdmin && callerUid !== orderInfo.user_id) {
+            throw { status: 403, message: "Not authorized to refund this order" };
+        }
+        const performedByUserId = callerUid;
         await db.runTransaction(async (transaction) => {
             const escrowRef = db.collection("escrow_transactions").where("order_id", "==", orderId).limit(1);
             const escrowSnapshot = await transaction.get(escrowRef);
@@ -584,11 +672,10 @@ async function sendSmsViaTermii(to, message) {
  * Send SMS (Termii) - Callable Function
  * Secure endpoint to send SMS from client
  */
-/**
- * Send SMS (Termii) - Callable Function
- * Secure endpoint to send SMS from client
- */
 exports.sendTermiiSms = functions.https.onCall(async (request) => {
+    if (!request.auth) {
+        throw new functions.https.HttpsError('unauthenticated', 'Authentication required to send SMS');
+    }
     // Determine if it's v1 (data, context) or v2 (request)
     // The type error suggested it's CallableRequest, so let's handle both or assume v2 structure if typed that way.
     // Actually, to be safe and avoid type errors, let's cast or check.
@@ -614,12 +701,15 @@ exports.sendTermiiSms = functions.https.onCall(async (request) => {
  */
 exports.sendEmail = functions.https.onCall(async (request) => {
     var _a, _b;
+    if (!request.auth) {
+        throw new functions.https.HttpsError('unauthenticated', 'Authentication required to send email');
+    }
     const data = request.data || request;
     const { to, subject, html } = data;
     if (!to || !subject || !html) {
         throw new functions.https.HttpsError('invalid-argument', 'Recipient (to), subject, and html content are required');
     }
-    const apiKey = process.env.SENDGRID_API_KEY || ((_a = functions.config().sendgrid) === null || _a === void 0 ? void 0 : _a.api_key) || process.env.VITE_SENDGRID_API_KEY;
+    const apiKey = process.env.SENDGRID_API_KEY || ((_a = functions.config().sendgrid) === null || _a === void 0 ? void 0 : _a.api_key);
     if (!apiKey) {
         throw new functions.https.HttpsError('failed-precondition', 'SendGrid API key not configured');
     }
@@ -648,4 +738,18 @@ exports.getGiglShippingQuote = gigl.getGiglShippingQuote;
 exports.createGiglShipment = gigl.createGiglShipment;
 exports.trackGiglShipment = gigl.trackGiglShipment;
 exports.getGiglServiceAreas = gigl.getGiglServiceAreas;
+// Export Flutterwave Functions
+const flw = __importStar(require("./flutterwave"));
+exports.initializeFlutterwavePayment = flw.initializeFlutterwavePayment;
+// Export Notification Functions
+const notifications = __importStar(require("./notifications"));
+exports.onOrderCreateNotifyVendor = notifications.onOrderCreateNotifyVendor;
+exports.onOrderStatusUpdateNotifyBuyer = notifications.onOrderStatusUpdateNotifyBuyer;
+exports.onChatMessageNotifyRecipient = notifications.onChatMessageNotifyRecipient;
+exports.verifyFlutterwavePayment = flw.verifyFlutterwavePayment;
+exports.createFlutterwaveVirtualAccount = flw.createFlutterwaveVirtualAccount;
+exports.createFlutterwaveSubaccount = flw.createFlutterwaveSubaccount;
+exports.processFlutterwaveWithdrawal = flw.processFlutterwaveWithdrawal;
+exports.getFlutterwaveBankList = flw.getFlutterwaveBankList;
+exports.resolveFlutterwaveAccount = flw.resolveFlutterwaveAccount;
 //# sourceMappingURL=index.js.map

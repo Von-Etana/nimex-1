@@ -14,7 +14,7 @@ export const signUpSchema = z.object({
     .string()
     .min(2, 'Full name must be at least 2 characters')
     .max(100, 'Full name must be less than 100 characters'),
-  role: z.enum(['buyer', 'vendor', 'admin', 'marketer'] as const)
+  role: z.enum(['buyer', 'vendor', 'marketer'] as const)
 });
 
 export const signInSchema = z.object({

@@ -150,18 +150,9 @@ class FlutterwaveService {
           return response;
         }
       } catch (e) {
-        console.warn('Backend unavailable, assuming success for client-side testing');
+        console.error('Backend unavailable for payment verification:', e);
+        return { success: false, error: 'Backend verification failed' };
       }
-
-      // Fallback
-      return {
-        success: true,
-        data: {
-          status: 'successful',
-          amount: 0,
-          tx_ref: `MOCK-${Date.now()}`,
-        },
-      };
     } catch (error) {
       return { success: false, error: 'Verification failed' };
     }

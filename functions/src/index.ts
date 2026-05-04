@@ -12,12 +12,21 @@ dotenv.config();
 admin.initializeApp();
 const db = admin.firestore();
 
-// CORS Handler
-const corsHandler = cors({ origin: true });
+// CORS Handler - Restrict to known origins
+const allowedOrigins = [
+    "https://nimex.ng",
+    "https://www.nimex.ng",
+    "https://nimex-ecommerce.web.app",
+    "https://nimex-ecommerce.firebaseapp.com",
+    ...(process.env.NODE_ENV !== "production" ? ["http://localhost:5173", "http://localhost:3000"] : []),
+];
+const corsHandler = cors({ origin: allowedOrigins });
 
 // Configuration
-// In production, use functions.config().paystack.secret_key
-const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY || "sk_test_placeholder";
+const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY || functions.config().paystack?.secret_key;
+if (!PAYSTACK_SECRET_KEY) {
+    console.error("CRITICAL: PAYSTACK_SECRET_KEY is not configured. Payment functions will fail.");
+}
 
 const paystackClient = axios.create({
     baseURL: "https://api.paystack.co",
@@ -27,6 +36,20 @@ const paystackClient = axios.create({
     },
 });
 
+// Helper: Verify Firebase Auth Token from Authorization header
+async function verifyAuthToken(req: functions.https.Request): Promise<admin.auth.DecodedIdToken> {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+        throw { status: 401, message: "Missing or invalid Authorization header" };
+    }
+    const idToken = authHeader.split("Bearer ")[1];
+    try {
+        return await admin.auth().verifyIdToken(idToken);
+    } catch {
+        throw { status: 401, message: "Invalid or expired auth token" };
+    }
+}
+
 // Helper: Wrap CORS and Error Handling
 const wrapCors = (req: functions.https.Request, res: any, handler: () => Promise<any>) => {
     return corsHandler(req, res, async () => {
@@ -34,8 +57,8 @@ const wrapCors = (req: functions.https.Request, res: any, handler: () => Promise
             await handler();
         } catch (error: any) {
             console.error("Function Error:", error);
-            const status = error.response ? error.response.status : 500;
-            const message = error.response ? error.response.data.message : error.message;
+            const status = error.status || (error.response ? error.response.status : 500);
+            const message = error.message || (error.response ? error.response.data.message : "Internal error");
             res.status(status).json({ success: false, error: message });
         }
     });
@@ -155,11 +178,41 @@ async function handleChargeSuccess(data: any) {
  */
 async function handleSubscriptionPayment(reference: string, amount: number, data: any) {
     try {
-        // Extract vendor ID and plan from reference: NIMEX-SUB-{vendorId}-{plan}-{timestamp}
-        const parts = reference.split("-");
-        if (parts.length >= 4 && parts[1] === "SUB") {
-            const vendorId = parts[2];
-            const plan = parts[3];
+        const metadata = data.metadata || {};
+        
+        // Extract vendor ID and plan from metadata (fallback to reference for legacy compatibility)
+        let vendorId = metadata.vendor_id;
+        let plan = metadata.plan;
+        
+        if (!vendorId || !plan) {
+            const parts = reference.split("-");
+            if (parts.length >= 4 && parts[1] === "SUB") {
+                vendorId = parts[2];
+                plan = parts[3];
+            } else {
+                console.error("Could not parse subscription details from metadata or reference");
+                return;
+            }
+        }
+
+        // Server-side price validation
+        const planPrices: Record<string, number> = {
+            monthly: 1550,
+            quarterly: 3550,
+            semi_annual: 6550,
+            annual: 10550,
+        };
+
+        const expectedPrice = planPrices[plan];
+        if (!expectedPrice) {
+            console.error(`Invalid subscription plan: ${plan}`);
+            return;
+        }
+
+        if (amount < expectedPrice) {
+            console.error(`Insufficient payment for ${plan} plan. Paid: ${amount}, Expected: ${expectedPrice}`);
+            return;
+        }
 
             // Get plan duration
             const planDurations: Record<string, number> = {
@@ -198,7 +251,6 @@ async function handleSubscriptionPayment(reference: string, amount: number, data
             });
 
             console.log(`Subscription activated for vendor ${vendorId}: ${plan} plan until ${endDate.toISOString()}`);
-        }
     } catch (error) {
         console.error("Error handling subscription payment:", error);
         throw error;
@@ -210,6 +262,17 @@ async function handleSubscriptionPayment(reference: string, amount: number, data
  */
 async function handleOrderPayment(reference: string, amount: number, data: any) {
     try {
+        // Idempotency check: skip if this reference was already processed
+        const existingTx = await db.collection("payment_transactions")
+            .where("payment_reference", "==", reference)
+            .where("type", "==", "order")
+            .limit(1)
+            .get();
+        if (!existingTx.empty) {
+            console.log(`Order payment already processed for reference: ${reference}, skipping.`);
+            return;
+        }
+
         const metadata = data.metadata || {};
         const orderId = metadata.order_id;
 
@@ -380,6 +443,9 @@ async function logPaymentEvent(reference: string, status: string, data: any) {
  */
 export const initializePayment = functions.https.onRequest(async (req, res) => {
     wrapCors(req, res, async () => {
+        // Verify caller is authenticated
+        await verifyAuthToken(req);
+
         const { email, amount, reference, callback_url, metadata } = req.body;
 
         if (!email || !amount) {
@@ -389,7 +455,7 @@ export const initializePayment = functions.https.onRequest(async (req, res) => {
 
         const response = await paystackClient.post("/transaction/initialize", {
             email,
-            amount: amount.toString(), // Paystack expects string or number (in kobo)
+            amount: amount.toString(),
             reference,
             callback_url,
             metadata,
@@ -404,6 +470,9 @@ export const initializePayment = functions.https.onRequest(async (req, res) => {
  */
 export const verifyPayment = functions.https.onRequest(async (req, res) => {
     wrapCors(req, res, async () => {
+        // Verify caller is authenticated
+        await verifyAuthToken(req);
+
         const { reference } = req.body;
 
         if (!reference) {
@@ -415,9 +484,6 @@ export const verifyPayment = functions.https.onRequest(async (req, res) => {
         const data = response.data.data;
 
         if (data.status === "success") {
-            // Check if this was a subscription payment/order and update DB if needed?
-            // For now, return verification to client, client calls next step or we handle webhook.
-            // Best practice: Use Webhooks. But for this migration, we mirror current flow.
             res.json({ success: true, data });
         } else {
             res.json({ success: false, error: "Payment verification failed" });
@@ -431,10 +497,24 @@ export const verifyPayment = functions.https.onRequest(async (req, res) => {
  */
 export const releaseEscrow = functions.https.onRequest(async (req, res) => {
     wrapCors(req, res, async () => {
-        const { orderId, releaseType, notes, performedByUserId: _performedByUserId } = req.body;
+        // Verify caller is authenticated and is admin or relevant party
+        const decodedToken = await verifyAuthToken(req);
+        const callerUid = decodedToken.uid;
+
+        const { orderId, releaseType, notes } = req.body;
 
         // Verify Inputs
         if (!orderId) throw new Error("Order ID is required");
+
+        // Verify caller is admin or the buyer/vendor of this order
+        const orderCheck = await db.collection("orders").doc(orderId).get();
+        if (!orderCheck.exists) throw { status: 404, message: "Order not found" };
+        const orderInfo = orderCheck.data()!;
+        const callerProfile = await db.collection("profiles").doc(callerUid).get();
+        const isAdmin = callerProfile.exists && callerProfile.data()?.role === "admin";
+        if (!isAdmin && callerUid !== orderInfo.user_id && callerUid !== orderInfo.vendor_id) {
+            throw { status: 403, message: "Not authorized to release escrow for this order" };
+        }
 
         // Transactional Consistency
         await db.runTransaction(async (transaction) => {
@@ -468,15 +548,15 @@ export const releaseEscrow = functions.https.onRequest(async (req, res) => {
                 release_type: releaseType // 'manual_buyer', 'auto', etc.
             });
 
-            // 4. Update Vendor Balance
-            const currentBalance = vendorDoc.data()?.wallet_balance || 0;
+            // 4. Update Vendor Balance (atomic increment to prevent race conditions)
             const creditAmount = Number(escrowData.vendor_amount);
-            const newBalance = currentBalance + creditAmount;
 
             transaction.update(vendorRef, {
-                wallet_balance: newBalance,
-                total_sales: admin.firestore.FieldValue.increment(1) // Optional: increment sales count
+                wallet_balance: admin.firestore.FieldValue.increment(creditAmount),
+                total_sales: admin.firestore.FieldValue.increment(1)
             });
+
+            const newBalance = (vendorDoc.data()?.wallet_balance || 0) + creditAmount;
 
             // 5. Create Wallet Transaction Record
             const txRef = db.collection("wallet_transactions").doc();
@@ -544,9 +624,25 @@ export const releaseEscrow = functions.https.onRequest(async (req, res) => {
  */
 export const refundEscrow = functions.https.onRequest(async (req, res) => {
     wrapCors(req, res, async () => {
-        const { orderId, reason, performedByUserId } = req.body;
+        // Verify caller is authenticated and authorized
+        const decodedToken = await verifyAuthToken(req);
+        const callerUid = decodedToken.uid;
+
+        const { orderId, reason } = req.body;
 
         if (!orderId) throw new Error("Order ID is required");
+
+        // Verify caller is admin or the buyer of this order
+        const orderCheck = await db.collection("orders").doc(orderId).get();
+        if (!orderCheck.exists) throw { status: 404, message: "Order not found" };
+        const orderInfo = orderCheck.data()!;
+        const callerProfile = await db.collection("profiles").doc(callerUid).get();
+        const isAdmin = callerProfile.exists && callerProfile.data()?.role === "admin";
+        if (!isAdmin && callerUid !== orderInfo.user_id) {
+            throw { status: 403, message: "Not authorized to refund this order" };
+        }
+
+        const performedByUserId = callerUid;
 
         await db.runTransaction(async (transaction) => {
             const escrowRef = db.collection("escrow_transactions").where("order_id", "==", orderId).limit(1);
@@ -622,11 +718,11 @@ async function sendSmsViaTermii(to: string, message: string) {
  * Send SMS (Termii) - Callable Function
  * Secure endpoint to send SMS from client
  */
-/**
- * Send SMS (Termii) - Callable Function
- * Secure endpoint to send SMS from client
- */
 export const sendTermiiSms = functions.https.onCall(async (request: any) => {
+    if (!request.auth) {
+        throw new functions.https.HttpsError('unauthenticated', 'Authentication required to send SMS');
+    }
+
     // Determine if it's v1 (data, context) or v2 (request)
     // The type error suggested it's CallableRequest, so let's handle both or assume v2 structure if typed that way.
     // Actually, to be safe and avoid type errors, let's cast or check.
@@ -655,6 +751,10 @@ export const sendTermiiSms = functions.https.onCall(async (request: any) => {
  * Secure endpoint to send emails from client
  */
 export const sendEmail = functions.https.onCall(async (request: any) => {
+    if (!request.auth) {
+        throw new functions.https.HttpsError('unauthenticated', 'Authentication required to send email');
+    }
+
     const data = request.data || request;
     const { to, subject, html } = data;
 
@@ -662,7 +762,7 @@ export const sendEmail = functions.https.onCall(async (request: any) => {
         throw new functions.https.HttpsError('invalid-argument', 'Recipient (to), subject, and html content are required');
     }
 
-    const apiKey = process.env.SENDGRID_API_KEY || functions.config().sendgrid?.api_key || process.env.VITE_SENDGRID_API_KEY;
+    const apiKey = process.env.SENDGRID_API_KEY || functions.config().sendgrid?.api_key;
 
     if (!apiKey) {
         throw new functions.https.HttpsError('failed-precondition', 'SendGrid API key not configured');
@@ -698,6 +798,12 @@ export const getGiglServiceAreas = gigl.getGiglServiceAreas;
 // Export Flutterwave Functions
 import * as flw from './flutterwave';
 export const initializeFlutterwavePayment = flw.initializeFlutterwavePayment;
+
+// Export Notification Functions
+import * as notifications from './notifications';
+export const onOrderCreateNotifyVendor = notifications.onOrderCreateNotifyVendor;
+export const onOrderStatusUpdateNotifyBuyer = notifications.onOrderStatusUpdateNotifyBuyer;
+export const onChatMessageNotifyRecipient = notifications.onChatMessageNotifyRecipient;
 export const verifyFlutterwavePayment = flw.verifyFlutterwavePayment;
 export const createFlutterwaveVirtualAccount = flw.createFlutterwaveVirtualAccount;
 export const createFlutterwaveSubaccount = flw.createFlutterwaveSubaccount;

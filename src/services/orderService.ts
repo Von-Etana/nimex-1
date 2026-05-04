@@ -4,6 +4,8 @@ import { logger } from '../lib/logger';
 import { Timestamp } from 'firebase/firestore';
 import type { Order, OrderItem, Vendor } from '../types/firestore';
 import { notificationService } from './notificationService';
+import { auth, db } from '../lib/firebase.config';
+import { doc } from 'firebase/firestore';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:5001/anima-project/us-central1'; // Default to local emulator for dev, or cloud url
 
@@ -48,66 +50,70 @@ interface ReleaseEscrowRequest {
 class OrderService {
   async createOrder(request: CreateOrderRequest): Promise<OrderResponse> {
     try {
-      const subtotal = request.items.reduce(
-        (sum, item) => sum + item.unitPrice * item.quantity,
-        0
-      );
-      const totalAmount = subtotal + request.deliveryCost;
       const orderNumber = `NIMEX-${Date.now()}-${Math.random().toString(36).substring(7).toUpperCase()}`;
-
-      // Generate IDs
       const orderId = `order_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
-      // First, validate stock for all items (non-blocking - log warnings but continue)
-      logger.info('Validating stock for items', { itemCount: request.items.length });
-      console.log('[OrderService] Starting order creation for', request.items.length, 'items');
+      logger.info('Starting transaction for order creation', { itemCount: request.items.length });
 
-      for (const item of request.items) {
-        console.log('[OrderService] Checking product:', item.productId, 'Title:', item.productTitle);
-        try {
-          const product = await FirestoreService.getDocument<any>(COLLECTIONS.PRODUCTS, item.productId);
-          if (!product) {
-            console.warn('[OrderService] Product not found in database:', item.productId);
-            // Continue anyway - product may have been deleted but order should still work
-          } else if ((product.stock_quantity || 0) < item.quantity) {
-            console.warn('[OrderService] Low stock for', item.productTitle, 'Available:', product.stock_quantity || 0, 'Requested:', item.quantity);
-            // Continue anyway - allow overselling, vendor can manage stock
-          } else {
-            console.log('[OrderService] Product OK:', item.productTitle, 'Stock:', product.stock_quantity);
+      await FirestoreService.runTransaction(async (transaction) => {
+        let calculatedSubtotal = 0;
+        const productDocs = [];
+
+        // 1. Read all products first (transactions require all reads before writes)
+        for (const item of request.items) {
+          const productRef = doc(db, COLLECTIONS.PRODUCTS, item.productId);
+          const productSnap = await transaction.get(productRef);
+          if (!productSnap.exists()) {
+            throw new Error(`Product not found: ${item.productTitle}`);
           }
-        } catch (validationError) {
-          console.error('[OrderService] Error validating product:', item.productId, validationError);
-          // Continue anyway - don't block order creation due to validation errors
+          productDocs.push({ item, ref: productRef, data: productSnap.data() });
         }
-      }
 
-      // Create order
-      logger.info('Creating order', { orderId, orderNumber });
-      await FirestoreService.setDocument(COLLECTIONS.ORDERS, orderId, {
-        order_number: orderNumber,
-        buyer_id: request.buyerId,
-        vendor_id: request.vendorId,
-        delivery_address_id: request.deliveryAddressId,
-        status: 'pending',
-        subtotal,
-        shipping_fee: request.deliveryCost,
-        total_amount: totalAmount,
-        payment_status: 'pending',
-        notes: request.notes || null,
-        created_at: Timestamp.now(),
-        updated_at: Timestamp.now(),
-      });
+        // 2. Validate prices and compute subtotal (HIGH-10)
+        for (const p of productDocs) {
+          const { item, data } = p;
+          
+          // Use the price from the database instead of trusting the client
+          const dbPrice = data.price || item.unitPrice;
+          if (item.unitPrice !== dbPrice) {
+            console.warn(`[OrderService] Price mismatch for ${item.productTitle}. Client: ${item.unitPrice}, DB: ${dbPrice}. Using DB price.`);
+            item.unitPrice = dbPrice;
+          }
+          
+          // Verify stock before proceeding
+          if ((data.stock_quantity || 0) < item.quantity) {
+             console.warn(`[OrderService] Overselling warning for ${item.productTitle}. Available: ${data.stock_quantity || 0}, Requested: ${item.quantity}`);
+          }
 
-      // Create order items and reduce stock
-      logger.info('Creating order items');
-      console.log('[OrderService] Creating order items for order:', orderId);
+          calculatedSubtotal += dbPrice * item.quantity;
+        }
 
-      for (const item of request.items) {
-        const itemId = `item_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        const calculatedTotal = calculatedSubtotal + request.deliveryCost;
 
-        try {
-          console.log('[OrderService] Creating order item:', itemId, 'for product:', item.productTitle);
-          await FirestoreService.setDocument(COLLECTIONS.ORDER_ITEMS, itemId, {
+        // 3. Write Order Document
+        const orderRef = doc(db, COLLECTIONS.ORDERS, orderId);
+        transaction.set(orderRef, {
+          order_number: orderNumber,
+          buyer_id: request.buyerId,
+          vendor_id: request.vendorId,
+          delivery_address_id: request.deliveryAddressId,
+          status: 'pending',
+          subtotal: calculatedSubtotal,
+          shipping_fee: request.deliveryCost,
+          total_amount: calculatedTotal,
+          payment_status: 'pending',
+          notes: request.notes || null,
+          created_at: Timestamp.now(),
+          updated_at: Timestamp.now(),
+        });
+
+        // 4. Write Order Items and Decrement Stock atomically (HIGH-05)
+        for (const p of productDocs) {
+          const { item, ref, data } = p;
+          const itemId = `item_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+          const itemRef = doc(db, COLLECTIONS.ORDER_ITEMS, itemId);
+          
+          transaction.set(itemRef, {
             order_id: orderId,
             product_id: item.productId,
             product_title: item.productTitle,
@@ -118,32 +124,19 @@ class OrderService {
             created_at: Timestamp.now(),
             updated_at: Timestamp.now(),
           });
-          console.log('[OrderService] Order item created successfully:', itemId);
-        } catch (itemError) {
-          console.error('[OrderService] Error creating order item:', itemId, itemError);
-          // Continue to next item - don't fail entire order
+
+          // Atomic Stock Decrement
+          const newStock = Math.max(0, (data.stock_quantity || 0) - item.quantity);
+          transaction.update(ref, {
+            stock_quantity: newStock,
+            updated_at: Timestamp.now(),
+          });
         }
+      });
 
-        // Reduce stock quantity (non-blocking)
-        try {
-          const product = await FirestoreService.getDocument<any>(COLLECTIONS.PRODUCTS, item.productId);
-          if (product) {
-            const newStock = Math.max(0, (product.stock_quantity || 0) - item.quantity);
-            await FirestoreService.updateDocument(COLLECTIONS.PRODUCTS, item.productId, {
-              stock_quantity: newStock,
-              updated_at: Timestamp.now(),
-            });
-            console.log('[OrderService] Stock updated for', item.productTitle, 'New stock:', newStock);
-          }
-        } catch (stockError) {
-          console.warn('[OrderService] Failed to update stock for', item.productTitle, stockError);
-          // Continue - stock update is not critical for order completion
-        }
-      }
+      console.log('[OrderService] Order transaction completed successfully:', orderId);
 
-      console.log('[OrderService] Order creation completed successfully:', orderId);
-
-      // Notify vendor about new order (non-blocking, don't fail order if notification fails)
+      // Notify vendor about new order (non-blocking)
       try {
         await notificationService.notifyVendorNewOrder(
           request.vendorId,
@@ -187,7 +180,8 @@ class OrderService {
 
       await FirestoreService.runTransaction(async (transaction) => {
         // Update order status
-        await FirestoreService.updateDocument(COLLECTIONS.ORDERS, orderId, {
+        const orderRef = doc(db, COLLECTIONS.ORDERS, orderId);
+        transaction.update(orderRef, {
           payment_status: paymentStatus,
           payment_reference: paymentReference,
           payment_method: paymentMethod,
@@ -211,7 +205,8 @@ class OrderService {
           const platformFee = Math.round(order.total_amount * platformFeePercentage);
           const vendorAmount = order.total_amount - platformFee;
 
-          await FirestoreService.setDocument(COLLECTIONS.ESCROW_TRANSACTIONS, escrowId, {
+          const escrowRef = doc(db, COLLECTIONS.ESCROW_TRANSACTIONS, escrowId);
+          transaction.set(escrowRef, {
             order_id: orderId,
             buyer_id: order.buyer_id,
             vendor_id: order.vendor_id,
@@ -272,33 +267,45 @@ class OrderService {
       const escrowTransaction = escrowTransactions.length > 0 ? escrowTransactions[0] : null;
 
       await FirestoreService.runTransaction(async (transaction) => {
+        // Read the vendor document within the transaction FIRST (all reads must come before writes)
+        let vendorData = null;
+        let vendorRef = null;
+        if (escrowTransaction && escrowTransaction.vendor_id) {
+          vendorRef = doc(db, COLLECTIONS.VENDORS, escrowTransaction.vendor_id);
+          const vendorSnap = await transaction.get(vendorRef);
+          if (vendorSnap.exists()) {
+            vendorData = vendorSnap.data();
+          }
+        }
+
         // Update delivery status
-        await FirestoreService.updateDocument(COLLECTIONS.DELIVERIES, delivery.id, {
+        const deliveryRef = doc(db, COLLECTIONS.DELIVERIES, delivery.id);
+        transaction.update(deliveryRef, {
           delivery_status: 'delivered',
           actual_delivery_date: Timestamp.now(),
         });
 
         // Release Escrow
         if (escrowTransaction) {
-          await FirestoreService.updateDocument(COLLECTIONS.ESCROW_TRANSACTIONS, escrowTransaction.id, {
+          const escrowRef = doc(db, COLLECTIONS.ESCROW_TRANSACTIONS, escrowTransaction.id);
+          transaction.update(escrowRef, {
             status: 'released',
             released_at: Timestamp.now(),
             release_reason: 'delivery_confirmed_by_buyer'
           });
 
-          // Credit Vendor Wallet (Logic could be moved to a trigger, but implementing here for directness)
-          // Fetch vendor to update wallet
-          const vendor = await FirestoreService.getDocument<any>(COLLECTIONS.VENDORS, escrowTransaction.vendor_id);
-          if (vendor) {
-            const newBalance = (vendor.wallet_balance || 0) + escrowTransaction.vendor_amount;
-            await FirestoreService.updateDocument(COLLECTIONS.VENDORS, escrowTransaction.vendor_id, {
+          // Credit Vendor Wallet
+          if (vendorData && vendorRef) {
+            const newBalance = (vendorData.wallet_balance || 0) + escrowTransaction.vendor_amount;
+            transaction.update(vendorRef, {
               wallet_balance: newBalance,
               updated_at: Timestamp.now()
             });
 
             // Log Wallet Transaction
             const walletTxId = `wtx_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-            await FirestoreService.setDocument('wallet_transactions', walletTxId, {
+            const walletTxRef = doc(db, 'wallet_transactions', walletTxId);
+            transaction.set(walletTxRef, {
               vendor_id: escrowTransaction.vendor_id,
               type: 'sale',
               amount: escrowTransaction.vendor_amount,
@@ -313,7 +320,8 @@ class OrderService {
 
         // Create escrow release record (audit trail)
         const releaseId = `release_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-        await FirestoreService.setDocument('escrow_releases', releaseId, {
+        const releaseRef = doc(db, 'escrow_releases', releaseId);
+        transaction.set(releaseRef, {
           escrow_transaction_id: escrowTransaction?.id || 'unknown',
           release_type: 'manual_buyer',
           buyer_confirmed_delivery: true,
@@ -334,16 +342,25 @@ class OrderService {
 
   async releaseEscrow(request: ReleaseEscrowRequest): Promise<{ success: boolean; error?: string }> {
     try {
+      // CRIT-04 FIX: Obtain current user's ID token and send it in the Authorization header.
+      // The backend must verify this token — never trust client-supplied user identity.
+      const currentUser = auth.currentUser;
+      if (!currentUser) {
+        return { success: false, error: 'User not authenticated' };
+      }
+      const idToken = await currentUser.getIdToken();
+
       const response = await fetch(`${API_URL}/releaseEscrow`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${idToken}`,
         },
         body: JSON.stringify({
           orderId: request.orderId,
           releaseType: request.releaseType,
           notes: request.notes,
-          performedByUserId: request.releaseBy,
+          // performedByUserId removed — backend derives identity from the verified token
         }),
       });
 
@@ -365,10 +382,18 @@ class OrderService {
 
   async refundEscrow(orderId: string, reason: string): Promise<{ success: boolean; error?: string }> {
     try {
+      // CRIT-04 FIX: Obtain current user's ID token
+      const currentUser = auth.currentUser;
+      if (!currentUser) {
+        return { success: false, error: 'User not authenticated' };
+      }
+      const idToken = await currentUser.getIdToken();
+
       const response = await fetch(`${API_URL}/refundEscrow`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${idToken}`,
         },
         body: JSON.stringify({
           orderId,
@@ -415,7 +440,8 @@ class OrderService {
       await FirestoreService.runTransaction(async (transaction) => {
         // Create dispute
         const disputeId = `dispute_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-        await FirestoreService.setDocument(COLLECTIONS.DISPUTES, disputeId, {
+        const disputeRef = doc(db, COLLECTIONS.DISPUTES, disputeId);
+        transaction.set(disputeRef, {
           order_id: orderId,
           escrow_transaction_id: escrowTransaction?.id,
           filed_by: filedBy,
@@ -429,13 +455,15 @@ class OrderService {
 
         // Update escrow status
         if (escrowTransaction) {
-          await FirestoreService.updateDocument(COLLECTIONS.ESCROW_TRANSACTIONS, escrowTransaction.id, {
+          const escrowRef = doc(db, COLLECTIONS.ESCROW_TRANSACTIONS, escrowTransaction.id);
+          transaction.update(escrowRef, {
             status: 'disputed'
           });
         }
 
         // Update order status
-        await FirestoreService.updateDocument(COLLECTIONS.ORDERS, orderId, {
+        const orderRef = doc(db, COLLECTIONS.ORDERS, orderId);
+        transaction.update(orderRef, {
           status: 'disputed'
         });
       });

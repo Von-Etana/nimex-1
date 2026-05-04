@@ -11,6 +11,7 @@ import { orderService } from '../services/orderService';
 import { flutterwaveService } from '../services/flutterwaveService';
 import { emailNotificationService } from '../services/emailNotificationService';
 import { giglService } from '../services/giglService';
+import { auth } from '../lib/firebase.config';
 
 interface CartItem {
   id: string;
@@ -50,6 +51,7 @@ export const CheckoutScreen: React.FC = () => {
   const [showAddressForm, setShowAddressForm] = useState(false);
   const [resendingEmail, setResendingEmail] = useState(false);
   const [emailSent, setEmailSent] = useState(false);
+  const [checkingVerification, setCheckingVerification] = useState(false);
   const [newAddress, setNewAddress] = useState<Partial<Address>>({
     full_name: '',
     phone: '',
@@ -175,6 +177,26 @@ export const CheckoutScreen: React.FC = () => {
     if (!error) {
       setEmailSent(true);
       setTimeout(() => setEmailSent(false), 5000);
+    }
+  };
+
+  const handleCheckVerification = async () => {
+    setCheckingVerification(true);
+    try {
+      const currentUser = auth.currentUser;
+      if (currentUser) {
+        await currentUser.reload();
+        if (currentUser.emailVerified) {
+          window.location.reload();
+        } else {
+          setError('Email not yet verified. Please check your inbox.');
+          setTimeout(() => setError(''), 3000);
+        }
+      }
+    } catch {
+      setError('Could not check verification status. Try again.');
+    } finally {
+      setCheckingVerification(false);
     }
   };
 
@@ -379,6 +401,20 @@ export const CheckoutScreen: React.FC = () => {
                         Resend Verification Email
                       </Button>
                     )}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleCheckVerification}
+                      disabled={checkingVerification}
+                      className="border-green-300 text-green-700 hover:bg-green-100"
+                    >
+                      {checkingVerification ? (
+                        <RefreshCw className="w-4 h-4 animate-spin mr-2" />
+                      ) : (
+                        <CheckCircle className="w-4 h-4 mr-2" />
+                      )}
+                      I've verified
+                    </Button>
                   </div>
                 </div>
               </div>

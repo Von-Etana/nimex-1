@@ -35,7 +35,7 @@ service firebase.storage {
     // Path pattern: products/{vendorId}/{productId}/{fileName}
     match /products/{vendorId}/{productId}/{fileName} {
       allow read: if true;
-      allow write: if isAuthenticated() && (
+      allow write: if isOwner(vendorId) && (
         (isImageFile() && isValidImageSize()) || 
         (isVideoFile() && isValidVideoSize())
       );
@@ -64,14 +64,19 @@ service firebase.storage {
     
     // Order documents - buyer and vendor
     match /orders/{orderId}/{fileName} {
-      allow read: if isAuthenticated();
-      allow write: if isAuthenticated() && isValidFileSize();
+      allow read, write: if isAuthenticated() && (
+        firestore.get(/databases/(default)/documents/orders/$(orderId)).data.buyer_id == request.auth.uid ||
+        firestore.get(/databases/(default)/documents/orders/$(orderId)).data.vendor_id == request.auth.uid ||
+        firestore.get(/databases/(default)/documents/profiles/$(request.auth.uid)).data.role == 'admin'
+      ) && isValidFileSize();
     }
     
     // Support ticket attachments - ticket owner and admin
     match /support/{ticketId}/{fileName} {
-      allow read: if isAuthenticated();
-      allow write: if isAuthenticated() && isValidFileSize();
+      allow read, write: if isAuthenticated() && (
+        firestore.get(/databases/(default)/documents/support_tickets/$(ticketId)).data.user_id == request.auth.uid ||
+        firestore.get(/databases/(default)/documents/profiles/$(request.auth.uid)).data.role == 'admin'
+      ) && isValidFileSize();
     }
     
     // KYC documents - owner and admin only
@@ -85,8 +90,10 @@ service firebase.storage {
     
     // Chat attachments - authenticated users
     match /chat/{conversationId}/{fileName} {
-      allow read: if isAuthenticated();
-      allow write: if isAuthenticated() && isValidFileSize();
+      allow read, write: if isAuthenticated() && (
+        firestore.get(/databases/(default)/documents/chat_conversations/$(conversationId)).data.buyer_id == request.auth.uid ||
+        firestore.get(/databases/(default)/documents/chat_conversations/$(conversationId)).data.vendor_id == request.auth.uid
+      ) && isValidFileSize();
     }
     
     // Temporary uploads - authenticated users (auto-delete after 24h)

@@ -181,6 +181,20 @@
             ]
         },
         {
+            "collectionGroup": "chat_messages",
+            "queryScope": "COLLECTION",
+            "fields": [
+                {
+                    "fieldPath": "conversation_id",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "is_read",
+                    "order": "ASCENDING"
+                }
+            ]
+        },
+        {
             "collectionGroup": "notifications",
             "queryScope": "COLLECTION",
             "fields": [

@@ -110,6 +110,34 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => unsubscribe();
   }, []);
 
+  // Poll for email verification status change
+  // Firebase onAuthStateChanged does NOT re-fire when email is verified,
+  // so we need to periodically call user.reload() to detect it.
+  useEffect(() => {
+    if (!state.user || state.user.emailVerified) return;
+
+    const checkVerification = async () => {
+      try {
+        await state.user!.reload();
+        if (state.user!.emailVerified) {
+          // Force a state update by re-dispatching the user object
+          // We need to get the current user from auth since reload() mutates in place
+          const currentUser = auth.currentUser;
+          if (currentUser) {
+            dispatch({ type: 'SET_USER', payload: Object.assign(Object.create(Object.getPrototypeOf(currentUser)), currentUser) });
+          }
+          logger.info('Email verification detected');
+        }
+      } catch (error) {
+        logger.error('Error checking email verification', error);
+      }
+    };
+
+    const interval = setInterval(checkVerification, 30000); // Check every 30 seconds
+
+    return () => clearInterval(interval);
+  }, [state.user?.uid, state.user?.emailVerified]);
+
   // Real-time subscription for KYC status changes
   useEffect(() => {
     if (!state.user?.uid) return;

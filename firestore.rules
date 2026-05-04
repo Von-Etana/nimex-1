@@ -80,7 +80,12 @@ service cloud.firestore {
     }
     
     match /cart_items/{itemId} {
-      allow read, write: if isAuthenticated();
+      // HIGH-01 FIX: Enforce ownership via the parent cart document
+      allow read, write: if isAuthenticated() &&
+        get(/databases/$(database)/documents/carts/$(resource.data.cart_id)).data.user_id == request.auth.uid;
+      // Allow create only when the new item's cart belongs to the requesting user
+      allow create: if isAuthenticated() &&
+        get(/databases/$(database)/documents/carts/$(request.resource.data.cart_id)).data.user_id == request.auth.uid;
     }
     
     // Reviews - public read, buyer write
@@ -109,10 +114,11 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
     
-    // Product Tags (Subcategories) - public read, authenticated create
+    // Product Tags (Subcategories) - public read, vendor/admin create
     match /product_tags/{tagId} {
       allow read: if true;
-      allow create: if isAuthenticated();
+      // HIGH-08 FIX: Only vendors or admins can create tags
+      allow create: if isVendor() || isAdmin();
       allow update: if isAuthenticated() && (
         resource.data.created_by == request.auth.uid || isAdmin()
       );
@@ -128,23 +134,46 @@ service cloud.firestore {
     // Chat conversations - participants only
     match /chat_conversations/{conversationId} {
       allow read: if isAuthenticated() && (
-        request.auth.uid in resource.data.participant_ids ||
         resource.data.buyer_id == request.auth.uid ||
         resource.data.vendor_id == request.auth.uid ||
-        !exists(/databases/$(database)/documents/chat_conversations/$(conversationId))
+        isAdmin()
       );
-      allow write: if isAuthenticated();
+      allow create: if isAuthenticated() && (
+        request.resource.data.buyer_id == request.auth.uid ||
+        request.resource.data.vendor_id == request.auth.uid
+      );
+      allow update: if isAuthenticated() && (
+        resource.data.buyer_id == request.auth.uid ||
+        resource.data.vendor_id == request.auth.uid
+      );
+      allow delete: if isAdmin();
     }
     
     match /chat_messages/{messageId} {
-      allow read, write: if isAuthenticated();
+      // HIGH-02 FIX: Restrict to conversation participants only
+      allow read: if isAuthenticated() && (
+        get(/databases/$(database)/documents/chat_conversations/$(resource.data.conversation_id)).data.buyer_id == request.auth.uid ||
+        get(/databases/$(database)/documents/chat_conversations/$(resource.data.conversation_id)).data.vendor_id == request.auth.uid ||
+        isAdmin()
+      );
+      allow create: if isAuthenticated() && (
+        get(/databases/$(database)/documents/chat_conversations/$(request.resource.data.conversation_id)).data.buyer_id == request.auth.uid ||
+        get(/databases/$(database)/documents/chat_conversations/$(request.resource.data.conversation_id)).data.vendor_id == request.auth.uid
+      );
+      allow update, delete: if isAuthenticated() && (
+        resource.data.sender_id == request.auth.uid || isAdmin()
+      );
     }
     
     // Notifications - owner read/update
     match /notifications/{notificationId} {
       allow read, update, delete: if isAuthenticated() && 
         resource.data.user_id == request.auth.uid;
-      allow create: if isAuthenticated();
+      // HIGH-03 FIX: Prevent cross-user notification creation
+      // Only backend (admin) or system should create notifications for other users
+      allow create: if isAuthenticated() && (
+        request.resource.data.user_id == request.auth.uid || isAdmin()
+      );
     }
     
     // Marketers - public read, owner write
@@ -153,12 +182,18 @@ service cloud.firestore {
       allow create, update: if isOwner(marketerId);
     }
     
-    // Referrals - public read, authenticated write
+    // Referrals - restricted read, authenticated write
     match /referrals/{referralId} {
-      allow read: if true;
+      // HIGH-09 FIX: Referrals contain PII and financial data - not public
+      allow read: if isAuthenticated() && (
+        resource.data.referrer_id == request.auth.uid ||
+        resource.data.referred_id == request.auth.uid ||
+        isAdmin()
+      );
       allow create: if isAuthenticated();
-      allow update, delete: if isAuthenticated() && 
-        resource.data.referrer_id == request.auth.uid;
+      allow update, delete: if isAuthenticated() && (
+        resource.data.referrer_id == request.auth.uid || isAdmin()
+      );
     }
     
     // Support tickets - owner and admin
@@ -213,7 +248,8 @@ service cloud.firestore {
     
     // Commissions - admin only
     match /commissions/{commissionId} {
-      allow read: if isAuthenticated();
+      // MED-04 FIX: Commission data is financial/sensitive - admin only
+      allow read: if isAdmin();
       allow write: if isAdmin();
     }
     
@@ -238,17 +274,20 @@ service cloud.firestore {
 
     // Admin Roles & Permissions
     match /admin_roles/{roleId} {
-      allow read: if isAuthenticated();
+      // MED-05 FIX: Role structure should not be visible to all users
+      allow read: if isAdmin();
       allow write: if isAdmin();
     }
 
     match /admin_permissions/{permId} {
-      allow read: if isAuthenticated();
+      // MED-05 FIX: Permission mappings are admin-only
+      allow read: if isAdmin();
       allow write: if isAdmin();
     }
 
     match /role_permissions/{permId} {
-      allow read: if isAuthenticated();
+      // MED-05 FIX: Role-permission mappings are admin-only
+      allow read: if isAdmin();
       allow write: if isAdmin();
     }
     // Orders - buyer and vendor can read, buyer can create (requires verified email)

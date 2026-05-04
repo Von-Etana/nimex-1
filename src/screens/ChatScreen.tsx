@@ -8,7 +8,7 @@ import { COLLECTIONS } from '../lib/collections';
 import { logger } from '../lib/logger';
 import { sanitizeText } from '../lib/sanitization';
 import { useAuth } from '../contexts/AuthContext';
-import { where, orderBy, onSnapshot, query, collection, Timestamp, doc } from 'firebase/firestore';
+import { where, orderBy, onSnapshot, query, collection, Timestamp, doc, increment } from 'firebase/firestore';
 import { db } from '../lib/firebase.config';
 import { notificationService } from '../services/notificationService';
 
@@ -64,9 +64,77 @@ export const ChatScreen: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
+  // Real-time subscription for conversations list
   useEffect(() => {
-    loadConversations();
-  }, [user?.uid]);
+    if (!user?.uid) return;
+
+    // We need two queries since Firestore doesn't support OR across different fields
+    const buyerQuery = query(
+      collection(db, COLLECTIONS.CHAT_CONVERSATIONS),
+      where('buyer_id', '==', user.uid)
+    );
+
+    const vendorQuery = profile?.role === 'vendor'
+      ? query(collection(db, COLLECTIONS.CHAT_CONVERSATIONS), where('vendor_id', '==', user.uid))
+      : null;
+
+    let buyerConvos: Conversation[] = [];
+    let vendorConvos: Conversation[] = [];
+
+    const enrichConversations = async (rawConvos: any[]) => {
+      return Promise.all(rawConvos.map(async (convo) => {
+        try {
+          const [buyer, vendor, product] = await Promise.all([
+            FirestoreService.getDocument<any>(COLLECTIONS.PROFILES, convo.buyer_id),
+            FirestoreService.getDocument<any>(COLLECTIONS.VENDORS, convo.vendor_id),
+            convo.product_id ? FirestoreService.getDocument<any>(COLLECTIONS.PRODUCTS, convo.product_id) : null
+          ]);
+          return {
+            ...convo,
+            buyer: buyer ? { full_name: buyer.full_name } : { full_name: 'Unknown Buyer' },
+            vendor: vendor ? { business_name: vendor.business_name } : { business_name: 'Unknown Vendor' },
+            product: product ? { title: product.title } : undefined
+          };
+        } catch {
+          return convo;
+        }
+      }));
+    };
+
+    const mergeAndSet = async () => {
+      const allConvos = [...buyerConvos, ...vendorConvos];
+      const uniqueConvos = Array.from(new Map(allConvos.map(c => [c.id, c])).values());
+      const enriched = await enrichConversations(uniqueConvos);
+      enriched.sort((a, b) => {
+        const timeA = a.last_message_at ? new Date(a.last_message_at).getTime() : 0;
+        const timeB = b.last_message_at ? new Date(b.last_message_at).getTime() : 0;
+        return timeB - timeA;
+      });
+      setConversations(enriched);
+      setLoading(false);
+    };
+
+    const unsubBuyer = onSnapshot(buyerQuery, async (snapshot) => {
+      buyerConvos = snapshot.docs.map(d => ({ id: d.id, ...d.data() })) as Conversation[];
+      await mergeAndSet();
+    });
+
+    let unsubVendor: (() => void) | null = null;
+    if (vendorQuery) {
+      unsubVendor = onSnapshot(vendorQuery, async (snapshot) => {
+        vendorConvos = snapshot.docs.map(d => ({ id: d.id, ...d.data() })) as Conversation[];
+        await mergeAndSet();
+      });
+    } else {
+      // If not a vendor, just trigger merge with empty vendor list
+      mergeAndSet();
+    }
+
+    return () => {
+      unsubBuyer();
+      unsubVendor?.();
+    };
+  }, [user?.uid, profile?.role]);
 
   // Handle URL vendorId parameter - create or find conversation
   useEffect(() => {
@@ -229,7 +297,6 @@ export const ChatScreen: React.FC = () => {
 
   useEffect(() => {
     if (selectedConversation) {
-      loadMessages(selectedConversation.id);
       markMessagesAsRead(selectedConversation.id);
     }
   }, [selectedConversation]);
@@ -238,86 +305,26 @@ export const ChatScreen: React.FC = () => {
     scrollToBottom();
   }, [messages]);
 
-  const loadConversations = async () => {
-    if (!user?.uid) return;
+  // loadConversations is now handled by the real-time subscription above
 
-    try {
-      setLoading(true);
-      logger.info('Loading conversations');
-
-      // Firestore doesn't support OR queries across different fields easily.
-      // We fetch conversations where user is buyer AND where user is vendor, then merge.
-
-      const buyerConversationsPromise = FirestoreService.getDocuments<any>(COLLECTIONS.CHAT_CONVERSATIONS, [
-        where('buyer_id', '==', user.uid)
-      ]);
-
-      const vendorConversationsPromise = profile?.role === 'vendor'
-        ? FirestoreService.getDocuments<any>(COLLECTIONS.CHAT_CONVERSATIONS, [
-          where('vendor_id', '==', user.uid)
-        ])
-        : Promise.resolve([]);
-
-      const [buyerConvos, vendorConvos] = await Promise.all([buyerConversationsPromise, vendorConversationsPromise]);
-
-      // Merge and deduplicate (though IDs should be unique across these sets ideally)
-      const allConvos = [...buyerConvos, ...vendorConvos];
-      const uniqueConvos = Array.from(new Map(allConvos.map(c => [c.id, c])).values());
-
-      // Manually join related data
-      const enrichedConvos = await Promise.all(uniqueConvos.map(async (convo) => {
-        try {
-          const [buyer, vendor, product] = await Promise.all([
-            FirestoreService.getDocument<any>(COLLECTIONS.PROFILES, convo.buyer_id),
-            FirestoreService.getDocument<any>(COLLECTIONS.VENDORS, convo.vendor_id),
-            convo.product_id ? FirestoreService.getDocument<any>(COLLECTIONS.PRODUCTS, convo.product_id) : null
-          ]);
-
-          return {
-            ...convo,
-            buyer: buyer ? { full_name: buyer.full_name } : { full_name: 'Unknown Buyer' },
-            vendor: vendor ? { business_name: vendor.business_name } : { business_name: 'Unknown Vendor' },
-            product: product ? { title: product.title } : undefined
-          };
-        } catch (e) {
-          console.error('Error enriching conversation', e);
-          return convo;
-        }
-      }));
-
-      // Sort by last_message_at desc
-      enrichedConvos.sort((a, b) => {
-        return new Date(b.last_message_at).getTime() - new Date(a.last_message_at).getTime();
-      });
-
-      setConversations(enrichedConvos);
-    } catch (error) {
-      logger.error('Error loading conversations', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const loadMessages = async (conversationId: string) => {
-    // This is now handled by the real-time subscription in useEffect
-    // But we can keep it for initial load if needed, or just rely on the subscription.
-    // The subscription handles both initial load and updates.
-  };
+  // Messages are loaded via the real-time onSnapshot subscription above
 
   const markMessagesAsRead = async (conversationId: string) => {
-    if (!user?.uid) return;
+    if (!user?.uid || !selectedConversation) return;
 
     try {
-      // Find unread messages not sent by current user
+      // Fetch unread messages for this conversation, then filter client-side
+      // to avoid the != composite index requirement
       const unreadMessages = await FirestoreService.getDocuments<Message>(COLLECTIONS.CHAT_MESSAGES, [
         where('conversation_id', '==', conversationId),
-        where('is_read', '==', false),
-        where('sender_id', '!=', user.uid)
+        where('is_read', '==', false)
       ]);
 
-      if (unreadMessages.length > 0) {
-        // Batch update
-        const batchOps = unreadMessages.map(msg => ({
+      // Filter client-side: only mark messages NOT sent by current user
+      const messagesToMark = unreadMessages.filter(msg => msg.sender_id !== user.uid);
+
+      if (messagesToMark.length > 0) {
+        const batchOps = messagesToMark.map(msg => ({
           type: 'update' as const,
           collectionName: COLLECTIONS.CHAT_MESSAGES,
           documentId: msg.id,
@@ -326,12 +333,14 @@ export const ChatScreen: React.FC = () => {
 
         await FirestoreService.batchWrite(batchOps);
 
-        // Also update conversation unread counts
-        // This is a bit complex because we need to know if we are buyer or vendor
-        // For simplicity, we can just reset the count for the current user's role
-        // But we need the conversation object to know which field to update.
-        // We'll skip updating the conversation document for now to avoid race conditions 
-        // or just rely on the next message to fix counts, or do a separate update if we had the convo.
+        // Reset the unread count for the current user on the conversation
+        const unreadField = selectedConversation.buyer_id === user.uid
+          ? 'unread_buyer'
+          : 'unread_vendor';
+
+        await FirestoreService.updateDocument(COLLECTIONS.CHAT_CONVERSATIONS, conversationId, {
+          [unreadField]: 0
+        });
       }
     } catch (error) {
       logger.error('Error marking messages as read', error);
@@ -353,17 +362,17 @@ export const ChatScreen: React.FC = () => {
         created_at: Timestamp.now()
       });
 
-      // Update conversation last message
+      // Update conversation last message using Firestore increment for unread counts
       const updates: any = {
         last_message: newMessage.trim(),
-        last_message_at: new Date().toISOString(), // Use ISO string for consistency with sorting
+        last_message_at: new Date().toISOString(),
       };
 
       if (selectedConversation.buyer_id !== user.uid) {
-        updates.unread_buyer = (selectedConversation.unread_buyer || 0) + 1;
+        updates.unread_buyer = increment(1);
       }
       if (selectedConversation.vendor_id !== user.uid) {
-        updates.unread_vendor = (selectedConversation.unread_vendor || 0) + 1;
+        updates.unread_vendor = increment(1);
       }
 
       await FirestoreService.updateDocument(COLLECTIONS.CHAT_CONVERSATIONS, selectedConversation.id, updates);
@@ -386,8 +395,7 @@ export const ChatScreen: React.FC = () => {
       });
 
       setNewMessage('');
-      // No need to reload messages, subscription will catch it
-      loadConversations(); // Refresh list to show new last message
+      // Conversations and messages update via real-time subscriptions
     } catch (error) {
       logger.error('Error sending message', error);
     } finally {
@@ -438,17 +446,17 @@ export const ChatScreen: React.FC = () => {
         created_at: Timestamp.now()
       });
 
-      // Update conversation
+      // Update conversation using Firestore increment for unread counts
       const updates: any = {
         last_message: '📷 Image',
         last_message_at: new Date().toISOString(),
       };
 
       if (selectedConversation.buyer_id !== user.uid) {
-        updates.unread_buyer = (selectedConversation.unread_buyer || 0) + 1;
+        updates.unread_buyer = increment(1);
       }
       if (selectedConversation.vendor_id !== user.uid) {
-        updates.unread_vendor = (selectedConversation.unread_vendor || 0) + 1;
+        updates.unread_vendor = increment(1);
       }
 
       await FirestoreService.updateDocument(COLLECTIONS.CHAT_CONVERSATIONS, selectedConversation.id, updates);
@@ -466,7 +474,7 @@ export const ChatScreen: React.FC = () => {
         data: { conversationId: selectedConversation.id },
       });
 
-      loadConversations();
+      // Conversations update via real-time subscriptions
     } catch (error) {
       logger.error('Error uploading image', error);
     } finally {
@@ -478,8 +486,20 @@ export const ChatScreen: React.FC = () => {
     }
   };
 
-  const formatTime = (dateString: string) => {
-    const date = new Date(dateString);
+  const formatTime = (dateInput: any) => {
+    if (!dateInput) return '';
+    // Handle Firestore Timestamp objects, ISO strings, and Date objects
+    let date: Date;
+    if (dateInput?.toDate && typeof dateInput.toDate === 'function') {
+      date = dateInput.toDate();
+    } else if (dateInput?.seconds) {
+      date = new Date(dateInput.seconds * 1000);
+    } else {
+      date = new Date(dateInput);
+    }
+
+    if (isNaN(date.getTime())) return '';
+
     const now = new Date();
     const diff = now.getTime() - date.getTime();
 
