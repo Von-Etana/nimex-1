@@ -810,3 +810,12 @@ export const createFlutterwaveSubaccount = flw.createFlutterwaveSubaccount;
 export const processFlutterwaveWithdrawal = flw.processFlutterwaveWithdrawal;
 export const getFlutterwaveBankList = flw.getFlutterwaveBankList;
 export const resolveFlutterwaveAccount = flw.resolveFlutterwaveAccount;
+
+// Export Terminal Africa Functions
+import * as terminal from './terminal';
+export const getTerminalRates = terminal.getTerminalRates;
+export const createTerminalShipment = terminal.createTerminalShipment;
+export const quickTerminalShipment = terminal.quickTerminalShipment;
+export const trackTerminalShipment = terminal.trackTerminalShipment;
+export const getTerminalCarriers = terminal.getTerminalCarriers;
+export const terminalWebhook = terminal.terminalWebhook;
