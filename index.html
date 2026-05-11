@@ -29,16 +29,5 @@
   <body>
     <div id="app"></div>
     <script type="module" src="./src/index.tsx"></script>
-    <script>
-      // Load Google Maps JavaScript API
-      (function() {
-        const script = document.createElement('script');
-        const apiKey = 'AIzaSyC_betE8PsKDPd-R7pt_nfsog7DxJdux74';
-        script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places`;
-        script.async = true;
-        script.defer = true;
-        document.head.appendChild(script);
-      })();
-    </script>
   </body>
 </html>
