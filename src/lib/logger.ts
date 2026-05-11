@@ -20,7 +20,7 @@ const sanitizeError = (error: any): string => {
 };
 
 const createLogger = (): Logger => {
-  const isDevelopment = process.env.NODE_ENV === 'development';
+  const isDevelopment = import.meta.env.DEV;
 
   const log = (level: LogLevel, message: string, ...args: any[]) => {
     // In production, we might want to suppress info logs but keep errors

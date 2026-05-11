@@ -73,7 +73,7 @@ export const getFriendlyErrorMessage = (error: any): string => {
     }
 
     // Fallback for unhandled technical errors
-    if (process.env.NODE_ENV === 'development') {
+    if (import.meta.env.DEV) {
         return message; // Show tech error in dev
     }
 
