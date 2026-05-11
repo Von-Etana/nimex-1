@@ -1,8 +1,70 @@
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Loader2, SlidersHorizontal, ChevronDown, Star } from 'lucide-react';
+import { Button } from '../components/ui/button';
+import { Card, CardContent } from '../components/ui/card';
+import { Badge } from '../components/ui/badge';
+import { FirestoreService } from '../services/firestore.service';
+import { COLLECTIONS } from '../lib/collections';
 import { CATEGORIES } from '../lib/categories';
+import { useToast } from '../contexts/ToastContext';
+import { ProductCard } from '../components/products/ProductCard';
+import { CartService } from '../services/cartService';
+import { triggerCartUpdate } from '../hooks/useCart';
 
-// ... imports remain the same
+interface Product {
+  id: string;
+  name: string;
+  price: number;
+  originalPrice?: number;
+  image: string;
+  images: string[];
+  vendor: string;
+  vendorId: string;
+  rating: number;
+  reviews: number;
+  category: string;
+  inStock: boolean;
+  discount?: number;
+  tags: string[];
+  location?: string;
+  isVerified?: boolean;
+}
 
-// ... const sortOptions remains same
+const sortOptions = [
+  { label: 'Featured', value: 'featured' },
+  { label: 'Price: Low to High', value: 'price_asc' },
+  { label: 'Price: High to Low', value: 'price_desc' },
+  { label: 'Highest Rated', value: 'rating' },
+  { label: 'Most Reviews', value: 'reviews' },
+];
+
+const priceRanges = [
+  { label: 'All Prices', min: 0, max: Infinity },
+  { label: 'Under ₦10,000', min: 0, max: 10000 },
+  { label: '₦10,000 - ₦50,000', min: 10000, max: 50000 },
+  { label: '₦50,000 - ₦100,000', min: 50000, max: 100000 },
+  { label: 'Over ₦100,000', min: 100000, max: Infinity },
+];
+
+const transformProduct = (p: any, vendorMap: Map<string, any>): Product => ({
+  id: p.id,
+  name: p.title || p.name || 'Untitled Product',
+  price: p.price || 0,
+  originalPrice: p.compare_at_price || undefined,
+  image: p.image_url || (p.images && p.images[0]) || '/placeholder.png',
+  images: p.images || [],
+  vendor: vendorMap.get(p.vendor_id)?.business_name || p.vendor_name || 'Vendor',
+  vendorId: p.vendor_id || '',
+  rating: p.rating || 0,
+  reviews: p.reviews_count || 0,
+  category: p.category_name || p.category_id || 'General',
+  inStock: (p.stock_quantity || 0) > 0,
+  discount: p.compare_at_price ? Math.round(((p.compare_at_price - p.price) / p.compare_at_price) * 100) : undefined,
+  tags: p.tags || [],
+  location: vendorMap.get(p.vendor_id)?.market_location || p.location || '',
+  isVerified: p.is_verified || false
+});
 
 export const ProductsScreen: React.FC = () => {
   const navigate = useNavigate();
@@ -39,9 +101,6 @@ export const ProductsScreen: React.FC = () => {
           setLoading(false);
           return;
         }
-
-        // Client-side filter for active products
-        // A product is visible if: (is_active === true) OR (status === 'active')
         const activeProducts = productsData.filter(p =>
           p.is_active === true || p.status === 'active'
         );
@@ -86,9 +145,9 @@ export const ProductsScreen: React.FC = () => {
       if (match) {
         setSelectedCategoryId(match.id);
       } else {
-        // Fallback: check names (legacy support)
-        const nameMatch = CATEGORIES.find(c => c.name.toLowerCase() === categoryParam.toLowerCase());
-        if (nameMatch) setSelectedCategoryId(nameMatch.id);
+        // Fallback: check titles (legacy support)
+        const titleMatch = CATEGORIES.find(c => c.title.toLowerCase() === categoryParam.toLowerCase());
+        if (titleMatch) setSelectedCategoryId(titleMatch.id);
         else if (categoryParam !== 'All') setSelectedCategoryId(categoryParam); // Keep as is if no match found, maybe custom ID
       }
     }
@@ -123,6 +182,7 @@ export const ProductsScreen: React.FC = () => {
       product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       product.vendor.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (product.category && product.category.toLowerCase().includes(searchQuery.toLowerCase()));
+
     return categoryMatch && priceMatch && ratingMatch && searchMatch;
   });
 
@@ -173,7 +233,7 @@ export const ProductsScreen: React.FC = () => {
   const getCategoryName = (id: string) => {
     if (id === 'all') return 'All Products';
     const cat = CATEGORIES.find(c => c.id === id);
-    return cat ? cat.name : id;
+    return cat ? cat.title : id;
   };
 
   return (
@@ -275,7 +335,7 @@ export const ProductsScreen: React.FC = () => {
                               className="w-4 h-4 text-primary-500 focus:ring-primary-500 cursor-pointer"
                             />
                             <span className="font-sans text-sm text-neutral-700 group-hover:text-primary-500">
-                              {category.name}
+                              {category.title}
                             </span>
                           </label>
                         ))}
