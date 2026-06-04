@@ -74,11 +74,11 @@ class GoogleMapsService {
 
       const data: { results: PlaceResult[]; status: string } = await response.json();
 
-      if (data.status !== 'OK') {
+      if (data.status !== 'OK' && data.status !== 'ZERO_RESULTS') {
         throw new Error(`Google Places API returned status: ${data.status}`);
       }
 
-      return data.results;
+      return data.results || [];
     } catch (error) {
       console.error('Error searching places:', error);
       throw error;
@@ -133,12 +133,14 @@ class GoogleMapsService {
 
       const data: GeocodeResult = await response.json();
 
-      if (data.status !== 'OK') {
+      if (data.status !== 'OK' && data.status !== 'ZERO_RESULTS') {
         throw new Error(`Google Geocoding API returned status: ${data.status}`);
       }
 
+      if (data.status === 'ZERO_RESULTS') return [];
+
       // Convert geocoding results to place-like format
-      return data.results.map(result => ({
+      return (data.results || []).map(result => ({
         place_id: result.place_id,
         formatted_address: result.formatted_address,
         geometry: result.geometry,
@@ -211,11 +213,11 @@ class GoogleMapsService {
 
       const data: { results: PlaceResult[]; status: string } = await response.json();
 
-      if (data.status !== 'OK') {
+      if (data.status !== 'OK' && data.status !== 'ZERO_RESULTS') {
         throw new Error(`Google Places API returned status: ${data.status}`);
       }
 
-      return data.results;
+      return data.results || [];
     } catch (error) {
       console.error('Error searching Nigerian locations:', error);
       throw error;
@@ -247,11 +249,11 @@ class GoogleMapsService {
 
       const data: { predictions: Array<{ description: string }>; status: string } = await response.json();
 
-      if (data.status !== 'OK') {
+      if (data.status !== 'OK' && data.status !== 'ZERO_RESULTS') {
         throw new Error(`Google Autocomplete API returned status: ${data.status}`);
       }
 
-      return data.predictions.map(prediction => prediction.description);
+      return (data.predictions || []).map(prediction => prediction.description);
     } catch (error) {
       console.error('Error getting autocomplete suggestions:', error);
       throw error;

@@ -84,18 +84,16 @@ module.exports = {
 			fontFamily: {
 				sans: [
 					'Inter',
-					'Roboto',
 					'ui-sans-serif',
 					'system-ui',
 					'sans-serif',
-					'Apple Color Emoji"',
-					'Segoe UI Emoji"',
-					'Segoe UI Symbol"',
-					'Noto Color Emoji"'
+					'"Apple Color Emoji"',
+					'"Segoe UI Emoji"',
+					'"Segoe UI Symbol"',
+					'"Noto Color Emoji"'
 				],
 				heading: [
-					'Poppins',
-					'Manrope',
+					'Inter',
 					'ui-sans-serif',
 					'system-ui',
 					'sans-serif'

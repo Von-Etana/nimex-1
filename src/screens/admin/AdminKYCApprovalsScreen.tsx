@@ -4,7 +4,7 @@ import { Button } from '../../components/ui/button';
 import { Search, CheckCircle, XCircle, Eye, FileText, Loader2 } from 'lucide-react';
 import { FirestoreService } from '../../services/firestore.service';
 import { logger } from '../../lib/logger';
-import { twilioService } from '../../services/twilioService';
+import { messagingService } from '../../services/messagingService';
 import type { Database } from '../../types/database';
 
 type KYCSubmission = Database['public']['Tables']['kyc_submissions']['Row'] & {
@@ -142,7 +142,7 @@ export const AdminKYCApprovalsScreen: React.FC = () => {
       // Send notification email
       const submission = submissions.find(s => s.id === id);
       if (submission) {
-        await twilioService.sendKYCApprovalEmail(submission.email, submission.vendor_name);
+        await messagingService.sendKYCApprovalEmail(submission.email, submission.vendor_name);
       }
 
       logger.info(`KYC submission ${id} approved successfully`);

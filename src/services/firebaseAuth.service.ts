@@ -54,6 +54,38 @@ export interface ProfileData {
  * Firebase Authentication Service Class
  */
 export class FirebaseAuthService {
+    static async createVendorProfile(userId: string): Promise<void> {
+        await FirestoreService.setDocument(COLLECTIONS.VENDORS, userId, {
+            user_id: userId,
+            business_name: '',
+            business_description: null,
+            business_address: null,
+            business_phone: null,
+            market_location: null,
+            sub_category_tags: null,
+            cac_number: null,
+            proof_of_address_url: null,
+            bank_account_details: null,
+            verification_badge: 'none',
+            verification_status: 'pending',
+            verification_date: null,
+            subscription_plan: 'free',
+            subscription_status: 'active',
+            subscription_start_date: new Date().toISOString(),
+            subscription_end_date: null,
+            rating: 0,
+            total_sales: 0,
+            response_time: 0,
+            wallet_balance: 0,
+            notification_preferences: null,
+            is_active: true,
+            referral_code: null,
+            total_referrals: 0,
+            referred_by_vendor_id: null,
+            referred_by_marketer_id: null,
+        });
+    }
+
     /**
      * Sign up a new user with email and password
      */
@@ -85,37 +117,8 @@ export class FirebaseAuthService {
                 location: null,
             });
 
-            // If vendor, create vendor record
             if (data.role === 'vendor') {
-                await FirestoreService.setDocument(COLLECTIONS.VENDORS, user.uid, {
-                    user_id: user.uid,
-                    business_name: '',
-                    business_description: null,
-                    business_address: null,
-                    business_phone: null,
-                    market_location: null,
-                    sub_category_tags: null,
-                    cac_number: null,
-                    proof_of_address_url: null,
-                    bank_account_details: null,
-                    verification_badge: 'none',
-                    verification_status: 'pending',
-                    verification_date: null,
-                    subscription_plan: 'free',
-                    subscription_status: 'active',
-                    subscription_start_date: new Date().toISOString(),
-                    subscription_end_date: null,
-                    rating: 0,
-                    total_sales: 0,
-                    response_time: 0,
-                    wallet_balance: 0,
-                    notification_preferences: null,
-                    is_active: true,
-                    referral_code: null,
-                    total_referrals: 0,
-                    referred_by_vendor_id: null,
-                    referred_by_marketer_id: null,
-                });
+                await this.createVendorProfile(user.uid);
             }
 
             // Send email verification
@@ -321,37 +324,8 @@ export class FirebaseAuthService {
                     location: null,
                 });
 
-                // If vendor, create vendor record
                 if (role === 'vendor') {
-                    await FirestoreService.setDocument(COLLECTIONS.VENDORS, user.uid, {
-                        user_id: user.uid,
-                        business_name: '',
-                        business_description: null,
-                        business_address: null,
-                        business_phone: null,
-                        market_location: null,
-                        sub_category_tags: null,
-                        cac_number: null,
-                        proof_of_address_url: null,
-                        bank_account_details: null,
-                        verification_badge: 'none',
-                        verification_status: 'pending',
-                        verification_date: null,
-                        subscription_plan: 'free',
-                        subscription_status: 'inactive',
-                        subscription_start_date: null,
-                        subscription_end_date: null,
-                        rating: 0,
-                        total_sales: 0,
-                        response_time: 0,
-                        wallet_balance: 0,
-                        notification_preferences: null,
-                        is_active: true,
-                        referral_code: null,
-                        total_referrals: 0,
-                        referred_by_vendor_id: null,
-                        referred_by_marketer_id: null,
-                    });
+                    await this.createVendorProfile(user.uid);
                 }
 
                 logger.info(`New user created via Google: ${user.uid}`);
@@ -466,37 +440,8 @@ export class FirebaseAuthService {
                     location: null,
                 });
 
-                // If vendor, create vendor record
                 if (role === 'vendor') {
-                    await FirestoreService.setDocument(COLLECTIONS.VENDORS, user.uid, {
-                        user_id: user.uid,
-                        business_name: '',
-                        business_description: null,
-                        business_address: null,
-                        business_phone: null,
-                        market_location: null,
-                        sub_category_tags: null,
-                        cac_number: null,
-                        proof_of_address_url: null,
-                        bank_account_details: null,
-                        verification_badge: 'none',
-                        verification_status: 'pending',
-                        verification_date: null,
-                        subscription_plan: 'free',
-                        subscription_status: 'inactive',
-                        subscription_start_date: null,
-                        subscription_end_date: null,
-                        rating: 0,
-                        total_sales: 0,
-                        response_time: 0,
-                        wallet_balance: 0,
-                        notification_preferences: null,
-                        is_active: true,
-                        referral_code: null,
-                        total_referrals: 0,
-                        referred_by_vendor_id: null,
-                        referred_by_marketer_id: null,
-                    });
+                    await this.createVendorProfile(user.uid);
                 }
 
                 logger.info(`New user created via email link: ${user.uid}`);

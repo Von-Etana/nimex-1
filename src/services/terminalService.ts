@@ -2,8 +2,11 @@ import { functions } from '../lib/firebase';
 import { httpsCallable } from 'firebase/functions';
 import { logger } from '../lib/logger';
 
+import type { ServiceError } from '../types/serviceTypes';
+
 export interface AddressDetails {
   fullName: string;
+  email: string; // Required, no fallback
   phone: string;
   addressLine1: string;
   addressLine2?: string;
@@ -42,7 +45,7 @@ export interface GetRatesResponse {
     shipmentId: string;
     rates: RateResponse[];
   };
-  error?: string;
+  error?: ServiceError;
 }
 
 export interface CreateShipmentRequest {
@@ -61,7 +64,7 @@ export interface CreateShipmentResponse {
     status: string;
     tracking_url: string;
   };
-  error?: string;
+  error?: ServiceError;
 }
 
 export interface TrackShipmentResponse {
@@ -75,7 +78,7 @@ export interface TrackShipmentResponse {
       time: string;
     }>;
   };
-  error?: string;
+  error?: ServiceError;
 }
 
 class TerminalService {
@@ -86,7 +89,7 @@ class TerminalService {
       const adaptAddress = (addr: AddressDetails) => ({
         name: addr.fullName,
         phone: addr.phone,
-        email: 'customer@nimex.ng', // fallback required email field
+        email: addr.email,
         address: `${addr.addressLine1}${addr.addressLine2 ? ', ' + addr.addressLine2 : ''}`,
         city: addr.city,
         state: addr.state,
@@ -111,7 +114,11 @@ class TerminalService {
       logger.error('Failed to get Terminal rates:', error);
       return {
         success: false,
-        error: error.message || 'Failed to get shipping rates'
+        error: {
+          code: 'NETWORK_ERROR',
+          message: error.message || 'Failed to get shipping rates',
+          retryable: true
+        }
       };
     }
   }
@@ -128,7 +135,11 @@ class TerminalService {
       logger.error('Failed to create Terminal shipment:', error);
       return {
         success: false,
-        error: error.message || 'Failed to create shipment'
+        error: {
+          code: 'NETWORK_ERROR',
+          message: error.message || 'Failed to create shipment',
+          retryable: true
+        }
       };
     }
   }
@@ -142,7 +153,11 @@ class TerminalService {
       logger.error('Failed to track Terminal shipment:', error);
       return {
         success: false,
-        error: error.message || 'Failed to track shipment'
+        error: {
+          code: 'NETWORK_ERROR',
+          message: error.message || 'Failed to track shipment',
+          retryable: true
+        }
       };
     }
   }
@@ -156,7 +171,11 @@ class TerminalService {
       logger.error('Failed to get Terminal carriers:', error);
       return {
         success: false,
-        error: error.message || 'Failed to fetch carriers'
+        error: {
+          code: 'NETWORK_ERROR',
+          message: error.message || 'Failed to fetch carriers',
+          retryable: true
+        }
       };
     }
   }

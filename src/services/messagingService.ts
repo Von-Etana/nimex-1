@@ -1,6 +1,7 @@
 import { functions } from '../lib/firebase';
 import { httpsCallable } from 'firebase/functions';
 import { emailNotificationService } from './emailNotificationService';
+import type { ServiceError } from '../types/serviceTypes';
 
 interface EmailRequest {
   to: string;
@@ -14,8 +15,8 @@ interface SMSRequest {
   message: string;
 }
 
-class TwilioService {
-  async sendEmail(request: EmailRequest): Promise<{ success: boolean; error?: string }> {
+class MessagingService {
+  async sendEmail(request: EmailRequest): Promise<{ success: boolean; error?: ServiceError }> {
     try {
       const sendEmailFn = httpsCallable(functions, 'sendEmail');
       const response = await sendEmailFn(request);
@@ -24,17 +25,28 @@ class TwilioService {
       if (result.success) {
         return { success: true };
       }
-      return { success: false, error: 'Failed to send email' };
+      return { 
+        success: false, 
+        error: {
+          code: 'UPSTREAM_ERROR',
+          message: 'Failed to send email',
+          retryable: true
+        }
+      };
     } catch (error: any) {
       console.error('Email send failed:', error);
       return {
         success: false,
-        error: error.message || 'Failed to send email',
+        error: {
+          code: 'NETWORK_ERROR',
+          message: error.message || 'Failed to send email',
+          retryable: true
+        },
       };
     }
   }
 
-  async sendSMS(request: SMSRequest): Promise<{ success: boolean; error?: string }> {
+  async sendSMS(request: SMSRequest): Promise<{ success: boolean; error?: ServiceError }> {
     try {
       const sendSmsFn = httpsCallable(functions, 'sendTermiiSms');
       const response = await sendSmsFn(request);
@@ -43,12 +55,23 @@ class TwilioService {
       if (result.success) {
         return { success: true };
       }
-      return { success: false, error: 'Failed to send SMS' };
+      return { 
+        success: false, 
+        error: {
+          code: 'UPSTREAM_ERROR',
+          message: 'Failed to send SMS',
+          retryable: true
+        }
+      };
     } catch (error: any) {
       console.error('SMS send failed:', error);
       return {
         success: false,
-        error: error.message || 'Failed to send SMS',
+        error: {
+          code: 'NETWORK_ERROR',
+          message: error.message || 'Failed to send SMS',
+          retryable: true
+        }
       };
     }
   }
@@ -57,19 +80,26 @@ class TwilioService {
     orderNumber: string;
     totalAmount: number;
     items: Array<{ title: string; quantity: number; price: number }>;
-  }): Promise<{ success: boolean; error?: string }> {
+  }): Promise<{ success: boolean; error?: ServiceError }> {
     const success = await emailNotificationService.sendOrderConfirmation(email, orderDetails.orderNumber, orderDetails.totalAmount, orderDetails.items);
-    return { success, error: success ? undefined : 'Failed to send order confirmation email' };
+    return { 
+      success, 
+      error: success ? undefined : {
+        code: 'UPSTREAM_ERROR',
+        message: 'Failed to send order confirmation email',
+        retryable: true
+      } 
+    };
   }
 
-  async sendVendorNotificationSMS(phone: string, message: string): Promise<{ success: boolean; error?: string }> {
+  async sendVendorNotificationSMS(phone: string, message: string): Promise<{ success: boolean; error?: ServiceError }> {
     return this.sendSMS({
       to: phone,
       message: `NIMEX: ${message}`,
     });
   }
 
-  async sendKYCApprovalEmail(email: string, vendorName: string): Promise<{ success: boolean; error?: string }> {
+  async sendKYCApprovalEmail(email: string, vendorName: string): Promise<{ success: boolean; error?: ServiceError }> {
     const html = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <h2 style="color: #15803d;">KYC Approved - NIMEX</h2>
@@ -93,6 +123,6 @@ class TwilioService {
   }
 }
 
-export const twilioService = new TwilioService();
+export const messagingService = new MessagingService();
 
 export type { EmailRequest, SMSRequest };

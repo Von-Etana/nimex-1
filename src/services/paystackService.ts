@@ -1,14 +1,7 @@
+import type { NormalizedPaymentRequest, ServiceError } from '../types/serviceTypes';
+
 interface PaystackConfig {
   publicKey: string;
-  testMode: boolean;
-}
-
-interface InitializePaymentRequest {
-  email: string;
-  amount: number;
-  orderId: string;
-  metadata?: Record<string, any>;
-  callbackUrl?: string;
 }
 
 interface InitializePaymentResponse {
@@ -18,7 +11,7 @@ interface InitializePaymentResponse {
     accessCode: string;
     reference: string;
   };
-  error?: string;
+  error?: ServiceError;
 }
 
 interface VerifyPaymentResponse {
@@ -33,7 +26,7 @@ interface VerifyPaymentResponse {
       email: string;
     };
   };
-  error?: string;
+  error?: ServiceError;
 }
 
 class PaystackService {
@@ -43,7 +36,6 @@ class PaystackService {
   constructor() {
     this.config = {
       publicKey: import.meta.env.VITE_PAYSTACK_PUBLIC_KEY,
-      testMode: import.meta.env.VITE_PAYSTACK_TEST_MODE === 'true',
     };
     // Placeholder for Firebase Functions URL
     this.apiUrl = import.meta.env.VITE_API_URL || 'https://your-firebase-project.cloudfunctions.net';
@@ -69,47 +61,43 @@ class PaystackService {
 
       const reference = `NIMEX-SUB-${vendorId}-${plan}-${Date.now()}`;
 
-      try {
-        // Try actual backend first
-        const response = await fetch(`${this.apiUrl}/initializePayment`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            email,
-            amount: Math.round(tier.price * 100),
-            reference,
-            metadata: {
-              type: 'subscription',
-              vendor_id: vendorId,
-              plan: plan,
-              price: tier.price,
-            },
-            callback_url: `${window.location.origin}/vendor/subscription/success`,
-          }),
-        });
+      // Try actual backend first
+      const response = await fetch(`${this.apiUrl}/initializePayment`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email,
+          amount: Math.round(tier.price * 100),
+          reference,
+          metadata: {
+            type: 'subscription',
+            vendor_id: vendorId,
+            plan: plan,
+            price: tier.price,
+          },
+          callback_url: `${window.location.origin}/vendor/subscription/success`,
+        }),
+      });
 
-        if (response.ok) {
-          const data = await response.json();
-          return {
-            success: true,
-            data: {
-              authorizationUrl: data.authorization_url,
-              accessCode: data.access_code,
-              reference: data.reference,
-            },
-          };
-        }
-      } catch (e) {
-        console.warn('Backend unreachable, falling back to client-side initialization');
+      if (response.ok) {
+        const data = await response.json();
+        return {
+          success: true,
+          data: {
+            authorizationUrl: data.authorization_url,
+            accessCode: data.access_code,
+            reference: data.reference,
+          },
+        };
       }
-
-      // Client-side fallback (works for both test and live keys via PaystackPop)
+      
+      const errorData = await response.json().catch(() => ({}));
       return {
-        success: true,
-        data: {
-          authorizationUrl: '', // Not needed for Inline JS
-          accessCode: '', // Not needed if we pass reference
-          reference: reference,
+        success: false,
+        error: {
+          code: 'UPSTREAM_ERROR',
+          message: errorData.message || 'Payment initialization failed',
+          retryable: true
         }
       };
 
@@ -117,53 +105,53 @@ class PaystackService {
       console.error('Failed to initialize subscription payment:', error);
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Failed to initialize subscription payment',
+        error: {
+          code: 'NETWORK_ERROR',
+          message: error instanceof Error ? error.message : 'Network error initializing subscription payment',
+          retryable: true
+        }
       };
     }
   }
 
-  async initializePayment(request: InitializePaymentRequest): Promise<InitializePaymentResponse> {
+  async initializePayment(request: NormalizedPaymentRequest): Promise<InitializePaymentResponse> {
     try {
-      const reference = `NIMEX-${request.orderId}-${Date.now()}`;
+      const reference = request.reference || `NIMEX-${request.orderId}-${Date.now()}`;
 
-      try {
-        const response = await fetch(`${this.apiUrl}/initializePayment`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            email: request.email,
-            amount: Math.round(request.amount * 100),
-            reference,
-            metadata: {
-              order_id: request.orderId,
-              ...request.metadata,
-            },
-            callback_url: request.callbackUrl || `${window.location.origin}/orders/${request.orderId}`,
-          }),
-        });
+      const response = await fetch(`${this.apiUrl}/initializePayment`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: request.customerEmail,
+          amount: Math.round(request.amountNaira * 100),
+          reference,
+          metadata: {
+            order_id: request.orderId,
+            ...request.metadata,
+          },
+          callback_url: request.callbackUrl || `${window.location.origin}/orders/${request.orderId}`,
+        }),
+      });
 
-        if (response.ok) {
-          const data = await response.json();
-          return {
-            success: true,
-            data: {
-              authorizationUrl: data.authorization_url,
-              accessCode: data.access_code,
-              reference: data.reference,
-            },
-          };
-        }
-      } catch (e) {
-        console.warn('Backend unreachable, falling back to client-side initialization');
+      if (response.ok) {
+        const data = await response.json();
+        return {
+          success: true,
+          data: {
+            authorizationUrl: data.authorization_url,
+            accessCode: data.access_code,
+            reference: data.reference,
+          },
+        };
       }
-
-      // Client-side fallback
+      
+      const errorData = await response.json().catch(() => ({}));
       return {
-        success: true,
-        data: {
-          authorizationUrl: '',
-          accessCode: '',
-          reference: reference,
+        success: false,
+        error: {
+          code: 'UPSTREAM_ERROR',
+          message: errorData.message || 'Payment initialization failed',
+          retryable: true
         }
       };
 
@@ -171,7 +159,11 @@ class PaystackService {
       console.error('Failed to initialize payment:', error);
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Failed to initialize payment',
+        error: {
+          code: 'NETWORK_ERROR',
+          message: error instanceof Error ? error.message : 'Failed to initialize payment',
+          retryable: true
+        }
       };
     }
   }
@@ -227,46 +219,59 @@ class PaystackService {
       console.error('Failed to verify subscription payment:', error);
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Failed to verify subscription payment',
+        error: {
+          code: 'UNKNOWN_ERROR',
+          message: error instanceof Error ? error.message : 'Failed to verify subscription payment',
+          retryable: false
+        }
       };
     }
   }
 
   async verifyPayment(reference: string): Promise<VerifyPaymentResponse> {
     try {
-      try {
-        const response = await fetch(`${this.apiUrl}/verifyPayment`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ reference }),
-        });
+      const response = await fetch(`${this.apiUrl}/verifyPayment`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reference }),
+      });
 
-        if (response.ok) {
-          const data = await response.json();
-          return {
-            success: true,
-            data: {
-              reference: data.reference,
-              amount: data.amount / 100,
-              status: data.status,
-              paidAt: data.paid_at,
-              channel: data.channel,
-              customer: {
-                email: data.customer.email,
-              },
+      if (response.ok) {
+        const data = await response.json();
+        return {
+          success: true,
+          data: {
+            reference: data.reference,
+            amount: data.amount / 100,
+            status: data.status,
+            paidAt: data.paid_at,
+            channel: data.channel,
+            customer: {
+              email: data.customer.email,
             },
-          };
-        }
-      } catch (e) {
-        console.error('Backend unreachable for payment verification:', e);
-        return { success: false, error: 'Backend verification failed' };
+          },
+        };
       }
+      
+      const errorData = await response.json().catch(() => ({}));
+      return { 
+        success: false, 
+        error: {
+          code: 'UPSTREAM_ERROR',
+          message: errorData.message || 'Payment verification failed',
+          retryable: true
+        }
+      };
 
     } catch (error) {
       console.error('Failed to verify payment:', error);
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Failed to verify payment',
+        error: {
+          code: 'NETWORK_ERROR',
+          message: error instanceof Error ? error.message : 'Failed to verify payment',
+          retryable: true
+        }
       };
     }
   }
@@ -300,7 +305,7 @@ class PaystackService {
   }
 
   isTestMode(): boolean {
-    return this.config.testMode;
+    return import.meta.env.VITE_APP_ENV !== 'production';
   }
 
   loadPaystackScript(): Promise<void> {
@@ -322,8 +327,5 @@ class PaystackService {
 
 export const paystackService = new PaystackService();
 
-export type {
-  InitializePaymentRequest,
-  InitializePaymentResponse,
   VerifyPaymentResponse,
 };

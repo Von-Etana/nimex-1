@@ -3,6 +3,7 @@ import { app } from '../lib/firebase.config';
 import { FirestoreService } from './firestore.service';
 import { COLLECTIONS } from '../lib/collections';
 import { logger } from '../lib/logger';
+import type { NormalizedPaymentRequest, ServiceError } from '../types/serviceTypes';
 
 interface FlutterwaveWalletResponse {
   success: boolean;
@@ -12,7 +13,7 @@ interface FlutterwaveWalletResponse {
     bank_name: string;
     account_name: string;
   };
-  error?: string;
+  error?: ServiceError;
 }
 
 interface FlutterwaveTransferResponse {
@@ -21,7 +22,7 @@ interface FlutterwaveTransferResponse {
     reference: string;
     status: string;
   };
-  error?: string;
+  error?: ServiceError;
 }
 
 class FlutterwaveService {
@@ -31,7 +32,6 @@ class FlutterwaveService {
   constructor() {
     this.config = {
       publicKey: import.meta.env.VITE_FLUTTERWAVE_PUBLIC_KEY || 'FLWPUBK_TEST-SANDBOX',
-      testMode: import.meta.env.VITE_FLUTTERWAVE_TEST_MODE === 'true',
     };
   }
 
@@ -40,79 +40,62 @@ class FlutterwaveService {
   /**
    * Initialize Payment (Buyer to Platform)
    */
-  async initializePayment(data: {
-    email: string;
-    amount: number;
-    phone?: string;
-    name?: string;
-    orderId: string;
-    metadata?: any;
-    callbackUrl?: string;
-  }): Promise<{ success: boolean; data?: any; error?: string }> {
+  async initializePayment(data: NormalizedPaymentRequest): Promise<{ success: boolean; data?: any; error?: ServiceError }> {
     try {
-      const tx_ref = `NIMEX-${data.orderId}-${Date.now()}`;
+      const tx_ref = data.reference || `NIMEX-${data.orderId}-${Date.now()}`;
 
       // Use backend Cloud Function
       try {
-        const initPayment = httpsCallable<any, any>(
-          this.functions,
-          'initializeFlutterwavePayment'
-        );
-        const result = await initPayment({
-          email: data.email,
-          amount: data.amount,
-          tx_ref,
-          redirect_url: data.callbackUrl || `${window.location.origin}/orders/${data.orderId}`,
-          customer: {
-            email: data.email,
-            phonenumber: data.phone,
-            name: data.name,
-          },
-          metadata: {
-            order_id: data.orderId,
-            ...data.metadata,
-          },
-        });
-
-        const response = result.data;
-        if (response.success) {
-          return { success: true, data: { ...response.data, tx_ref } };
-        }
-      } catch (e) {
-        console.warn('Backend unreachable, falling back to client-side initialization');
-      }
-
-      // Client-side fallback (Flutterwave Inline)
-      return {
-        success: true,
-        data: {
-          tx_ref,
-          amount: data.amount,
-          currency: 'NGN',
-          payment_options: 'card,mobilemoney,ussd',
-          customer: {
-            email: data.email,
-            phonenumber: data.phone,
-            name: data.name,
-          },
-          meta: { order_id: data.orderId },
-          customizations: {
-            title: 'Nimex Payments',
-            description: 'Payment for items in cart',
-            logo: 'https://st2.depositphotos.com/4403291/7418/v/450/depositphotos_74189661-stock-illustration-online-shop-log.jpg',
-          },
+      const initPayment = httpsCallable<any, any>(
+        this.functions,
+        'initializeFlutterwavePayment'
+      );
+      const result = await initPayment({
+        email: data.customerEmail,
+        amount: data.amountNaira,
+        tx_ref,
+        redirect_url: data.callbackUrl || `${window.location.origin}/orders/${data.orderId}`,
+        customer: {
+          email: data.customerEmail,
+          phonenumber: data.customerPhone,
         },
+        metadata: {
+          order_id: data.orderId,
+          ...data.metadata,
+        },
+      });
+
+      const response = result.data;
+      if (response.success) {
+        return { success: true, data: { ...response.data, tx_ref } };
+      }
+      
+      return { 
+        success: false, 
+        error: {
+          code: 'UPSTREAM_ERROR',
+          message: response.error || 'Payment initialization failed',
+          retryable: true
+        }
       };
+
     } catch (error) {
       logger.error('Payment initialization error:', error);
-      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+      return { 
+        success: false, 
+        error: {
+          code: 'NETWORK_ERROR',
+          message: error instanceof Error ? error.message : 'Network error initializing payment',
+          retryable: true
+        }
+      };
     }
   }
 
   /**
    * Verify Payment
    */
-  async verifyPayment(transactionId: string): Promise<{ success: boolean; data?: any; error?: string }> {
+  async verifyPayment(transactionId: string): Promise<{ success: boolean; data?: any; error?: ServiceError }> {
     try {
       // Use backend Cloud Function
       try {
@@ -147,14 +130,24 @@ class FlutterwaveService {
           } catch (logError) {
             console.error('Failed to log transaction:', logError);
           }
-          return response;
+      return { 
+        success: false, 
+        error: {
+          code: 'UPSTREAM_ERROR',
+          message: response.error || 'Payment verification failed',
+          retryable: true
         }
-      } catch (e) {
-        console.error('Backend unavailable for payment verification:', e);
-        return { success: false, error: 'Backend verification failed' };
-      }
+      };
     } catch (error) {
-      return { success: false, error: 'Verification failed' };
+      console.error('Payment verification failed:', error);
+      return { 
+        success: false, 
+        error: {
+          code: 'NETWORK_ERROR',
+          message: error instanceof Error ? error.message : 'Network error verifying payment',
+          retryable: true
+        }
+      };
     }
   }
 
@@ -171,7 +164,7 @@ class FlutterwaveService {
       phone?: string;
       bvn?: string;
     }
-  ): Promise<{ success: boolean; data?: { account_number: string; bank_name: string; account_reference: string }; error?: string }> {
+  ): Promise<{ success: boolean; data?: { account_number: string; bank_name: string; account_reference: string }; error?: ServiceError }> {
     try {
       const createVA = httpsCallable<any, any>(
         this.functions,
@@ -205,10 +198,24 @@ class FlutterwaveService {
           },
         };
       }
-      throw new Error('Backend returned error');
+      return { 
+        success: false, 
+        error: {
+          code: 'UPSTREAM_ERROR',
+          message: response.error || 'Failed to create virtual account',
+          retryable: true
+        }
+      };
     } catch (error: any) {
       console.error('Virtual account creation failed:', error);
-      return { success: false, error: error.message || 'Failed to create virtual account' };
+      return { 
+        success: false, 
+        error: {
+          code: 'NETWORK_ERROR',
+          message: error.message || 'Network error creating virtual account',
+          retryable: true
+        }
+      };
     }
   }
 
@@ -260,10 +267,24 @@ class FlutterwaveService {
         };
       }
 
-      throw new Error(response.error || 'Failed to create subaccount');
+      return { 
+        success: false, 
+        error: {
+          code: 'UPSTREAM_ERROR',
+          message: response.error || 'Failed to create subaccount',
+          retryable: true
+        }
+      };
     } catch (error: any) {
       console.error('Wallet creation failed:', error);
-      return { success: false, error: error.message || 'Failed to create vendor wallet' };
+      return { 
+        success: false, 
+        error: {
+          code: 'NETWORK_ERROR',
+          message: error.message || 'Network error creating vendor wallet',
+          retryable: true
+        }
+      };
     }
   }
 
@@ -314,10 +335,24 @@ class FlutterwaveService {
         return { success: true, data: { reference: response.data.reference || reference, status: response.data.status || 'successful' } };
       }
 
-      return { success: false, error: response.error || 'Withdrawal failed' };
+      return { 
+        success: false, 
+        error: {
+          code: 'UPSTREAM_ERROR',
+          message: response.error || 'Withdrawal failed',
+          retryable: true
+        }
+      };
     } catch (error: any) {
       console.error('Withdrawal failed:', error);
-      return { success: false, error: error.message || 'Failed to process withdrawal' };
+      return { 
+        success: false, 
+        error: {
+          code: 'NETWORK_ERROR',
+          message: error.message || 'Network error processing withdrawal',
+          retryable: true
+        }
+      };
     }
   }
 
@@ -356,7 +391,7 @@ class FlutterwaveService {
   async resolveAccountNumber(
     accountNumber: string,
     bankCode: string
-  ): Promise<{ success: boolean; accountName?: string; error?: string }> {
+  ): Promise<{ success: boolean; accountName?: string; error?: ServiceError }> {
     try {
       const resolveAcct = httpsCallable<any, any>(
         this.functions,
@@ -370,10 +405,24 @@ class FlutterwaveService {
       if (response.success) {
         return { success: true, accountName: response.data.account_name };
       }
-      throw new Error('Resolution failed');
+      return { 
+        success: false, 
+        error: {
+          code: 'UPSTREAM_ERROR',
+          message: response.error || 'Resolution failed',
+          retryable: true
+        }
+      };
     } catch (error: any) {
       console.error('Account resolution failed:', error);
-      return { success: false, error: error.message || 'Failed to resolve account' };
+      return { 
+        success: false, 
+        error: {
+          code: 'NETWORK_ERROR',
+          message: error.message || 'Network error resolving account',
+          retryable: true
+        }
+      };
     }
   }
 
