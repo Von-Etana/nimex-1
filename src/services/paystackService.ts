@@ -327,5 +327,3 @@ class PaystackService {
 
 export const paystackService = new PaystackService();
 
-  VerifyPaymentResponse,
-};

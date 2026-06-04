@@ -45,7 +45,6 @@ class FlutterwaveService {
       const tx_ref = data.reference || `NIMEX-${data.orderId}-${Date.now()}`;
 
       // Use backend Cloud Function
-      try {
       const initPayment = httpsCallable<any, any>(
         this.functions,
         'initializeFlutterwavePayment'
@@ -98,38 +97,41 @@ class FlutterwaveService {
   async verifyPayment(transactionId: string): Promise<{ success: boolean; data?: any; error?: ServiceError }> {
     try {
       // Use backend Cloud Function
-      try {
-        const verifyPayment = httpsCallable<any, any>(
-          this.functions,
-          'verifyFlutterwavePayment'
-        );
-        const result = await verifyPayment({ transaction_id: transactionId });
-        const response = result.data;
+      const verifyPayment = httpsCallable<any, any>(
+        this.functions,
+        'verifyFlutterwavePayment'
+      );
+      const result = await verifyPayment({ transaction_id: transactionId });
+      const response = result.data;
 
-        if (response.success) {
-          // Log transaction
-          try {
-            const txRef = response.data.tx_ref || '';
-            const parts = txRef.split('-');
-            let orderId = response.data.meta?.order_id;
-            if (!orderId && parts.length >= 3 && parts[0] === 'NIMEX') {
-              orderId = parts[1];
-            }
-            if (orderId) {
-              await FirestoreService.addDocument('payment_transactions', {
-                amount: response.data.amount,
-                payment_status: 'paid',
-                payment_method: 'flutterwave',
-                payment_reference: response.data.tx_ref,
-                created_at: new Date().toISOString(),
-                order_id: orderId,
-                type: 'order',
-                description: `Order Payment - #${orderId}`,
-              });
-            }
-          } catch (logError) {
-            console.error('Failed to log transaction:', logError);
+      if (response.success) {
+        // Log transaction
+        try {
+          const txRef = response.data.tx_ref || '';
+          const parts = txRef.split('-');
+          let orderId = response.data.meta?.order_id;
+          if (!orderId && parts.length >= 3 && parts[0] === 'NIMEX') {
+            orderId = parts[1];
           }
+          if (orderId) {
+            await FirestoreService.addDocument('payment_transactions', {
+              amount: response.data.amount,
+              payment_status: 'paid',
+              payment_method: 'flutterwave',
+              payment_reference: response.data.tx_ref,
+              created_at: new Date().toISOString(),
+              order_id: orderId,
+              type: 'order',
+              description: `Order Payment - #${orderId}`,
+            });
+          }
+        } catch (logError) {
+          console.error('Failed to log transaction:', logError);
+        }
+        
+        return { success: true, data: response.data };
+      }
+      
       return { 
         success: false, 
         error: {
