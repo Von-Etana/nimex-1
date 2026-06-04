@@ -19,7 +19,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { FirestoreService } from '../../services/firestore.service';
 import { COLLECTIONS } from '../../lib/collections';
 import { where, orderBy, limit } from 'firebase/firestore';
-import { giglService } from '../../services/giglService';
+import { deliveryService } from '../../services/deliveryService';
 
 interface Order {
     id: string;
@@ -48,7 +48,7 @@ interface Delivery {
     delivery_status: string;
     delivery_type: string;
     tracking_number?: string;
-    gigl_tracking_url?: string;
+    terminal_tracking_url?: string;
     estimated_cost?: number;
 }
 
@@ -125,17 +125,17 @@ export const VendorOrderDetailsScreen: React.FC = () => {
         if (!deliveryAddr) return;
 
         try {
-            const quote = await giglService.getDeliveryQuote({
-                pickupState: 'Lagos', // Vendor Address (Hardcoded for now)
-                pickupCity: 'Ikeja',
-                deliveryState: deliveryAddr.state,
-                deliveryCity: deliveryAddr.city,
-                weight: items.length * 1, // Approx
-                deliveryType: 'standard'
-            });
+            const quote = await deliveryService.calculateDeliveryCost(
+                'Ikeja', // Vendor Address (Hardcoded for now)
+                'Lagos',
+                deliveryAddr.city,
+                deliveryAddr.state,
+                items.length * 1, // Approx weight
+                'standard'
+            );
 
-            if (quote.success && quote.data) {
-                setShippingQuote(quote.data.estimatedCost);
+            if (quote.success && quote.cost !== undefined) {
+                setShippingQuote(quote.cost);
             }
         } catch (err) {
             console.warn('Failed to get auto-quote', err);
@@ -149,26 +149,32 @@ export const VendorOrderDetailsScreen: React.FC = () => {
         setQuoteError('');
 
         try {
-            const result = await giglService.createShipment({
+            const result = await deliveryService.createDelivery({
                 orderId: order.id,
-                items: order.items || [],
-                senderDetails: {
-                    name: user?.displayName || 'Vendor',
+                vendorId: (order as any).vendor_id || user?.uid || '',
+                buyerId: order.buyer_id,
+                pickupAddress: {
+                    fullName: user?.displayName || 'Vendor',
                     phone: user?.phoneNumber || '08000000000',
-                    email: user?.email || 'vendor@example.com',
-                    address: 'Vendor Address, Lagos', // Should come from Vendor Profile
+                    addressLine1: 'Vendor Shop, Lagos',
                     city: 'Ikeja',
                     state: 'Lagos'
                 },
-                receiverDetails: {
-                    name: address.full_name,
+                deliveryAddress: {
+                    fullName: address.full_name,
                     phone: address.phone,
-                    email: 'customer@example.com', // Should fetch buyer email
-                    address: address.address_line1 + (address.address_line2 ? ', ' + address.address_line2 : ''),
+                    addressLine1: address.address_line1,
+                    addressLine2: address.address_line2,
                     city: address.city,
                     state: address.state
                 },
-                deliveryType: 'standard'
+                packageDetails: {
+                    weight: (order.items || []).length * 1 || 1,
+                    description: (order.items || []).map(i => i.product_title).join(', ').substring(0, 100) || 'Order items',
+                    value: order.total_amount
+                },
+                deliveryType: 'standard',
+                deliveryCost: shippingQuote || 2000
             });
 
             if (result.success && result.data) {
@@ -246,11 +252,11 @@ export const VendorOrderDetailsScreen: React.FC = () => {
                                             <p className="text-green-800 text-sm">
                                                 Status: <span className="capitalize">{delivery.delivery_status.replace('_', ' ')}</span>
                                             </p>
-                                            {delivery.gigl_tracking_url && (
+                                            {delivery.terminal_tracking_url && (
                                                 <Button
                                                     size="sm"
                                                     className="mt-3 bg-green-600 hover:bg-green-700"
-                                                    onClick={() => window.open(delivery.gigl_tracking_url, '_blank')}
+                                                    onClick={() => window.open(delivery.terminal_tracking_url, '_blank')}
                                                 >
                                                     Track Shipment
                                                 </Button>
@@ -279,7 +285,7 @@ export const VendorOrderDetailsScreen: React.FC = () => {
                                         disabled={processingShipment || !address}
                                         className="w-full h-12"
                                     >
-                                        {processingShipment ? 'Creating Shipment...' : 'Create GIGL Shipment'}
+                                        {processingShipment ? 'Creating Shipment...' : 'Create Terminal Shipment'}
                                     </Button>
                                     <p className="text-xs text-neutral-500 mt-3 text-center">
                                         * This will generate a waybill and request pickup from your location.

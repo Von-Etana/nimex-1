@@ -37,7 +37,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 var _a;
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.resolveFlutterwaveAccount = exports.getFlutterwaveBankList = exports.processFlutterwaveWithdrawal = exports.createFlutterwaveSubaccount = exports.createFlutterwaveVirtualAccount = exports.verifyFlutterwavePayment = exports.onChatMessageNotifyRecipient = exports.onOrderStatusUpdateNotifyBuyer = exports.onOrderCreateNotifyVendor = exports.initializeFlutterwavePayment = exports.getGiglServiceAreas = exports.trackGiglShipment = exports.createGiglShipment = exports.getGiglShippingQuote = exports.sendEmail = exports.sendTermiiSms = exports.refundEscrow = exports.releaseEscrow = exports.verifyPayment = exports.initializePayment = exports.paystackWebhook = void 0;
+exports.terminalWebhook = exports.getTerminalCarriers = exports.trackTerminalShipment = exports.quickTerminalShipment = exports.createTerminalShipment = exports.getTerminalRates = exports.resolveFlutterwaveAccount = exports.getFlutterwaveBankList = exports.processFlutterwaveWithdrawal = exports.createFlutterwaveSubaccount = exports.createFlutterwaveVirtualAccount = exports.verifyFlutterwavePayment = exports.onChatMessageNotifyRecipient = exports.onOrderStatusUpdateNotifyBuyer = exports.onOrderCreateNotifyVendor = exports.initializeFlutterwavePayment = exports.sendEmail = exports.sendTermiiSms = exports.refundEscrow = exports.releaseEscrow = exports.verifyPayment = exports.initializePayment = exports.paystackWebhook = void 0;
 const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
 const axios_1 = __importDefault(require("axios"));
@@ -732,12 +732,6 @@ exports.sendEmail = functions.https.onCall(async (request) => {
         throw new functions.https.HttpsError('internal', "Failed to send email via SendGrid");
     }
 });
-// Export GIGL Functions
-const gigl = __importStar(require("./gigl"));
-exports.getGiglShippingQuote = gigl.getGiglShippingQuote;
-exports.createGiglShipment = gigl.createGiglShipment;
-exports.trackGiglShipment = gigl.trackGiglShipment;
-exports.getGiglServiceAreas = gigl.getGiglServiceAreas;
 // Export Flutterwave Functions
 const flw = __importStar(require("./flutterwave"));
 exports.initializeFlutterwavePayment = flw.initializeFlutterwavePayment;
@@ -752,4 +746,12 @@ exports.createFlutterwaveSubaccount = flw.createFlutterwaveSubaccount;
 exports.processFlutterwaveWithdrawal = flw.processFlutterwaveWithdrawal;
 exports.getFlutterwaveBankList = flw.getFlutterwaveBankList;
 exports.resolveFlutterwaveAccount = flw.resolveFlutterwaveAccount;
+// Export Terminal Africa Functions
+const terminal = __importStar(require("./terminal"));
+exports.getTerminalRates = terminal.getTerminalRates;
+exports.createTerminalShipment = terminal.createTerminalShipment;
+exports.quickTerminalShipment = terminal.quickTerminalShipment;
+exports.trackTerminalShipment = terminal.trackTerminalShipment;
+exports.getTerminalCarriers = terminal.getTerminalCarriers;
+exports.terminalWebhook = terminal.terminalWebhook;
 //# sourceMappingURL=index.js.map

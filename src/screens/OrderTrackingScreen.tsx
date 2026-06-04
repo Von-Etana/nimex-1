@@ -39,7 +39,7 @@ interface Delivery {
   delivery_type: string;
   estimated_delivery_date: string;
   actual_delivery_date?: string;
-  gigl_tracking_url?: string;
+  terminal_tracking_url?: string;
   delivery_proof_url?: string;
   recipient_name?: string;
 }
@@ -282,14 +282,14 @@ export const OrderTrackingScreen: React.FC = () => {
                       )}
                     </div>
 
-                    {delivery.gigl_tracking_url && (
+                    {delivery.terminal_tracking_url && (
                       <Button
                         variant="outline"
-                        onClick={() => window.open(delivery.gigl_tracking_url, '_blank')}
+                        onClick={() => window.open(delivery.terminal_tracking_url, '_blank')}
                         className="w-full"
                       >
                         <Truck className="w-4 h-4 mr-2" />
-                        Track with GIGL
+                        Track with Terminal
                       </Button>
                     )}
 

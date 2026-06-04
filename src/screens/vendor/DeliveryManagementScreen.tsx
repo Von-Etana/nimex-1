@@ -30,8 +30,8 @@ interface Delivery {
   id: string;
   order_id: string;
   delivery_status: string;
-  gigl_shipment_id?: string;
-  gigl_tracking_url?: string;
+  terminal_shipment_id?: string;
+  terminal_tracking_url?: string;
   estimated_delivery_date?: string;
 }
 
@@ -349,9 +349,9 @@ export const DeliveryManagementScreen: React.FC = () => {
                                   .join(' ')}
                               </span>
                             </p>
-                            {delivery.gigl_shipment_id && (
+                            {delivery.terminal_shipment_id && (
                               <p className="font-mono text-xs text-neutral-600 mb-1">
-                                GIGL: {delivery.gigl_shipment_id}
+                                Terminal: {delivery.terminal_shipment_id}
                               </p>
                             )}
                             {delivery.estimated_delivery_date && (
@@ -378,10 +378,10 @@ export const DeliveryManagementScreen: React.FC = () => {
                           </Button>
                         )}
 
-                        {delivery?.gigl_tracking_url && (
+                        {delivery?.terminal_tracking_url && (
                           <Button
                             variant="outline"
-                            onClick={() => window.open(delivery.gigl_tracking_url, '_blank')}
+                            onClick={() => window.open(delivery.terminal_tracking_url, '_blank')}
                           >
                             <Truck className="w-4 h-4 mr-2" />
                             Track Shipment

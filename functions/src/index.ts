@@ -788,12 +788,6 @@ export const sendEmail = functions.https.onCall(async (request: any) => {
     }
 });
 
-// Export GIGL Functions
-import * as gigl from './gigl';
-export const getGiglShippingQuote = gigl.getGiglShippingQuote;
-export const createGiglShipment = gigl.createGiglShipment;
-export const trackGiglShipment = gigl.trackGiglShipment;
-export const getGiglServiceAreas = gigl.getGiglServiceAreas;
 
 // Export Flutterwave Functions
 import * as flw from './flutterwave';

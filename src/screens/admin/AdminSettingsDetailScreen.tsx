@@ -224,15 +224,11 @@ const ApiKeysSettings = () => {
             <Card>
                 <CardHeader>
                     <CardTitle>Logistics</CardTitle>
-                    <CardDescription>GIG Logistics Integration</CardDescription>
+                    <CardDescription>Terminal Africa Integration</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                     <div className="grid gap-2">
-                        <Label>GIGL Client ID</Label>
-                        <Input type="text" defaultValue="nimex_gigl_client" />
-                    </div>
-                    <div className="grid gap-2">
-                        <Label>GIGL Client Secret</Label>
+                        <Label>Terminal Secret Key</Label>
                         <Input type="password" defaultValue="****************" />
                     </div>
                 </CardContent>

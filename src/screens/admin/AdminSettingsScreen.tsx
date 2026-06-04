@@ -104,7 +104,7 @@ export const AdminSettingsScreen: React.FC = () => {
                     API Keys
                   </h3>
                   <p className="font-sans text-sm text-neutral-600 mb-3">
-                    Manage API keys for Paystack, Flutterwave, and GIGL
+                    Manage API keys for Paystack, Flutterwave, and Terminal
                   </p>
                   <button className="font-sans text-sm text-primary-600 hover:text-primary-700 font-medium">
                     Manage →

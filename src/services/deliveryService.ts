@@ -3,7 +3,7 @@ import { FirebaseStorageService } from './firebaseStorage.service';
 import { COLLECTIONS } from '../lib/collections';
 import { logger } from '../lib/logger';
 import { Timestamp } from 'firebase/firestore';
-import { giglService, CreateShipmentRequest } from './giglService';
+import { terminalService } from './terminalService';
 
 interface CreateDeliveryRequest {
   orderId: string;
@@ -54,20 +54,44 @@ interface DeliveryResponse {
 class DeliveryService {
   async createDelivery(request: CreateDeliveryRequest): Promise<DeliveryResponse> {
     try {
-      const shipmentRequest: CreateShipmentRequest = {
-        orderId: request.orderId,
-        vendorId: request.vendorId,
+      // Step 1: Fetch rates for the shipment first
+      const ratesResult = await terminalService.getRates({
         pickupAddress: request.pickupAddress,
         deliveryAddress: request.deliveryAddress,
-        packageDetails: request.packageDetails,
-        deliveryType: request.deliveryType,
-        deliveryNotes: request.deliveryNotes,
-      };
+        parcels: [{
+          weight: request.packageDetails.weight,
+          length: request.packageDetails.length,
+          width: request.packageDetails.width,
+          height: request.packageDetails.height,
+          description: request.packageDetails.description,
+          value: request.packageDetails.value,
+        }]
+      });
 
-      const shipmentResult = await giglService.createShipment(shipmentRequest);
+      if (!ratesResult.success || !ratesResult.data || !ratesResult.data.rates || ratesResult.data.rates.length === 0) {
+        throw new Error(ratesResult.error || 'Failed to fetch rates from Terminal.africa');
+      }
+
+      const { shipmentId, rates } = ratesResult.data;
+
+      // Select rate based on delivery type
+      const sortedRates = [...rates].sort((a, b) => a.amount - b.amount);
+      let selectedRate = sortedRates[0]; // standard/cheapest
+
+      if (request.deliveryType === 'express') {
+        selectedRate = sortedRates[Math.min(1, sortedRates.length - 1)];
+      } else if (request.deliveryType === 'same_day') {
+        selectedRate = sortedRates[sortedRates.length - 1];
+      }
+
+      // Step 2: Book the shipment with the selected rate
+      const shipmentResult = await terminalService.createShipment({
+        shipmentId,
+        rateId: selectedRate.id
+      });
 
       if (!shipmentResult.success || !shipmentResult.data) {
-        throw new Error(shipmentResult.error || 'Failed to create GIGL shipment');
+        throw new Error(shipmentResult.error || 'Failed to create shipment with Terminal.africa');
       }
 
       const deliveryId = `delivery_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -78,8 +102,8 @@ class DeliveryService {
           order_id: request.orderId,
           vendor_id: request.vendorId,
           buyer_id: request.buyerId,
-          gigl_shipment_id: shipmentResult.data!.shipmentId,
-          gigl_tracking_url: shipmentResult.data!.trackingUrl,
+          terminal_shipment_id: shipmentResult.data!.id,
+          terminal_tracking_url: shipmentResult.data!.tracking_url,
           pickup_address: request.pickupAddress,
           delivery_address: request.deliveryAddress,
           delivery_type: request.deliveryType,
@@ -90,10 +114,10 @@ class DeliveryService {
             height: request.packageDetails.height,
           },
           delivery_cost: request.deliveryCost,
-          estimated_delivery_date: shipmentResult.data!.estimatedDeliveryDate,
+          estimated_delivery_date: selectedRate.duration || '3-5 Days',
           delivery_status: 'pickup_scheduled',
           delivery_notes: request.deliveryNotes,
-          gigl_response_data: shipmentResult,
+          terminal_response_data: shipmentResult.data,
           created_at: Timestamp.now(),
           updated_at: Timestamp.now(),
         });
@@ -112,7 +136,7 @@ class DeliveryService {
         // Update order
         await FirestoreService.updateDocument(COLLECTIONS.ORDERS, request.orderId, {
           status: 'processing',
-          tracking_number: shipmentResult.data!.trackingNumber,
+          tracking_number: shipmentResult.data!.tracking_number,
         });
       });
 
@@ -120,9 +144,9 @@ class DeliveryService {
         success: true,
         data: {
           deliveryId,
-          trackingNumber: shipmentResult.data.trackingNumber,
-          trackingUrl: shipmentResult.data.trackingUrl,
-          estimatedDeliveryDate: shipmentResult.data.estimatedDeliveryDate,
+          trackingNumber: shipmentResult.data.tracking_number,
+          trackingUrl: shipmentResult.data.tracking_url,
+          estimatedDeliveryDate: selectedRate.duration || '3-5 Days',
         },
       };
     } catch (error) {
@@ -161,7 +185,7 @@ class DeliveryService {
           status,
           location,
           notes,
-          updated_by: 'gigl_webhook',
+          updated_by: 'terminal_webhook',
           created_at: Timestamp.now(),
         });
 
@@ -209,13 +233,13 @@ class DeliveryService {
     }
   }
 
-  async getDeliveryTracking(trackingNumber: string): Promise<{
+  async getDeliveryTracking(shipmentId: string): Promise<{
     success: boolean;
     data?: any;
     error?: string;
   }> {
     try {
-      const trackingResult = await giglService.getTrackingStatus(trackingNumber);
+      const trackingResult = await terminalService.trackShipment(shipmentId);
 
       if (!trackingResult.success || !trackingResult.data) {
         throw new Error(trackingResult.error || 'Failed to get tracking information');
@@ -305,16 +329,28 @@ class DeliveryService {
     deliveryType: 'standard' | 'express' | 'same_day'
   ): Promise<{ success: boolean; cost?: number; error?: string }> {
     try {
-      const quoteResult = await giglService.getDeliveryQuote({
-        pickupCity,
-        pickupState,
-        deliveryCity,
-        deliveryState,
-        weight,
-        deliveryType,
+      const ratesResult = await terminalService.getRates({
+        pickupAddress: {
+          fullName: 'Vendor Office',
+          phone: '08000000000',
+          addressLine1: 'Main Pickup St',
+          city: pickupCity,
+          state: pickupState,
+        },
+        deliveryAddress: {
+          fullName: 'Buyer Destination',
+          phone: '08000000000',
+          addressLine1: 'Main Delivery St',
+          city: deliveryCity,
+          state: deliveryState,
+        },
+        parcels: [{
+          weight: weight,
+          description: 'Package Delivery',
+        }]
       });
 
-      if (!quoteResult.success || !quoteResult.data) {
+      if (!ratesResult.success || !ratesResult.data || !ratesResult.data.rates || ratesResult.data.rates.length === 0) {
         // Fallback to local zones
         const zones = await FirestoreService.getDocuments(COLLECTIONS.DELIVERY_ZONES, {
           filters: [
@@ -338,9 +374,19 @@ class DeliveryService {
         throw new Error('Unable to calculate delivery cost');
       }
 
+      const { rates } = ratesResult.data;
+      const sortedRates = [...rates].sort((a, b) => a.amount - b.amount);
+      let selectedRate = sortedRates[0]; // cheapest/standard
+
+      if (deliveryType === 'express') {
+        selectedRate = sortedRates[Math.min(1, sortedRates.length - 1)];
+      } else if (deliveryType === 'same_day') {
+        selectedRate = sortedRates[sortedRates.length - 1];
+      }
+
       return {
         success: true,
-        cost: quoteResult.data.estimatedCost,
+        cost: selectedRate.amount,
       };
     } catch (error) {
       logger.error('Failed to calculate delivery cost:', error);

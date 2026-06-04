@@ -10,7 +10,7 @@ import { COLLECTIONS } from '../lib/collections';
 import { orderService } from '../services/orderService';
 import { flutterwaveService } from '../services/flutterwaveService';
 import { emailNotificationService } from '../services/emailNotificationService';
-import { giglService } from '../services/giglService';
+import { deliveryService } from '../services/deliveryService';
 import { auth } from '../lib/firebase.config';
 
 interface CartItem {
@@ -109,20 +109,20 @@ export const CheckoutScreen: React.FC = () => {
     try {
       const totalWeight = cartItems.length * 1; // Approx 1kg per item for now
 
-      // Use GIGL Service instead of static deliveryService
-      const result = await giglService.getDeliveryQuote({
-        pickupState: 'Lagos', // Default vendor location (should be dynamic in future)
-        pickupCity: 'Ikeja',
-        deliveryState: selectedAddress.state,
-        deliveryCity: selectedAddress.city,
-        weight: totalWeight,
+      // Use deliveryService to calculate rates from Terminal Africa
+      const result = await deliveryService.calculateDeliveryCost(
+        'Ikeja', // Default vendor location city
+        'Lagos', // Default vendor location state
+        selectedAddress.city,
+        selectedAddress.state,
+        totalWeight,
         deliveryType
-      });
+      );
 
-      if (result.success && result.data) {
-        setDeliveryCost(result.data.estimatedCost);
+      if (result.success && result.cost !== undefined) {
+        setDeliveryCost(result.cost);
       } else {
-        console.warn('GIGL Quote Failed, falling back to standard rates:', result.error);
+        console.warn('Terminal Quote Failed, falling back to standard rates:', result.error);
         setDeliveryCost(deliveryType === 'standard' ? 2500 : deliveryType === 'express' ? 4000 : 6000);
       }
     } catch (err) {
