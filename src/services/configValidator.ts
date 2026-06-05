@@ -6,11 +6,6 @@ interface ConfigValidationResult {
 
 class ConfigValidator {
   private requiredEnvVars = [
-    'VITE_TWILIO_ACCOUNT_SID',
-    'VITE_TWILIO_AUTH_TOKEN',
-    'VITE_TWILIO_API_KEY',
-    'VITE_TWILIO_API_SECRET',
-    'VITE_TWILIO_PHONE_NUMBER',
     'VITE_FIREBASE_API_KEY',
     'VITE_FIREBASE_AUTH_DOMAIN',
     'VITE_FIREBASE_PROJECT_ID',
@@ -33,11 +28,6 @@ class ConfigValidator {
     }
 
     // Validate specific formats
-
-    const twilioPhone = import.meta.env.VITE_TWILIO_PHONE_NUMBER;
-    if (twilioPhone && !twilioPhone.match(/^\+[1-9]\d{1,14}$/)) {
-      errors.push('VITE_TWILIO_PHONE_NUMBER must be in E.164 format (e.g., +1234567890)');
-    }
 
     const firebaseAuthDomain = import.meta.env.VITE_FIREBASE_AUTH_DOMAIN;
     if (firebaseAuthDomain && !firebaseAuthDomain.includes('.firebaseapp.com')) {

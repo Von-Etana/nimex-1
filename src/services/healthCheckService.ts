@@ -13,79 +13,23 @@ class HealthCheckService {
   private lastChecks = new Map<string, HealthCheckResult>();
 
   async checkTwilioHealth(): Promise<HealthCheckResult> {
-    const startTime = Date.now();
-    try {
-      // Simple health check - try to get account info
-      const response = await fetch('https://api.twilio.com/2010-04-01/Accounts.json', {
-        method: 'GET',
-        headers: {
-          'Authorization': `Basic ${btoa(`${import.meta.env.VITE_TWILIO_API_KEY}:${import.meta.env.VITE_TWILIO_API_SECRET}`)}`,
-        },
-      });
-
-      const result: HealthCheckResult = {
-        service: 'twilio',
-        status: response.ok ? 'healthy' : 'unhealthy',
-        timestamp: new Date().toISOString(),
-        responseTime: Date.now() - startTime,
-      };
-
-      if (!response.ok) {
-        result.error = `HTTP ${response.status}: ${response.statusText}`;
-      }
-
-      this.lastChecks.set('twilio', result);
-      return result;
-    } catch (error) {
-      const result: HealthCheckResult = {
-        service: 'twilio',
-        status: 'unhealthy',
-        timestamp: new Date().toISOString(),
-        responseTime: Date.now() - startTime,
-        error: error instanceof Error ? error.message : 'Unknown error',
-      };
-
-      this.lastChecks.set('twilio', result);
-      return result;
-    }
+    // Twilio integration is disabled
+    return {
+      service: 'twilio',
+      status: 'unhealthy',
+      timestamp: new Date().toISOString(),
+      error: 'Twilio integration is disabled',
+    };
   }
 
   async checkSendGridHealth(): Promise<HealthCheckResult> {
-    const startTime = Date.now();
-    try {
-      // Simple health check - try to get user profile
-      const response = await fetch('https://api.sendgrid.com/v3/user/profile', {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${import.meta.env.VITE_TWILIO_API_SECRET}`,
-        },
-      });
-
-      const result: HealthCheckResult = {
-        service: 'sendgrid',
-        status: response.ok ? 'healthy' : 'unhealthy',
-        timestamp: new Date().toISOString(),
-        responseTime: Date.now() - startTime,
-      };
-
-      if (!response.ok) {
-        result.error = `HTTP ${response.status}: ${response.statusText}`;
-      }
-
-      this.lastChecks.set('sendgrid', result);
-      return result;
-    } catch (error) {
-      const result: HealthCheckResult = {
-        service: 'sendgrid',
-        status: 'unhealthy',
-        timestamp: new Date().toISOString(),
-        responseTime: Date.now() - startTime,
-        error: error instanceof Error ? error.message : 'Unknown error',
-      };
-
-      this.lastChecks.set('sendgrid', result);
-      return result;
-    }
+    // SendGrid/Twilio integration is disabled
+    return {
+      service: 'sendgrid',
+      status: 'unhealthy',
+      timestamp: new Date().toISOString(),
+      error: 'SendGrid integration is disabled',
+    };
   }
 
   async checkFirestoreHealth(): Promise<HealthCheckResult> {
@@ -120,8 +64,9 @@ class HealthCheckService {
 
   async runAllHealthChecks(): Promise<HealthCheckResult[]> {
     const checks = await Promise.allSettled([
-      this.checkTwilioHealth(),
-      this.checkSendGridHealth(),
+      // Twilio/SendGrid disabled
+      // this.checkTwilioHealth(),
+      // this.checkSendGridHealth(),
       this.checkFirestoreHealth(),
     ]);
 

@@ -15,14 +15,9 @@ class APIKeyTester {
     // Test Firebase
     results.push(await this.testFirebase());
 
-    // Test Twilio
-    results.push(await this.testTwilio());
-
-    // Test SendGrid (via health check)
-    results.push(await this.testSendGrid());
-
-    // Test Clerk (basic validation) - keeping for legacy if needed, or remove if not used
-    // results.push(await this.testClerk());
+    // Twilio is disabled
+    // results.push(await this.testTwilio());
+    // results.push(await this.testSendGrid());
 
     // Test Google Maps
     results.push(await this.testGoogleMaps());
@@ -71,119 +66,21 @@ class APIKeyTester {
   }
 
   private async testTwilio(): Promise<APIKeyTestResult> {
-    try {
-      const accountSid = import.meta.env.VITE_TWILIO_ACCOUNT_SID;
-      const apiKey = import.meta.env.VITE_TWILIO_API_KEY;
-      const apiSecret = import.meta.env.VITE_TWILIO_API_SECRET;
-
-      if (!accountSid || !apiKey || !apiSecret) {
-        return {
-          service: 'twilio',
-          status: 'missing_config',
-          error: 'Missing Twilio credentials'
-        };
-      }
-
-      // Test account info endpoint
-      const response = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${accountSid}.json`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Basic ${btoa(`${apiKey}:${apiSecret}`)}`,
-        },
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        return {
-          service: 'twilio',
-          status: 'success',
-          details: {
-            accountSid: data.sid,
-            status: data.status,
-            friendlyName: data.friendly_name
-          }
-        };
-      } else {
-        return {
-          service: 'twilio',
-          status: 'failed',
-          error: `HTTP ${response.status}: ${response.statusText}`,
-          details: { accountSid }
-        };
-      }
-    } catch (error) {
-      return {
-        service: 'twilio',
-        status: 'failed',
-        error: error instanceof Error ? error.message : 'Unknown error'
-      };
-    }
+    // Twilio integration is disabled
+    return {
+      service: 'twilio',
+      status: 'missing_config',
+      error: 'Twilio integration is disabled',
+    };
   }
 
   private async testSendGrid(): Promise<APIKeyTestResult> {
-    try {
-      const apiSecret = import.meta.env.VITE_TWILIO_API_SECRET;
-
-      if (!apiSecret) {
-        return {
-          service: 'sendgrid',
-          status: 'missing_config',
-          error: 'Missing VITE_TWILIO_API_SECRET (SendGrid key)'
-        };
-      }
-
-      // Test user profile endpoint with timeout
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
-
-      try {
-        const response = await fetch('https://api.sendgrid.com/v3/user/profile', {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${apiSecret}`,
-          },
-          signal: controller.signal,
-        });
-
-        clearTimeout(timeoutId);
-
-        if (response.ok) {
-          const data = await response.json();
-          return {
-            service: 'sendgrid',
-            status: 'success',
-            details: {
-              username: data.username,
-              email: data.email,
-              firstName: data.first_name,
-              lastName: data.last_name
-            }
-          };
-        } else {
-          return {
-            service: 'sendgrid',
-            status: 'failed',
-            error: `HTTP ${response.status}: ${response.statusText}`
-          };
-        }
-      } catch (fetchError) {
-        clearTimeout(timeoutId);
-        if (fetchError instanceof Error && fetchError.name === 'AbortError') {
-          return {
-            service: 'sendgrid',
-            status: 'failed',
-            error: 'Request timeout - service may be unavailable'
-          };
-        }
-        throw fetchError;
-      }
-    } catch (error) {
-      return {
-        service: 'sendgrid',
-        status: 'failed',
-        error: error instanceof Error ? error.message : 'Unknown error'
-      };
-    }
+    // SendGrid/Twilio integration is disabled
+    return {
+      service: 'sendgrid',
+      status: 'missing_config',
+      error: 'SendGrid integration is disabled',
+    };
   }
 
   private async testGoogleMaps(): Promise<APIKeyTestResult> {
