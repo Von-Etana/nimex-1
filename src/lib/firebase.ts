@@ -62,7 +62,7 @@ try {
     auth = getAuth(app);
     db = getFirestore(app);
     storage = getStorage(app);
-    functions = getFunctions(app, 'europe-west1'); // Or your region
+    functions = getFunctions(app, import.meta.env.VITE_FIREBASE_FUNCTIONS_REGION || 'us-east4');
 
     // Initialize Analytics (only in browser environment)
     if (typeof window !== 'undefined') {

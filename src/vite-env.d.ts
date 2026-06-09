@@ -12,8 +12,10 @@ interface ImportMetaEnv {
   readonly VITE_GOOGLE_MAPS_API_KEY: string;
   readonly VITE_PAYSTACK_PUBLIC_KEY: string;
   readonly VITE_PAYSTACK_TEST_MODE: string;
+  readonly VITE_TERMINAL_PUBLIC_KEY: string;
   readonly VITE_TERMINAL_SECRET_KEY: string;
   readonly VITE_TERMINAL_BASE_URL: string;
+  readonly VITE_TERMINAL_WEBHOOK_SECRET: string;
   readonly VITE_FLUTTERWAVE_API_KEY: string;
   readonly VITE_FLUTTERWAVE_API_URL: string;
   readonly VITE_FLUTTERWAVE_TEST_MODE: string;

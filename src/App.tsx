@@ -46,6 +46,7 @@ const FAQScreen = React.lazy(() => import('./screens/FAQScreen').then(module => 
 const AboutScreen = React.lazy(() => import('./screens/AboutScreen').then(module => ({ default: module.AboutScreen })));
 const TermsScreen = React.lazy(() => import('./screens/TermsScreen').then(module => ({ default: module.TermsScreen })));
 const PrivacyScreen = React.lazy(() => import('./screens/PrivacyScreen').then(module => ({ default: module.PrivacyScreen })));
+const AccountDeletionScreen = React.lazy(() => import('./screens/AccountDeletionScreen').then(module => ({ default: module.AccountDeletionScreen })));
 const ContactScreen = React.lazy(() => import('./screens/ContactScreen').then(module => ({ default: module.ContactScreen })));
 
 // Vendor screens
@@ -499,6 +500,15 @@ const App: React.FC = () => {
                   element={
                     <MainLayout>
                       <PrivacyScreen />
+                    </MainLayout>
+                  }
+                />
+
+                <Route
+                  path="/delete-account"
+                  element={
+                    <MainLayout>
+                      <AccountDeletionScreen />
                     </MainLayout>
                   }
                 />
