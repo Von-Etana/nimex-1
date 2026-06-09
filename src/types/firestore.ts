@@ -1,6 +1,5 @@
 /**
- * Firestore Data Models
- * Mirrors the Supabase database types but adapted for Firestore
+ * Firestore database types and schemas
  */
 
 import { Timestamp } from 'firebase/firestore';

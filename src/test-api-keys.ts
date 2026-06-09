@@ -10,14 +10,10 @@ config({ path: '.env', override: true }); // Load .env file
 
 // Debug: Check if env vars are loaded
 console.log('🔧 Environment Variables Check:');
-console.log('VITE_SUPABASE_URL:', process.env.VITE_SUPABASE_URL ? 'Present' : 'Missing');
-console.log('VITE_SUPABASE_ANON_KEY:', process.env.VITE_SUPABASE_ANON_KEY ? 'Present' : 'Missing');
 console.log('VITE_CLERK_PUBLISHABLE_KEY:', process.env.VITE_CLERK_PUBLISHABLE_KEY ? 'Present' : 'Missing');
 console.log('');
 
 // Set global environment variables for the entire process
-process.env.VITE_SUPABASE_URL = process.env.VITE_SUPABASE_URL || '';
-process.env.VITE_SUPABASE_ANON_KEY = process.env.VITE_SUPABASE_ANON_KEY || '';
 process.env.VITE_CLERK_PUBLISHABLE_KEY = process.env.VITE_CLERK_PUBLISHABLE_KEY || '';
 process.env.VITE_TWILIO_ACCOUNT_SID = process.env.VITE_TWILIO_ACCOUNT_SID || '';
 process.env.VITE_TWILIO_API_KEY = process.env.VITE_TWILIO_API_KEY || '';

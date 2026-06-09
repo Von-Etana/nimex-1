@@ -9,7 +9,7 @@ interface Logger {
 const sanitizeError = (error: any): string => {
   if (!error) return 'Unknown error';
 
-  // For Supabase errors, return message if available
+  // If the error object has a message property, return it
   if (error.message) return error.message;
 
   // For generic errors
