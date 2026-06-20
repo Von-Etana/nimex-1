@@ -139,6 +139,20 @@ export const AdminKYCApprovalsScreen: React.FC = () => {
         submissions.map((sub) => (sub.id === id ? { ...sub, status: 'approved' as const } : sub))
       );
 
+      // Update vendor's verification status
+      const rawSub = rawSubmissions.find((s) => s.id === id);
+      if (rawSub && rawSub.user_id) {
+        try {
+          await FirestoreService.updateDocument('vendors', rawSub.user_id, {
+            verification_status: 'verified',
+            verification_badge: 'verified'
+          });
+          logger.info(`Vendor document for user ${rawSub.user_id} updated to verified`);
+        } catch (vendorError) {
+          logger.error(`Failed to update vendor document for user ${rawSub.user_id}:`, vendorError);
+        }
+      }
+
       // Send notification email
       const submission = submissions.find(s => s.id === id);
       if (submission) {
@@ -168,6 +182,19 @@ export const AdminKYCApprovalsScreen: React.FC = () => {
       setSubmissions(
         submissions.map((sub) => (sub.id === id ? { ...sub, status: 'rejected' as const } : sub))
       );
+
+      // Update vendor's verification status
+      const rawSub = rawSubmissions.find((s) => s.id === id);
+      if (rawSub && rawSub.user_id) {
+        try {
+          await FirestoreService.updateDocument('vendors', rawSub.user_id, {
+            verification_status: 'rejected'
+          });
+          logger.info(`Vendor document for user ${rawSub.user_id} updated to rejected`);
+        } catch (vendorError) {
+          logger.error(`Failed to update vendor document for user ${rawSub.user_id}:`, vendorError);
+        }
+      }
 
       logger.info(`KYC submission ${id} rejected successfully`);
     } catch (error) {

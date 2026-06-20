@@ -524,21 +524,109 @@ const App: React.FC = () => {
 
                 <Route
                   path="/admin"
-                  element={<AdminLayout />}
+                  element={
+                    <ProtectedAdminRoute>
+                      <AdminLayout />
+                    </ProtectedAdminRoute>
+                  }
                 >
                   <Route index element={<AdminDashboardScreen />} />
-                  <Route path="users" element={<AdminUsersScreen />} />
-                  <Route path="listings" element={<AdminListingsScreen />} />
-                  <Route path="transactions" element={<AdminTransactionsScreen />} />
-                  <Route path="disputes" element={<AdminDisputesScreen />} />
-                  <Route path="escrow" element={<AdminEscrowScreen />} />
-                  <Route path="support" element={<AdminSupportScreen />} />
-                  <Route path="kyc" element={<AdminKYCApprovalsScreen />} />
-                  <Route path="settings" element={<AdminSettingsScreen />} />
-                  <Route path="settings/:section" element={<AdminSettingsDetailScreen />} />
-                  <Route path="marketers" element={<AdminMarketersScreen />} />
-                  <Route path="commissions" element={<AdminCommissionsScreen />} />
-                  <Route path="withdrawals" element={<AdminWithdrawalsScreen />} />
+                  <Route
+                    path="users"
+                    element={
+                      <ProtectedAdminRoute requiredPermission="users.view">
+                        <AdminUsersScreen />
+                      </ProtectedAdminRoute>
+                    }
+                  />
+                  <Route
+                    path="listings"
+                    element={
+                      <ProtectedAdminRoute requiredPermission="products.view">
+                        <AdminListingsScreen />
+                      </ProtectedAdminRoute>
+                    }
+                  />
+                  <Route
+                    path="transactions"
+                    element={
+                      <ProtectedAdminRoute requiredPermission="finance.transactions">
+                        <AdminTransactionsScreen />
+                      </ProtectedAdminRoute>
+                    }
+                  />
+                  <Route
+                    path="disputes"
+                    element={
+                      <ProtectedAdminRoute requiredPermission="disputes.view">
+                        <AdminDisputesScreen />
+                      </ProtectedAdminRoute>
+                    }
+                  />
+                  <Route
+                    path="escrow"
+                    element={
+                      <ProtectedAdminRoute requiredPermission="finance.escrow">
+                        <AdminEscrowScreen />
+                      </ProtectedAdminRoute>
+                    }
+                  />
+                  <Route
+                    path="support"
+                    element={
+                      <ProtectedAdminRoute requiredPermission="support.view">
+                        <AdminSupportScreen />
+                      </ProtectedAdminRoute>
+                    }
+                  />
+                  <Route
+                    path="kyc"
+                    element={
+                      <ProtectedAdminRoute requiredPermission="kyc.view">
+                        <AdminKYCApprovalsScreen />
+                      </ProtectedAdminRoute>
+                    }
+                  />
+                  <Route
+                    path="settings"
+                    element={
+                      <ProtectedAdminRoute requiredPermission="settings.view">
+                        <AdminSettingsScreen />
+                      </ProtectedAdminRoute>
+                    }
+                  />
+                  <Route
+                    path="settings/:section"
+                    element={
+                      <ProtectedAdminRoute requiredPermission="settings.view">
+                        <AdminSettingsDetailScreen />
+                      </ProtectedAdminRoute>
+                    }
+                  />
+                  <Route
+                    path="marketers"
+                    element={
+                      <ProtectedAdminRoute requiredPermission="marketers.view">
+                        <AdminMarketersScreen />
+                      </ProtectedAdminRoute>
+                    }
+                  />
+                  <Route
+                    path="commissions"
+                    element={
+                      <ProtectedAdminRoute requiredPermission="marketers.commissions">
+                        <AdminCommissionsScreen />
+                      </ProtectedAdminRoute>
+                    }
+                  />
+                  <Route
+                    path="withdrawals"
+                    element={
+                      <ProtectedAdminRoute requiredPermission="finance.payouts">
+                        <AdminWithdrawalsScreen />
+                      </ProtectedAdminRoute>
+                    }
+                  />
                 </Route>
 
                 {/* Marketer Routes */}

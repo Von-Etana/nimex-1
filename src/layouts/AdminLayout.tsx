@@ -12,6 +12,7 @@ import {
   ShieldCheck,
   ArrowUpRight,
 } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
 
 interface MenuItem {
   icon: React.ComponentType<{ className?: string }>;
@@ -24,6 +25,7 @@ export const AdminLayout: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const { profile, hasPermission } = useAuth();
 
   const menuItems: MenuItem[] = [
     {
@@ -35,46 +37,55 @@ export const AdminLayout: React.FC = () => {
       icon: Users,
       label: 'Users',
       path: '/admin/users',
+      permission: 'users.view',
     },
     {
       icon: Package,
       label: 'Listings',
       path: '/admin/listings',
+      permission: 'products.view',
     },
     {
       icon: CreditCard,
       label: 'Transactions',
       path: '/admin/transactions',
+      permission: 'finance.transactions',
     },
     {
       icon: ArrowUpRight,
       label: 'Withdrawals',
       path: '/admin/withdrawals',
+      permission: 'finance.payouts',
     },
     {
       icon: FileCheck,
       label: 'KYC Approvals',
       path: '/admin/kyc',
+      permission: 'kyc.view',
     },
     {
       icon: Settings,
       label: 'Settings',
       path: '/admin/settings',
+      permission: 'settings.view',
     },
     {
       icon: ShieldCheck,
       label: 'Marketers',
       path: '/admin/marketers',
+      permission: 'marketers.view',
     },
     {
       icon: CreditCard,
       label: 'Commissions',
       path: '/admin/commissions',
+      permission: 'marketers.commissions',
     },
   ];
 
-  // Show all menu items since there's no authentication
-  const visibleMenuItems = menuItems;
+  const visibleMenuItems = menuItems.filter(
+    (item) => !item.permission || hasPermission(item.permission)
+  );
 
   const isActive = (path: string) => {
     if (path === '/admin') {
@@ -115,15 +126,19 @@ export const AdminLayout: React.FC = () => {
 
           <div className="p-4 border-b border-neutral-200">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-primary-100 rounded-full flex items-center justify-center">
-                <ShieldCheck className="w-6 h-6 text-primary-700" />
+              <div className="w-10 h-10 bg-primary-100 rounded-full flex items-center justify-center overflow-hidden">
+                {profile?.avatar_url ? (
+                  <img src={profile.avatar_url} alt="Avatar" className="w-full h-full object-cover" />
+                ) : (
+                  <ShieldCheck className="w-6 h-6 text-primary-700" />
+                )}
               </div>
               <div className="flex-1 min-w-0">
                 <p className="font-sans font-medium text-sm text-neutral-900 truncate">
-                  Admin Panel
+                  {profile?.full_name || 'Admin Panel'}
                 </p>
                 <p className="font-sans text-xs text-neutral-500 truncate">
-                  System Administration
+                  {profile?.adminRoles?.[0]?.display_name || 'System Administration'}
                 </p>
               </div>
             </div>

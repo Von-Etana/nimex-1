@@ -19,6 +19,7 @@ import {
   Activity as ActivityIcon
 } from 'lucide-react';
 import { FirestoreService } from '../../services/firestore.service';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface MetricCardProps {
   title: string;
@@ -57,6 +58,7 @@ const MetricCard: React.FC<MetricCardProps> = ({ title, value, icon, bgColor = '
 
 export const AdminDashboardScreen: React.FC = () => {
   const navigate = useNavigate();
+  const { hasPermission } = useAuth();
   const [loading, setLoading] = useState(true);
   const [metrics, setMetrics] = useState({
     totalUsers: 0,
@@ -83,7 +85,17 @@ export const AdminDashboardScreen: React.FC = () => {
       const twentyFourHoursAgo = new Date();
       twentyFourHoursAgo.setHours(twentyFourHoursAgo.getHours() - 24);
 
-      // Fetch all necessary data in parallel
+      // Safe fetch utility to gracefully catch database loading failures (e.g. if permissions lack)
+      const safeFetch = async <T,>(promise: Promise<T>, fallback: T): Promise<T> => {
+        try {
+          return await promise;
+        } catch (err) {
+          console.warn('Dashboard metric load failure bypassed gracefully:', err);
+          return fallback;
+        }
+      };
+
+      // Fetch all necessary data in parallel with safe loading guards
       const [
         usersCount,
         vendorsCount,
@@ -95,15 +107,15 @@ export const AdminDashboardScreen: React.FC = () => {
         marketersCount,
         activeUsers
       ] = await Promise.all([
-        FirestoreService.getCount('profiles'),
-        FirestoreService.getCount('vendors'),
-        FirestoreService.getCount('products'),
-        FirestoreService.getDocuments('payment_transactions'), // Use payment_transactions for accurate financial metrics
-        FirestoreService.getCount('kyc_submissions', { filters: [{ field: 'status', operator: '==', value: 'pending' }] }),
-        FirestoreService.getCount('vendors', { filters: [{ field: 'subscription_status', operator: '==', value: 'active' }] }),
-        FirestoreService.getCount('vendors', { filters: [{ field: 'subscription_status', operator: '==', value: 'expired' }] }),
-        FirestoreService.getCount('marketers'),
-        FirestoreService.getDocuments('profiles', { filters: [{ field: 'updated_at', operator: '>', value: twentyFourHoursAgo.toISOString() }] }),
+        safeFetch(FirestoreService.getCount('profiles'), 0),
+        safeFetch(FirestoreService.getCount('vendors'), 0),
+        safeFetch(FirestoreService.getCount('products'), 0),
+        safeFetch(FirestoreService.getDocuments('payment_transactions'), []),
+        safeFetch(FirestoreService.getCount('kyc_submissions', { filters: [{ field: 'status', operator: '==', value: 'pending' }] }), 0),
+        safeFetch(FirestoreService.getCount('vendors', { filters: [{ field: 'subscription_status', operator: '==', value: 'active' }] }), 0),
+        safeFetch(FirestoreService.getCount('vendors', { filters: [{ field: 'subscription_status', operator: '==', value: 'expired' }] }), 0),
+        safeFetch(FirestoreService.getCount('marketers'), 0),
+        safeFetch(FirestoreService.getDocuments('profiles', { filters: [{ field: 'updated_at', operator: '>', value: twentyFourHoursAgo.toISOString() }] }), []),
       ]);
 
       const totalRevenue = (transactions as any[]).reduce((sum: number, tx: any) => {
@@ -120,9 +132,12 @@ export const AdminDashboardScreen: React.FC = () => {
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-      const newListingsCount = await FirestoreService.getCount('products', {
-        filters: [{ field: 'created_at', operator: '>=', value: thirtyDaysAgo.toISOString() }]
-      });
+      const newListingsCount = await safeFetch(
+        FirestoreService.getCount('products', {
+          filters: [{ field: 'created_at', operator: '>=', value: thirtyDaysAgo.toISOString() }]
+        }),
+        0
+      );
 
       setMetrics({
         totalUsers: usersCount,
@@ -264,31 +279,31 @@ export const AdminDashboardScreen: React.FC = () => {
                 title="Total Users"
                 value={metrics.totalUsers.toLocaleString()}
                 icon={<Users className="w-5 h-5 text-neutral-600" />}
-                onClick={() => navigate('/admin/users')}
+                onClick={hasPermission('users.view') ? () => navigate('/admin/users') : undefined}
               />
               <MetricCard
                 title="Active Vendors"
                 value={metrics.activeVendors.toLocaleString()}
                 icon={<Package className="w-5 h-5 text-neutral-600" />}
-                onClick={() => navigate('/admin/vendors')}
+                onClick={hasPermission('users.view') ? () => navigate('/admin/users') : undefined}
               />
               <MetricCard
                 title="Total Listings"
                 value={metrics.totalListings.toLocaleString()}
                 icon={<List className="w-5 h-5 text-neutral-600" />}
-                onClick={() => navigate('/admin/listings')}
+                onClick={hasPermission('products.view') ? () => navigate('/admin/listings') : undefined}
               />
               <MetricCard
                 title="Pending KYC"
                 value={metrics.pendingKYC}
                 icon={<FileCheck className="w-5 h-5 text-neutral-600" />}
-                onClick={() => navigate('/admin/kyc')}
+                onClick={hasPermission('kyc.view') ? () => navigate('/admin/kyc') : undefined}
               />
               <MetricCard
                 title="Total Transactions"
                 value={metrics.totalTransactions.toLocaleString()}
                 icon={<DollarSign className="w-5 h-5 text-neutral-600" />}
-                onClick={() => navigate('/admin/transactions')}
+                onClick={hasPermission('finance.transactions') ? () => navigate('/admin/transactions') : undefined}
               />
               <MetricCard
                 title="New Listings (30D)"
@@ -309,7 +324,7 @@ export const AdminDashboardScreen: React.FC = () => {
                 title="Marketers"
                 value={metrics.totalMarketers}
                 icon={<UserCheck className="w-5 h-5 text-blue-600" />}
-                onClick={() => navigate('/admin/marketers')}
+                onClick={hasPermission('marketers.view') ? () => navigate('/admin/marketers') : undefined}
               />
               <MetricCard
                 title="Expired Subscriptions"
@@ -460,97 +475,117 @@ export const AdminDashboardScreen: React.FC = () => {
           </Card>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <Card className="border border-neutral-200 shadow-sm">
-              <CardContent className="p-6">
-                <h2 className="font-heading font-bold text-xl md:text-2xl text-neutral-900 mb-6">
-                  Quick Admin Actions
-                </h2>
-                <div className="grid grid-cols-2 gap-4">
-                  <button
-                    onClick={() => navigate('/admin/users')}
-                    className="flex flex-col items-center gap-3 p-4 rounded-lg border border-neutral-200 hover:bg-neutral-50 transition-colors"
-                  >
-                    <Users className="w-8 h-8 text-neutral-700" />
-                    <span className="font-sans text-sm font-medium text-neutral-900">
-                      Manage Users
-                    </span>
-                  </button>
-                  <button
-                    onClick={() => navigate('/admin/listings')}
-                    className="flex flex-col items-center gap-3 p-4 rounded-lg border border-neutral-200 hover:bg-neutral-50 transition-colors"
-                  >
-                    <List className="w-8 h-8 text-neutral-700" />
-                    <span className="font-sans text-sm font-medium text-neutral-900">
-                      Moderate Listings
-                    </span>
-                  </button>
-                  <button
-                    onClick={() => navigate('/admin/kyc')}
-                    className="flex flex-col items-center gap-3 p-4 rounded-lg border border-neutral-200 hover:bg-neutral-50 transition-colors"
-                  >
-                    <FileCheck className="w-8 h-8 text-neutral-700" />
-                    <span className="font-sans text-sm font-medium text-neutral-900">
-                      Approve KYC
-                    </span>
-                  </button>
-                  <button
-                    onClick={() => navigate('/admin/transactions')}
-                    className="flex flex-col items-center gap-3 p-4 rounded-lg border border-neutral-200 hover:bg-neutral-50 transition-colors"
-                  >
-                    <Clock className="w-8 h-8 text-neutral-700" />
-                    <span className="font-sans text-sm font-medium text-neutral-900">
-                      View Transactions
-                    </span>
-                  </button>
-                </div>
-              </CardContent>
-            </Card>
+            {(hasPermission('users.view') || hasPermission('products.view') || hasPermission('kyc.view') || hasPermission('finance.transactions')) && (
+              <Card className="border border-neutral-200 shadow-sm">
+                <CardContent className="p-6">
+                  <h2 className="font-heading font-bold text-xl md:text-2xl text-neutral-900 mb-6">
+                    Quick Admin Actions
+                  </h2>
+                  <div className="grid grid-cols-2 gap-4">
+                    {hasPermission('users.view') && (
+                      <button
+                        onClick={() => navigate('/admin/users')}
+                        className="flex flex-col items-center gap-3 p-4 rounded-lg border border-neutral-200 hover:bg-neutral-50 transition-colors"
+                      >
+                        <Users className="w-8 h-8 text-neutral-700" />
+                        <span className="font-sans text-sm font-medium text-neutral-900">
+                          Manage Users
+                        </span>
+                      </button>
+                    )}
+                    {hasPermission('products.view') && (
+                      <button
+                        onClick={() => navigate('/admin/listings')}
+                        className="flex flex-col items-center gap-3 p-4 rounded-lg border border-neutral-200 hover:bg-neutral-50 transition-colors"
+                      >
+                        <List className="w-8 h-8 text-neutral-700" />
+                        <span className="font-sans text-sm font-medium text-neutral-900">
+                          Moderate Listings
+                        </span>
+                      </button>
+                    )}
+                    {hasPermission('kyc.view') && (
+                      <button
+                        onClick={() => navigate('/admin/kyc')}
+                        className="flex flex-col items-center gap-3 p-4 rounded-lg border border-neutral-200 hover:bg-neutral-50 transition-colors"
+                      >
+                        <FileCheck className="w-8 h-8 text-neutral-700" />
+                        <span className="font-sans text-sm font-medium text-neutral-900">
+                          Approve KYC
+                        </span>
+                      </button>
+                    )}
+                    {hasPermission('finance.transactions') && (
+                      <button
+                        onClick={() => navigate('/admin/transactions')}
+                        className="flex flex-col items-center gap-3 p-4 rounded-lg border border-neutral-200 hover:bg-neutral-50 transition-colors"
+                      >
+                        <Clock className="w-8 h-8 text-neutral-700" />
+                        <span className="font-sans text-sm font-medium text-neutral-900">
+                          View Transactions
+                        </span>
+                      </button>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
 
-            <Card className="border border-neutral-200 shadow-sm">
-              <CardContent className="p-6">
-                <h2 className="font-heading font-bold text-xl md:text-2xl text-neutral-900 mb-6">
-                  Platform Settings
-                </h2>
-                <div className="grid grid-cols-2 gap-4">
-                  <button
-                    onClick={() => navigate('/admin/settings/commissions')}
-                    className="flex flex-col items-center gap-3 p-4 rounded-lg border border-neutral-200 hover:bg-neutral-50 transition-colors"
-                  >
-                    <DollarSign className="w-8 h-8 text-green-600" />
-                    <span className="font-sans text-sm font-medium text-neutral-900">
-                      Commissions
-                    </span>
-                  </button>
-                  <button
-                    onClick={() => navigate('/admin/settings/banners')}
-                    className="flex flex-col items-center gap-3 p-4 rounded-lg border border-neutral-200 hover:bg-neutral-50 transition-colors"
-                  >
-                    <Megaphone className="w-8 h-8 text-yellow-500" />
-                    <span className="font-sans text-sm font-medium text-neutral-900">
-                      Banners & Ads
-                    </span>
-                  </button>
-                  <button
-                    onClick={() => navigate('/admin/settings/notifications')}
-                    className="flex flex-col items-center gap-3 p-4 rounded-lg border border-neutral-200 hover:bg-neutral-50 transition-colors"
-                  >
-                    <Bell className="w-8 h-8 text-blue-500" />
-                    <span className="font-sans text-sm font-medium text-neutral-900">
-                      Notifications
-                    </span>
-                  </button>
-                  <button
-                    onClick={() => navigate('/admin/settings/security')}
-                    className="flex flex-col items-center gap-3 p-4 rounded-lg border border-neutral-200 hover:bg-neutral-50 transition-colors"
-                  >
-                    <Shield className="w-8 h-8 text-red-500" />
-                    <span className="font-sans text-sm font-medium text-neutral-900">
-                      Security
-                    </span>
-                  </button>
-                </div>
-              </CardContent>
-            </Card>
+            {(hasPermission('marketers.commissions') || hasPermission('marketing.view') || hasPermission('settings.view') || hasPermission('settings.security')) && (
+              <Card className="border border-neutral-200 shadow-sm">
+                <CardContent className="p-6">
+                  <h2 className="font-heading font-bold text-xl md:text-2xl text-neutral-900 mb-6">
+                    Platform Settings
+                  </h2>
+                  <div className="grid grid-cols-2 gap-4">
+                    {hasPermission('marketers.commissions') && (
+                      <button
+                        onClick={() => navigate('/admin/settings/commissions')}
+                        className="flex flex-col items-center gap-3 p-4 rounded-lg border border-neutral-200 hover:bg-neutral-50 transition-colors"
+                      >
+                        <DollarSign className="w-8 h-8 text-green-600" />
+                        <span className="font-sans text-sm font-medium text-neutral-900">
+                          Commissions
+                        </span>
+                      </button>
+                    )}
+                    {hasPermission('marketing.view') && (
+                      <button
+                        onClick={() => navigate('/admin/settings/banners')}
+                        className="flex flex-col items-center gap-3 p-4 rounded-lg border border-neutral-200 hover:bg-neutral-50 transition-colors"
+                      >
+                        <Megaphone className="w-8 h-8 text-yellow-500" />
+                        <span className="font-sans text-sm font-medium text-neutral-900">
+                          Banners & Ads
+                        </span>
+                      </button>
+                    )}
+                    {hasPermission('settings.view') && (
+                      <button
+                        onClick={() => navigate('/admin/settings/notifications')}
+                        className="flex flex-col items-center gap-3 p-4 rounded-lg border border-neutral-200 hover:bg-neutral-50 transition-colors"
+                      >
+                        <Bell className="w-8 h-8 text-blue-500" />
+                        <span className="font-sans text-sm font-medium text-neutral-900">
+                          Notifications
+                        </span>
+                      </button>
+                    )}
+                    {hasPermission('settings.security') && (
+                      <button
+                        onClick={() => navigate('/admin/settings/security')}
+                        className="flex flex-col items-center gap-3 p-4 rounded-lg border border-neutral-200 hover:bg-neutral-50 transition-colors"
+                      >
+                        <Shield className="w-8 h-8 text-red-500" />
+                        <span className="font-sans text-sm font-medium text-neutral-900">
+                          Security
+                        </span>
+                      </button>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
           </div>
         </div>
       </div>

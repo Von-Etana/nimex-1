@@ -98,7 +98,11 @@ service cloud.firestore {
     
     // Addresses - owner only
     match /addresses/{addressId} {
-      allow read, write: if isAuthenticated() && 
+      // create: resource doesn't exist yet, so check request.resource
+      allow create: if isAuthenticated() &&
+        request.resource.data.user_id == request.auth.uid;
+      // read/update/delete: document already exists, check resource
+      allow read, update, delete: if isAuthenticated() &&
         resource.data.user_id == request.auth.uid;
     }
     
@@ -176,10 +180,14 @@ service cloud.firestore {
       );
     }
     
-    // Marketers - public read, owner write
+    // Marketers - public read, owner/admin write, limited update for stats
     match /marketers/{marketerId} {
       allow read: if true;
-      allow create, update: if isOwner(marketerId);
+      allow create: if isOwner(marketerId);
+      allow update: if isOwner(marketerId) || isAdmin() || (
+        isAuthenticated() &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['total_referrals', 'total_commission_earned', 'updated_at'])
+      );
     }
     
     // Referrals - restricted read, authenticated write
@@ -246,10 +254,9 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
     
-    // Commissions - admin only
-    match /commissions/{commissionId} {
-      // MED-04 FIX: Commission data is financial/sensitive - admin only
-      allow read: if isAdmin();
+    // Commission Settings - authenticated read, admin write
+    match /commission_settings/{settingId} {
+      allow read: if isAuthenticated();
       allow write: if isAdmin();
     }
     
@@ -359,9 +366,32 @@ service cloud.firestore {
     // Commission Payments
     match /commission_payments/{paymentId} {
       allow read: if isAuthenticated() && (
-        resource.data.beneficiary_id == request.auth.uid || isAdmin()
+        resource.data.recipient_id == request.auth.uid || isAdmin()
       );
-      allow write: if false; // Backend only
+      allow create: if isAdmin();
+      allow update, delete: if isAdmin();
+    }
+
+    // Vendor Referrals
+    match /vendor_referrals/{referralId} {
+      allow read: if isAuthenticated() && (
+        resource.data.referrer_vendor_id == request.auth.uid ||
+        resource.data.referred_vendor_id == request.auth.uid ||
+        isAdmin()
+      );
+      allow create: if isAuthenticated();
+      allow update, delete: if isAdmin();
+    }
+
+    // Marketer Referrals
+    match /marketer_referrals/{referralId} {
+      allow read: if isAuthenticated() && (
+        resource.data.marketer_id == request.auth.uid ||
+        resource.data.vendor_id == request.auth.uid ||
+        isAdmin()
+      );
+      allow create: if isAuthenticated();
+      allow update, delete: if isAdmin();
     }
     
     // Delivery Zones

@@ -182,7 +182,7 @@ export const AdminCommissionsScreen: React.FC = () => {
         status: 'completed',
         referral_ids: [selectedCommission.id],
         notes: paymentNotes || null,
-        processed_by: user?.id,
+        processed_by: user?.uid,
         processed_at: new Date().toISOString(),
       });
 

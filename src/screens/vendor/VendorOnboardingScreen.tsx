@@ -99,10 +99,25 @@ export const VendorOnboardingScreen: React.FC = () => {
     avatar: null as File | null
   });
 
+  // Filter available tags based on selected business category
   useEffect(() => {
-    // Load available sub-category tags based on common categories
-    setAvailableTags(SUB_CATEGORY_TAGS.slice(0, INITIAL_TAG_DISPLAY_COUNT));
+    const category = profileData.businessCategory;
+    if (category) {
+      const filtered = SUB_CATEGORY_TAGS.filter(tag => tag.category === category);
+      setAvailableTags(filtered.length > 0 ? filtered : SUB_CATEGORY_TAGS.slice(0, INITIAL_TAG_DISPLAY_COUNT));
+      // Clear previously selected tags that no longer belong to the new category
+      setProfileData(prev => ({
+        ...prev,
+        subCategoryTags: prev.subCategoryTags.filter(id =>
+          filtered.some(t => t.id === id)
+        )
+      }));
+    } else {
+      setAvailableTags(SUB_CATEGORY_TAGS.slice(0, INITIAL_TAG_DISPLAY_COUNT));
+    }
+  }, [profileData.businessCategory]);
 
+  useEffect(() => {
     // Check for referral code in URL
     const refCode = searchParams.get('ref');
     if (refCode) {
@@ -353,6 +368,7 @@ export const VendorOnboardingScreen: React.FC = () => {
         business_address: profileData.businessAddress,
         business_phone: profileData.businessPhone,
         market_location: profileData.marketLocation,
+        business_category: profileData.businessCategory || null,
         sub_category_tags: profileData.subCategoryTags,
         cac_number: profileData.cacNumber || null,
         cac_certificate_url: cacUrl || null,
