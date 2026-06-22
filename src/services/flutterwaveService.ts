@@ -300,17 +300,19 @@ class FlutterwaveService {
     amount: number,
     bankCode: string,
     accountNumber: string,
-    narration: string
+    narration: string,
+    bankName?: string
   ): Promise<FlutterwaveTransferResponse> {
     try {
       const reference = `NIMEX-PAYOUT-${vendorId}-${Date.now()}`;
 
       const processWithdrawal = httpsCallable<any, any>(
         this.functions,
-        'processFlutterwaveWithdrawal'
+        'requestFlutterwaveWithdrawal'
       );
       const result = await processWithdrawal({
-        account_bank: bankCode,
+        bank_code: bankCode,
+        bank_name: bankName || bankCode,
         account_number: accountNumber,
         amount,
         narration,
@@ -319,7 +321,7 @@ class FlutterwaveService {
 
       const response = result.data;
       if (response.success) {
-        // Log withdrawal
+        // Log withdrawal to client-side payment transactions ledger
         try {
           await FirestoreService.addDocument('payment_transactions', {
             amount,
@@ -334,7 +336,7 @@ class FlutterwaveService {
         } catch (e) {
           console.error('Failed to log withdrawal', e);
         }
-        return { success: true, data: { reference: response.data.reference || reference, status: response.data.status || 'successful' } };
+        return { success: true, data: { reference: response.data.reference || reference, status: response.data.status || 'pending' } };
       }
 
       return { 

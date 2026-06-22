@@ -37,7 +37,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 var _a;
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.terminalWebhook = exports.getTerminalCarriers = exports.trackTerminalShipment = exports.quickTerminalShipment = exports.createTerminalShipment = exports.getTerminalRates = exports.resolveFlutterwaveAccount = exports.getFlutterwaveBankList = exports.processFlutterwaveWithdrawal = exports.createFlutterwaveSubaccount = exports.createFlutterwaveVirtualAccount = exports.verifyFlutterwavePayment = exports.onChatMessageNotifyRecipient = exports.onOrderStatusUpdateNotifyBuyer = exports.onOrderCreateNotifyVendor = exports.initializeFlutterwavePayment = exports.sendEmail = exports.sendTermiiSms = exports.refundEscrow = exports.releaseEscrow = exports.verifyPayment = exports.initializePayment = exports.paystackWebhook = void 0;
+exports.terminalWebhook = exports.getTerminalCarriers = exports.trackTerminalShipment = exports.quickTerminalShipment = exports.createTerminalShipment = exports.getTerminalRates = exports.resolveFlutterwaveAccount = exports.getFlutterwaveBankList = exports.rejectFlutterwaveWithdrawal = exports.approveFlutterwaveWithdrawal = exports.requestFlutterwaveWithdrawal = exports.createFlutterwaveSubaccount = exports.createFlutterwaveVirtualAccount = exports.verifyFlutterwavePayment = exports.onChatMessageNotifyRecipient = exports.onOrderStatusUpdateNotifyBuyer = exports.onOrderCreateNotifyVendor = exports.initializeFlutterwavePayment = exports.sendEmail = exports.sendTermiiSms = exports.refundEscrow = exports.releaseEscrow = exports.verifyPayment = exports.initializePayment = exports.flutterwaveWebhook = exports.paystackWebhook = void 0;
 const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
 const axios_1 = __importDefault(require("axios"));
@@ -167,6 +167,58 @@ exports.paystackWebhook = functions.https.onRequest(async (req, res) => {
     catch (error) {
         console.error("Paystack webhook error:", error);
         // Still return 200 to prevent Paystack from retrying
+        res.status(200).json({ received: true, error: error.message });
+    }
+});
+/**
+ * Verify Flutterwave Webhook Signature
+ */
+const verifyFlutterwaveSignature = (signature) => {
+    var _a;
+    const secretHash = process.env.FLUTTERWAVE_WEBHOOK_HASH || ((_a = functions.config().flutterwave) === null || _a === void 0 ? void 0 : _a.webhook_hash);
+    if (!secretHash) {
+        console.warn("FLUTTERWAVE_WEBHOOK_HASH is not configured.");
+        // Dev fallback to prevent signature failure during local testing
+        if (process.env.NODE_ENV !== "production") {
+            return true;
+        }
+        return false;
+    }
+    return signature === secretHash;
+};
+/**
+ * Flutterwave Webhook Handler
+ */
+exports.flutterwaveWebhook = functions.https.onRequest(async (req, res) => {
+    try {
+        if (req.method !== "POST") {
+            res.status(405).send("Method Not Allowed");
+            return;
+        }
+        const signature = req.headers["verif-hash"];
+        if (!signature || !verifyFlutterwaveSignature(signature)) {
+            console.warn("Invalid Flutterwave webhook signature");
+            res.status(401).send("Invalid signature");
+            return;
+        }
+        const payload = req.body;
+        const event = payload.event;
+        const data = payload.data;
+        console.log(`Received Flutterwave webhook: ${event}`, { id: data === null || data === void 0 ? void 0 : data.id, reference: data === null || data === void 0 ? void 0 : data.reference });
+        // Event names: "transfer.completed" or "transfer.failed"
+        if (event === "transfer.completed") {
+            await handleTransferSuccess({ reference: data.reference });
+        }
+        else if (event === "transfer.failed") {
+            await handleTransferFailed({ reference: data.reference, reason: data.complete_message || "Transfer failed" });
+        }
+        else {
+            console.log(`Unhandled Flutterwave event: ${event}`);
+        }
+        res.status(200).json({ received: true });
+    }
+    catch (error) {
+        console.error("Flutterwave webhook error:", error);
         res.status(200).json({ received: true, error: error.message });
     }
 });
@@ -354,36 +406,87 @@ async function handleOrderPayment(reference, amount, data) {
 async function handleTransferSuccess(data) {
     const reference = data.reference;
     console.log(`Transfer successful: ${reference}`);
-    // Update payout status if exists
-    const payoutQuery = await db.collection("payouts")
-        .where("transfer_reference", "==", reference)
-        .limit(1)
-        .get();
-    if (!payoutQuery.empty) {
-        await payoutQuery.docs[0].ref.update({
+    await db.runTransaction(async (transaction) => {
+        const payoutQuery = db.collection("payouts")
+            .where("transfer_reference", "==", reference)
+            .limit(1);
+        const payoutSnap = await transaction.get(payoutQuery);
+        if (payoutSnap.empty) {
+            console.warn(`No payout document found for successful transfer reference: ${reference}`);
+            return;
+        }
+        const payoutDoc = payoutSnap.docs[0];
+        // Update payout status to completed
+        transaction.update(payoutDoc.ref, {
             status: "completed",
             completed_at: admin.firestore.FieldValue.serverTimestamp(),
+            updated_at: admin.firestore.FieldValue.serverTimestamp()
         });
-    }
+        // Find and update corresponding wallet transaction
+        const walletTxQuery = db.collection("wallet_transactions")
+            .where("reference", "==", payoutDoc.data().reference)
+            .limit(1);
+        const walletTxSnap = await transaction.get(walletTxQuery);
+        if (!walletTxSnap.empty) {
+            transaction.update(walletTxSnap.docs[0].ref, {
+                status: "successful",
+            });
+        }
+    });
 }
 /**
  * Handle failed transfer (payout failed)
+ * Performs automatic vendor wallet refund atomically.
  */
 async function handleTransferFailed(data) {
     const reference = data.reference;
     console.error(`Transfer failed: ${reference}`, data);
-    // Update payout status
-    const payoutQuery = await db.collection("payouts")
-        .where("transfer_reference", "==", reference)
-        .limit(1)
-        .get();
-    if (!payoutQuery.empty) {
-        await payoutQuery.docs[0].ref.update({
-            status: "failed",
-            failure_reason: data.reason || "Unknown error",
-            failed_at: admin.firestore.FieldValue.serverTimestamp(),
+    await db.runTransaction(async (transaction) => {
+        var _a;
+        // Update payout status
+        const payoutQuery = db.collection("payouts")
+            .where("transfer_reference", "==", reference)
+            .limit(1);
+        const payoutSnap = await transaction.get(payoutQuery);
+        if (payoutSnap.empty) {
+            console.warn(`No payout document found for failed transfer reference: ${reference}`);
+            return;
+        }
+        const payoutDoc = payoutSnap.docs[0];
+        const payoutData = payoutDoc.data();
+        if (payoutData.status === "failed") {
+            console.log(`Payout ${payoutDoc.id} already marked as failed`);
+            return;
+        }
+        // Refund the vendor's wallet balance
+        const vendorRef = db.collection("vendors").doc(payoutData.vendor_id);
+        const vendorSnap = await transaction.get(vendorRef);
+        const currentBalance = ((_a = vendorSnap.data()) === null || _a === void 0 ? void 0 : _a.wallet_balance) || 0;
+        transaction.update(vendorRef, {
+            wallet_balance: currentBalance + payoutData.amount,
+            updated_at: admin.firestore.FieldValue.serverTimestamp()
         });
-    }
+        // Mark payout as failed
+        transaction.update(payoutDoc.ref, {
+            status: "failed",
+            failure_reason: data.reason || "Transfer failed (reported via webhook)",
+            failed_at: admin.firestore.FieldValue.serverTimestamp(),
+            updated_at: admin.firestore.FieldValue.serverTimestamp()
+        });
+        // Find and update corresponding wallet transaction
+        const walletTxQuery = db.collection("wallet_transactions")
+            .where("reference", "==", payoutData.reference)
+            .limit(1);
+        const walletTxSnap = await transaction.get(walletTxQuery);
+        if (!walletTxSnap.empty) {
+            transaction.update(walletTxSnap.docs[0].ref, {
+                status: "failed",
+                balance_after: currentBalance + payoutData.amount,
+                description: `Failed: ${data.reason || "Bank transfer failed"}`
+            });
+        }
+        console.log(`Successfully refunded ${payoutData.amount} to vendor ${payoutData.vendor_id} due to failed transfer ${reference}`);
+    });
 }
 /**
  * Handle subscription creation
@@ -551,12 +654,37 @@ exports.releaseEscrow = functions.https.onRequest(async (req, res) => {
                 status: "delivered", // Assuming release means delivered/completed
                 updated_at: admin.firestore.FieldValue.serverTimestamp()
             });
-            // Send SMS to Buyer (Customer) - Outside transaction or inside? 
-            // Better to do it after transaction, but we need data. 
-            // We can schedule it or just do it here implicitly if we had a trigger.
-            // Since this is an HTTP function, we can do it after the transaction block if we extract data, 
-            // OR just fire-and-forget inside via a promise (but await might simulate delay).
-            // Let's rely on retrieving buyer details.
+            // 7. Update Delivery Status (Sync)
+            const deliveryRef = db.collection("deliveries").where("order_id", "==", orderId).limit(1);
+            const deliverySnap = await transaction.get(deliveryRef);
+            if (!deliverySnap.empty) {
+                const deliveryDoc = deliverySnap.docs[0];
+                transaction.update(deliveryDoc.ref, {
+                    delivery_status: "delivered",
+                    actual_delivery_date: admin.firestore.FieldValue.serverTimestamp(),
+                    updated_at: admin.firestore.FieldValue.serverTimestamp()
+                });
+                // Add status history
+                const historyRef = db.collection("delivery_status_history").doc();
+                transaction.set(historyRef, {
+                    delivery_id: deliveryDoc.id,
+                    status: "delivered",
+                    location: "Delivered",
+                    notes: "Delivery confirmed and escrow released",
+                    updated_by: "system_escrow_release",
+                    created_at: admin.firestore.FieldValue.serverTimestamp()
+                });
+            }
+            // 8. Create escrow release record (audit trail)
+            const releaseRef = db.collection("escrow_releases").doc();
+            transaction.set(releaseRef, {
+                escrow_transaction_id: escrowDoc.id,
+                release_type: releaseType || "manual_buyer",
+                buyer_confirmed_delivery: true,
+                delivery_confirmed_at: admin.firestore.FieldValue.serverTimestamp(),
+                release_requested_by: callerUid,
+                created_at: admin.firestore.FieldValue.serverTimestamp()
+            });
         });
         // Post-transaction SMS (Safe to do here)
         try {
@@ -743,7 +871,9 @@ exports.onChatMessageNotifyRecipient = notifications.onChatMessageNotifyRecipien
 exports.verifyFlutterwavePayment = flw.verifyFlutterwavePayment;
 exports.createFlutterwaveVirtualAccount = flw.createFlutterwaveVirtualAccount;
 exports.createFlutterwaveSubaccount = flw.createFlutterwaveSubaccount;
-exports.processFlutterwaveWithdrawal = flw.processFlutterwaveWithdrawal;
+exports.requestFlutterwaveWithdrawal = flw.requestFlutterwaveWithdrawal;
+exports.approveFlutterwaveWithdrawal = flw.approveFlutterwaveWithdrawal;
+exports.rejectFlutterwaveWithdrawal = flw.rejectFlutterwaveWithdrawal;
 exports.getFlutterwaveBankList = flw.getFlutterwaveBankList;
 exports.resolveFlutterwaveAccount = flw.resolveFlutterwaveAccount;
 // Export Terminal Africa Functions

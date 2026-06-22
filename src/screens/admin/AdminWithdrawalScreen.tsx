@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent } from '../../components/ui/card';
-import { Search, Eye, DollarSign, Clock, CheckCircle, XCircle, Loader2, ArrowUpRight, Building } from 'lucide-react';
+import { Search, Eye, DollarSign, Clock, CheckCircle, XCircle, Loader2, ArrowUpRight, Building, Check, AlertCircle } from 'lucide-react';
 import { FirestoreService } from '../../services/firestore.service';
 import { logger } from '../../lib/logger';
+import { getFunctions, httpsCallable } from 'firebase/functions';
+import { app } from '../../lib/firebase.config';
 
 interface Payout {
     id: string;
@@ -30,6 +32,65 @@ export const AdminWithdrawalsScreen: React.FC = () => {
     const [searchQuery, setSearchQuery] = useState('');
     const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'processing' | 'completed' | 'failed'>('all');
     const [selectedPayout, setSelectedPayout] = useState<Payout | null>(null);
+    const [actionLoading, setActionLoading] = useState(false);
+    const [rejectionReason, setRejectionReason] = useState('');
+    const [showRejectInput, setShowRejectInput] = useState(false);
+
+    const handleApprovePayout = async (payoutId: string) => {
+        if (window.confirm('Are you sure you want to approve this withdrawal? This will trigger a bank transfer via Flutterwave.')) {
+            try {
+                setActionLoading(true);
+                const approvePayout = httpsCallable<any, any>(
+                    getFunctions(app),
+                    'approveFlutterwaveWithdrawal'
+                );
+                const result = await approvePayout({ payoutId });
+                const response = result.data;
+                if (response.success) {
+                    alert('Payout approved successfully and transfer initiated!');
+                    await loadPayouts();
+                    setSelectedPayout(null);
+                } else {
+                    alert(response.error || 'Failed to approve payout');
+                }
+            } catch (error: any) {
+                logger.error('Error approving payout', error);
+                alert(error.message || 'Error approving payout');
+            } finally {
+                setActionLoading(false);
+            }
+        }
+    };
+
+    const handleRejectPayout = async (payoutId: string) => {
+        if (!rejectionReason.trim()) {
+            alert('Please enter a reason for rejection.');
+            return;
+        }
+        try {
+            setActionLoading(true);
+            const rejectPayout = httpsCallable<any, any>(
+                getFunctions(app),
+                'rejectFlutterwaveWithdrawal'
+            );
+            const result = await rejectPayout({ payoutId, reason: rejectionReason });
+            const response = result.data;
+            if (response.success) {
+                alert('Payout rejected successfully and vendor refunded!');
+                await loadPayouts();
+                setSelectedPayout(null);
+                setRejectionReason('');
+                setShowRejectInput(false);
+            } else {
+                alert(response.error || 'Failed to reject payout');
+            }
+        } catch (error: any) {
+            logger.error('Error rejecting payout', error);
+            alert(error.message || 'Error rejecting payout');
+        } finally {
+            setActionLoading(false);
+        }
+    };
 
     useEffect(() => {
         loadPayouts();
@@ -384,7 +445,11 @@ export const AdminWithdrawalsScreen: React.FC = () => {
                                             Withdrawal Details
                                         </h2>
                                         <button
-                                            onClick={() => setSelectedPayout(null)}
+                                            onClick={() => {
+                                                setSelectedPayout(null);
+                                                setShowRejectInput(false);
+                                                setRejectionReason('');
+                                            }}
                                             className="p-2 hover:bg-neutral-100 rounded-lg"
                                         >
                                             <XCircle className="w-5 h-5 text-neutral-600" />
@@ -498,6 +563,74 @@ export const AdminWithdrawalsScreen: React.FC = () => {
                                                 )}
                                             </div>
                                         </div>
+
+                                        {/* Admin Action Section */}
+                                        {selectedPayout.status === 'pending' && (
+                                            <div className="border-t pt-4 space-y-3">
+                                                <h3 className="font-sans text-sm font-semibold text-neutral-700">
+                                                    Admin Actions
+                                                </h3>
+                                                {!showRejectInput ? (
+                                                    <div className="flex gap-3">
+                                                        <button
+                                                            onClick={() => handleApprovePayout(selectedPayout.id)}
+                                                            disabled={actionLoading}
+                                                            className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2 bg-green-700 hover:bg-green-800 text-white rounded-lg font-sans text-sm font-medium transition-colors disabled:opacity-50"
+                                                        >
+                                                            {actionLoading ? (
+                                                                <Loader2 className="w-4 h-4 animate-spin" />
+                                                            ) : (
+                                                                <Check className="w-4 h-4" />
+                                                            )}
+                                                            Approve & Transfer
+                                                        </button>
+                                                        <button
+                                                            onClick={() => setShowRejectInput(true)}
+                                                            disabled={actionLoading}
+                                                            className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-sans text-sm font-medium transition-colors disabled:opacity-50"
+                                                        >
+                                                            <XCircle className="w-4 h-4" />
+                                                            Reject & Refund
+                                                        </button>
+                                                    </div>
+                                                ) : (
+                                                    <div className="space-y-3">
+                                                        <div>
+                                                            <label className="font-sans text-xs text-neutral-600 mb-1 block">
+                                                                Reason for Rejection
+                                                            </label>
+                                                            <textarea
+                                                                value={rejectionReason}
+                                                                onChange={(e) => setRejectionReason(e.target.value)}
+                                                                placeholder="Enter reason..."
+                                                                rows={3}
+                                                                className="w-full p-2 border border-neutral-200 rounded-lg font-sans text-sm focus:outline-none focus:ring-2 focus:ring-red-600"
+                                                            />
+                                                        </div>
+                                                        <div className="flex gap-2">
+                                                            <button
+                                                                onClick={() => handleRejectPayout(selectedPayout.id)}
+                                                                disabled={actionLoading || !rejectionReason.trim()}
+                                                                className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-sans text-sm font-medium transition-colors disabled:opacity-50"
+                                                            >
+                                                                {actionLoading && <Loader2 className="w-4 h-4 animate-spin" />}
+                                                                Reject Request
+                                                            </button>
+                                                            <button
+                                                                onClick={() => {
+                                                                    setShowRejectInput(false);
+                                                                    setRejectionReason('');
+                                                                }}
+                                                                disabled={actionLoading}
+                                                                className="px-4 py-2 bg-neutral-100 hover:bg-neutral-200 text-neutral-700 rounded-lg font-sans text-sm font-medium transition-colors disabled:opacity-50"
+                                                            >
+                                                                Cancel
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                             </div>

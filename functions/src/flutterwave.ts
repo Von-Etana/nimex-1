@@ -235,26 +235,27 @@ export const createFlutterwaveSubaccount = functions.https.onCall(
     }
 );
 
-// ─── 5. Process Withdrawal (Transfer to Bank) ──────────────────────────────
+// ─── 5. Request Withdrawal (Create Pending Payout) ─────────────────────────
 
-export const processFlutterwaveWithdrawal = functions.https.onCall(
+export const requestFlutterwaveWithdrawal = functions.https.onCall(
     async (request: any) => {
         // 1. Verify Authentication
         if (!request.auth || !request.auth.uid) {
             throw new functions.https.HttpsError(
                 "unauthenticated",
-                "Authentication required to process withdrawal"
+                "Authentication required to request withdrawal"
             );
         }
         
         const vendorId = request.auth.uid;
         const data = request.data || request;
-        const { account_bank, account_number, amount, narration, reference } = data;
+        const { account_bank, bank_code, bank_name, account_number, amount, narration, reference } = data;
+        const finalBankCode = bank_code || account_bank;
 
-        if (!account_bank || !account_number || !amount) {
+        if (!finalBankCode || !account_number || !amount) {
             throw new functions.https.HttpsError(
                 "invalid-argument",
-                "account_bank, account_number, and amount are required"
+                "Bank code, account_number, and amount are required"
             );
         }
 
@@ -300,46 +301,138 @@ export const processFlutterwaveWithdrawal = functions.https.onCall(
                 transaction.set(payoutRef, {
                     vendor_id: vendorId,
                     amount: amount,
-                    bank_name: account_bank,
+                    bank_code: finalBankCode,
+                    bank_name: bank_name || finalBankCode,
                     account_number: account_number,
                     account_name: vendorData?.business_name || "Vendor",
-                    status: "processing",
+                    status: "pending",
                     reference: payoutReference,
-                    requested_at: admin.firestore.FieldValue.serverTimestamp()
+                    requested_at: admin.firestore.FieldValue.serverTimestamp(),
+                    created_at: new Date().toISOString()
                 });
 
                 // Create wallet transaction record
                 const walletTxRef = db.collection("wallet_transactions").doc();
                 transaction.set(walletTxRef, {
                     vendor_id: vendorId,
-                    type: "payout",
+                    type: "withdrawal",
                     amount: amount,
                     balance_after: currentBalance - amount,
                     reference: payoutReference,
-                    description: narration || "Withdrawal to bank account",
-                    status: "processing",
+                    description: narration || `Withdrawal to ${bank_name || finalBankCode} account`,
+                    status: "pending",
                     created_at: admin.firestore.FieldValue.serverTimestamp()
                 });
             });
 
-            // 3. Call Flutterwave API
+            return {
+                success: true,
+                data: {
+                    payoutId: payoutDocId,
+                    reference: payoutReference,
+                    status: "pending",
+                    amount: amount,
+                },
+            };
+        } catch (error: any) {
+            console.error("Flutterwave request withdrawal error:", error);
+            if (error instanceof functions.https.HttpsError) {
+                throw error;
+            }
+            throw new functions.https.HttpsError(
+                "internal",
+                error.message || "Failed to request withdrawal"
+            );
+        }
+    }
+);
+
+// ─── 5b. Approve Withdrawal (Trigger Payout via Flutterwave) ───────────────
+
+export const approveFlutterwaveWithdrawal = functions.https.onCall(
+    async (request: any) => {
+        // 1. Verify Authentication
+        if (!request.auth || !request.auth.uid) {
+            throw new functions.https.HttpsError(
+                "unauthenticated",
+                "Authentication required to approve withdrawal"
+            );
+        }
+
+        // 2. Verify Admin Role
+        const callerProfile = await db.collection("profiles").doc(request.auth.uid).get();
+        const isAdmin = callerProfile.exists && callerProfile.data()?.role === "admin";
+        if (!isAdmin) {
+            throw new functions.https.HttpsError(
+                "permission-denied",
+                "Only administrators can approve payouts."
+            );
+        }
+
+        const data = request.data || request;
+        const { payoutId } = data;
+
+        if (!payoutId) {
+            throw new functions.https.HttpsError(
+                "invalid-argument",
+                "payoutId is required"
+            );
+        }
+
+        let payoutData: any = null;
+
+        try {
+            // 3. Update Payout and Wallet Transaction to 'processing'
+            await db.runTransaction(async (transaction) => {
+                const payoutRef = db.collection("payouts").doc(payoutId);
+                const payoutSnap = await transaction.get(payoutRef);
+
+                if (!payoutSnap.exists) {
+                    throw new functions.https.HttpsError("not-found", "Payout request not found");
+                }
+
+                payoutData = payoutSnap.data();
+                if (payoutData.status !== "pending") {
+                    throw new functions.https.HttpsError(
+                        "failed-precondition",
+                        `Payout request is not pending (current status: ${payoutData.status})`
+                    );
+                }
+
+                // Update payout status to processing
+                transaction.update(payoutRef, {
+                    status: "processing",
+                    approved_at: admin.firestore.FieldValue.serverTimestamp(),
+                    approved_by: request.auth.uid,
+                });
+
+                // Find corresponding wallet transaction
+                const walletTxQuery = db.collection("wallet_transactions")
+                    .where("reference", "==", payoutData.reference)
+                    .limit(1);
+                const walletTxSnap = await transaction.get(walletTxQuery);
+
+                if (!walletTxSnap.empty) {
+                    transaction.update(walletTxSnap.docs[0].ref, {
+                        status: "processing",
+                    });
+                }
+            });
+
+            // 4. Call Flutterwave Transfers API
             const client = getFlwClient();
             const response = await client.post("/transfers", {
-                account_bank,
-                account_number,
-                amount,
-                narration: narration || "NIMEX Vendor Withdrawal",
+                account_bank: payoutData.bank_code || payoutData.bank_name,
+                account_number: payoutData.account_number,
+                amount: payoutData.amount,
+                narration: `NIMEX Payout - ${payoutData.reference}`,
                 currency: "NGN",
-                reference: payoutReference,
+                reference: payoutData.reference,
             });
 
             const txData = response.data.data;
-            
-            // Note: We leave the status as 'processing' because Flutterwave will send a webhook 
-            // ('transfer.success' or 'transfer.failed') to finalize the status.
-            // If the webhook fails, we've at least deducted the balance to be safe, 
-            // and an admin can reconcile. We update the transfer reference here.
-            await db.collection("payouts").doc(payoutDocId).update({
+
+            await db.collection("payouts").doc(payoutId).update({
                 transfer_reference: txData.reference,
                 transfer_id: txData.id,
                 updated_at: admin.firestore.FieldValue.serverTimestamp()
@@ -352,34 +445,48 @@ export const processFlutterwaveWithdrawal = functions.https.onCall(
                     reference: txData.reference,
                     status: txData.status,
                     amount: txData.amount,
-                    narration: txData.narration,
-                    complete_message: txData.complete_message,
                 },
             };
         } catch (error: any) {
-            console.error("Flutterwave withdrawal error:", error?.response?.data || error.message);
-            
-            // 4. Refund if the API call failed immediately
-            if (payoutDocId) {
+            console.error("Flutterwave payout approval error:", error?.response?.data || error.message);
+
+            // 5. Refund if the API call failed immediately
+            if (payoutData) {
                 try {
                     await db.runTransaction(async (transaction) => {
-                        const vendorRef = db.collection("vendors").doc(vendorId);
-                        const payoutRef = db.collection("payouts").doc(payoutDocId);
+                        const vendorRef = db.collection("vendors").doc(payoutData.vendor_id);
+                        const payoutRef = db.collection("payouts").doc(payoutId);
                         
+                        const vendorSnap = await transaction.get(vendorRef);
+                        const currentBalance = vendorSnap.data()?.wallet_balance || 0;
+
                         transaction.update(vendorRef, {
-                            wallet_balance: admin.firestore.FieldValue.increment(amount),
+                            wallet_balance: currentBalance + payoutData.amount,
                             updated_at: admin.firestore.FieldValue.serverTimestamp()
                         });
                         
                         transaction.update(payoutRef, {
                             status: "failed",
-                            failure_reason: error?.response?.data?.message || error.message,
+                            failure_reason: error?.response?.data?.message || error.message || "Failed to initiate Flutterwave transfer",
                             updated_at: admin.firestore.FieldValue.serverTimestamp()
                         });
+
+                        // Update wallet transaction to failed
+                        const walletTxQuery = db.collection("wallet_transactions")
+                            .where("reference", "==", payoutData.reference)
+                            .limit(1);
+                        const walletTxSnap = await transaction.get(walletTxQuery);
+
+                        if (!walletTxSnap.empty) {
+                            transaction.update(walletTxSnap.docs[0].ref, {
+                                status: "failed",
+                                balance_after: currentBalance + payoutData.amount,
+                            });
+                        }
                     });
-                    console.log(`Refunded ${amount} to vendor ${vendorId} after failed transfer API call`);
+                    console.log(`Refunded ${payoutData.amount} to vendor ${payoutData.vendor_id} after failed transfer API call`);
                 } catch (refundError) {
-                    console.error("CRITICAL: Failed to refund vendor after API error:", refundError);
+                    console.error("CRITICAL: Failed to refund vendor after approval API error:", refundError);
                 }
             }
 
@@ -389,7 +496,107 @@ export const processFlutterwaveWithdrawal = functions.https.onCall(
 
             throw new functions.https.HttpsError(
                 "internal",
-                error?.response?.data?.message || error.message || "Failed to process withdrawal"
+                error?.response?.data?.message || error.message || "Failed to process withdrawal approval"
+            );
+        }
+    }
+);
+
+// ─── 5c. Reject Withdrawal (Refund Vendor Balance) ─────────────────────────
+
+export const rejectFlutterwaveWithdrawal = functions.https.onCall(
+    async (request: any) => {
+        // 1. Verify Authentication
+        if (!request.auth || !request.auth.uid) {
+            throw new functions.https.HttpsError(
+                "unauthenticated",
+                "Authentication required to reject withdrawal"
+            );
+        }
+
+        // 2. Verify Admin Role
+        const callerProfile = await db.collection("profiles").doc(request.auth.uid).get();
+        const isAdmin = callerProfile.exists && callerProfile.data()?.role === "admin";
+        if (!isAdmin) {
+            throw new functions.https.HttpsError(
+                "permission-denied",
+                "Only administrators can reject payouts."
+            );
+        }
+
+        const data = request.data || request;
+        const { payoutId, reason } = data;
+
+        if (!payoutId) {
+            throw new functions.https.HttpsError(
+                "invalid-argument",
+                "payoutId is required"
+            );
+        }
+
+        try {
+            await db.runTransaction(async (transaction) => {
+                const payoutRef = db.collection("payouts").doc(payoutId);
+                const payoutSnap = await transaction.get(payoutRef);
+
+                if (!payoutSnap.exists) {
+                    throw new functions.https.HttpsError("not-found", "Payout request not found");
+                }
+
+                const payoutData = payoutSnap.data();
+                if (!payoutData) {
+                    throw new functions.https.HttpsError("not-found", "Payout request data is empty");
+                }
+                if (payoutData.status !== "pending") {
+                    throw new functions.https.HttpsError(
+                        "failed-precondition",
+                        `Payout request is not pending (current status: ${payoutData.status})`
+                    );
+                }
+
+                // 3. Refund the vendor's wallet balance
+                const vendorRef = db.collection("vendors").doc(payoutData.vendor_id);
+                const vendorSnap = await transaction.get(vendorRef);
+                const currentBalance = vendorSnap.data()?.wallet_balance || 0;
+
+                transaction.update(vendorRef, {
+                    wallet_balance: currentBalance + payoutData.amount,
+                    updated_at: admin.firestore.FieldValue.serverTimestamp()
+                });
+
+                // Update payout status to rejected
+                transaction.update(payoutRef, {
+                    status: "failed",
+                    failure_reason: reason || "Rejected by administrator",
+                    rejected_at: admin.firestore.FieldValue.serverTimestamp(),
+                    rejected_by: request.auth.uid,
+                    updated_at: admin.firestore.FieldValue.serverTimestamp()
+                });
+
+                // Find corresponding wallet transaction
+                const walletTxQuery = db.collection("wallet_transactions")
+                    .where("reference", "==", payoutData.reference)
+                    .limit(1);
+                const walletTxSnap = await transaction.get(walletTxQuery);
+
+                if (!walletTxSnap.empty) {
+                    transaction.update(walletTxSnap.docs[0].ref, {
+                        status: "failed",
+                        balance_after: currentBalance + payoutData.amount,
+                        description: `Rejected: ${reason || "Withdrawal rejected by admin"}`
+                    });
+                }
+            });
+
+            return { success: true };
+        } catch (error: any) {
+            console.error("Flutterwave payout rejection error:", error);
+            if (error instanceof functions.https.HttpsError) {
+                throw error;
+            }
+            throw new functions.https.HttpsError(
+                "internal",
+                error.message || "Failed to process withdrawal rejection"
             );
         }
     }

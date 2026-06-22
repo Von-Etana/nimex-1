@@ -15,6 +15,7 @@ import {
     isSignInWithEmailLink,
     signInWithEmailLink,
     ActionCodeSettings,
+    fetchSignInMethodsForEmail,
     User,
     UserCredential,
     AuthError,
@@ -177,13 +178,33 @@ export class FirebaseAuthService {
 
     /**
      * Send password reset email
+     * Passes actionCodeSettings so the reset link redirects back to the
+     * correct app URL instead of the default firebaseapp.com domain.
      */
     static async sendPasswordReset(email: string): Promise<{ error: Error | null }> {
         try {
-            await sendPasswordResetEmail(auth, email);
+            // Determine the app base URL from env or fall back to current origin
+            const appUrl =
+                (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_APP_URL) ||
+                (typeof window !== 'undefined' ? window.location.origin : 'https://nimex.ng');
+
+            const actionCodeSettings: ActionCodeSettings = {
+                // After the user clicks the reset link, they will be redirected to this URL.
+                url: `${appUrl}/login`,
+                handleCodeInApp: false,
+            };
+
+            await sendPasswordResetEmail(auth, email, actionCodeSettings);
             logger.info(`Password reset email sent to: ${email}`);
             return { error: null };
-        } catch (error) {
+        } catch (error: any) {
+            // Firebase throws auth/user-not-found when the email doesn't exist.
+            // For security we swallow it so we don't reveal whether an account exists;
+            // the UI should still show a success message.
+            if (error?.code === 'auth/user-not-found') {
+                logger.warn(`Password reset attempted for non-existent email: ${email}`);
+                return { error: null };
+            }
             logger.error('Error sending password reset email', error);
             return { error: error as Error };
         }

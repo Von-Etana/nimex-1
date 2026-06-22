@@ -52,6 +52,7 @@ class OrderService {
     try {
       const orderNumber = `NIMEX-${Date.now()}-${Math.random().toString(36).substring(7).toUpperCase()}`;
       const orderId = `order_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      let totalAmount = 0;
 
       logger.info('Starting transaction for order creation', { itemCount: request.items.length });
 
@@ -82,13 +83,14 @@ class OrderService {
           
           // Verify stock before proceeding
           if ((data.stock_quantity || 0) < item.quantity) {
-             console.warn(`[OrderService] Overselling warning for ${item.productTitle}. Available: ${data.stock_quantity || 0}, Requested: ${item.quantity}`);
+             throw new Error(`Insufficient stock for ${item.productTitle}. Available: ${data.stock_quantity || 0}, Requested: ${item.quantity}`);
           }
 
           calculatedSubtotal += dbPrice * item.quantity;
         }
 
         const calculatedTotal = calculatedSubtotal + request.deliveryCost;
+        totalAmount = calculatedTotal;
 
         // 3. Write Order Document
         const orderRef = doc(db, COLLECTIONS.ORDERS, orderId);
@@ -178,6 +180,12 @@ class OrderService {
         throw new Error('Order not found');
       }
 
+      // Prevent duplicate escrow creation or processing if already paid
+      if (order.payment_status === 'paid' && paymentStatus === 'paid') {
+        logger.info('Order is already marked as paid. Skipping escrow creation.', { orderId });
+        return { success: true };
+      }
+
       await FirestoreService.runTransaction(async (transaction) => {
         // Update order status
         const orderRef = doc(db, COLLECTIONS.ORDERS, orderId);
@@ -243,94 +251,13 @@ class OrderService {
 
   async confirmDelivery(request: ConfirmDeliveryRequest): Promise<{ success: boolean; error?: string }> {
     try {
-      // Find delivery record
-      const deliveries = await FirestoreService.getDocuments(COLLECTIONS.DELIVERIES, {
-        filters: [
-          { field: 'order_id', operator: '==', value: request.orderId },
-          { field: 'buyer_id', operator: '==', value: request.buyerId }
-        ],
-        limitCount: 1
+      // Delegate to releaseEscrow secure cloud function which performs all updates atomically
+      return await this.releaseEscrow({
+        orderId: request.orderId,
+        releaseType: 'manual_buyer',
+        releaseBy: request.buyerId,
+        notes: 'Delivery confirmed by buyer'
       });
-
-      if (deliveries.length === 0) {
-        throw new Error('Delivery record not found');
-      }
-
-      const delivery = deliveries[0];
-
-      // Find Escrow Record
-      const escrowTransactions = await FirestoreService.getDocuments(COLLECTIONS.ESCROW_TRANSACTIONS, {
-        filters: [{ field: 'order_id', operator: '==', value: request.orderId }],
-        limitCount: 1
-      });
-
-      const escrowTransaction = escrowTransactions.length > 0 ? escrowTransactions[0] : null;
-
-      await FirestoreService.runTransaction(async (transaction) => {
-        // Read the vendor document within the transaction FIRST (all reads must come before writes)
-        let vendorData = null;
-        let vendorRef = null;
-        if (escrowTransaction && escrowTransaction.vendor_id) {
-          vendorRef = doc(db, COLLECTIONS.VENDORS, escrowTransaction.vendor_id);
-          const vendorSnap = await transaction.get(vendorRef);
-          if (vendorSnap.exists()) {
-            vendorData = vendorSnap.data();
-          }
-        }
-
-        // Update delivery status
-        const deliveryRef = doc(db, COLLECTIONS.DELIVERIES, delivery.id);
-        transaction.update(deliveryRef, {
-          delivery_status: 'delivered',
-          actual_delivery_date: Timestamp.now(),
-        });
-
-        // Release Escrow
-        if (escrowTransaction) {
-          const escrowRef = doc(db, COLLECTIONS.ESCROW_TRANSACTIONS, escrowTransaction.id);
-          transaction.update(escrowRef, {
-            status: 'released',
-            released_at: Timestamp.now(),
-            release_reason: 'delivery_confirmed_by_buyer'
-          });
-
-          // Credit Vendor Wallet
-          if (vendorData && vendorRef) {
-            const newBalance = (vendorData.wallet_balance || 0) + escrowTransaction.vendor_amount;
-            transaction.update(vendorRef, {
-              wallet_balance: newBalance,
-              updated_at: Timestamp.now()
-            });
-
-            // Log Wallet Transaction
-            const walletTxId = `wtx_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-            const walletTxRef = doc(db, 'wallet_transactions', walletTxId);
-            transaction.set(walletTxRef, {
-              vendor_id: escrowTransaction.vendor_id,
-              type: 'sale',
-              amount: escrowTransaction.vendor_amount,
-              balance_after: newBalance,
-              reference: escrowTransaction.id,
-              description: `Earnings from Order #${request.orderId}`,
-              status: 'completed',
-              created_at: Timestamp.now()
-            });
-          }
-        }
-
-        // Create escrow release record (audit trail)
-        const releaseId = `release_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-        const releaseRef = doc(db, 'escrow_releases', releaseId);
-        transaction.set(releaseRef, {
-          escrow_transaction_id: escrowTransaction?.id || 'unknown',
-          release_type: 'manual_buyer',
-          buyer_confirmed_delivery: true,
-          delivery_confirmed_at: Timestamp.now(),
-          release_requested_by: request.buyerId,
-        });
-      });
-
-      return { success: true };
     } catch (error) {
       logger.error('Failed to confirm delivery', error);
       return {

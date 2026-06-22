@@ -151,7 +151,7 @@ export const OrderTrackingScreen: React.FC = () => {
     try {
       const result = await orderService.confirmDelivery({
         orderId,
-        buyerId: user.id,
+        buyerId: user.uid,
       });
 
       if (result.success) {

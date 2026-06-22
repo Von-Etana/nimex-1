@@ -364,7 +364,8 @@ export const WalletScreen: React.FC = () => {
         amount,
         account.bank_code,
         account.account_number,
-        'Withdrawal from Nimex'
+        'Withdrawal from Nimex',
+        account.bank_name
       );
 
       if (result.success) {
