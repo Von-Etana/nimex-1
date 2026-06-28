@@ -15,9 +15,8 @@ class APIKeyTester {
     // Test Firebase
     results.push(await this.testFirebase());
 
-    // Twilio is disabled
-    // results.push(await this.testTwilio());
-    // results.push(await this.testSendGrid());
+    // Test Resend email service
+    results.push(await this.testResend());
 
     // Test Google Maps
     results.push(await this.testGoogleMaps());
@@ -74,12 +73,30 @@ class APIKeyTester {
     };
   }
 
-  private async testSendGrid(): Promise<APIKeyTestResult> {
-    // SendGrid/Twilio integration is disabled
+  private async testResend(): Promise<APIKeyTestResult> {
+    const apiKey = import.meta.env.VITE_RESEND_API_KEY;
+
+    if (!apiKey) {
+      return {
+        service: 'resend',
+        status: 'missing_config',
+        error: 'Missing VITE_RESEND_API_KEY environment variable',
+      };
+    }
+
+    const isValidFormat = apiKey.startsWith('re_') || /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(apiKey);
+    if (!isValidFormat) {
+      return {
+        service: 'resend',
+        status: 'failed',
+        error: 'VITE_RESEND_API_KEY does not appear to be a valid Resend API key (should start with re_ or be a valid UUID)',
+      };
+    }
+
     return {
-      service: 'sendgrid',
-      status: 'missing_config',
-      error: 'SendGrid integration is disabled',
+      service: 'resend',
+      status: 'success',
+      details: { keyPrefix: apiKey.substring(0, 6) + '...' },
     };
   }
 

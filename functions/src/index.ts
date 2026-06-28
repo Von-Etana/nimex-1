@@ -8,9 +8,9 @@ import * as dotenv from "dotenv";
 // Load environment variables
 dotenv.config();
 
-// Initialize Firebase Admin
-admin.initializeApp();
-const db = admin.firestore();
+// Initialize Firebase Admin safely
+const app = admin.apps.length ? admin.app() : admin.initializeApp();
+const db = app.firestore();
 
 // CORS Handler - Restrict to known origins
 const allowedOrigins = [
@@ -23,18 +23,19 @@ const allowedOrigins = [
 const corsHandler = cors({ origin: allowedOrigins });
 
 // Configuration
-const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY || functions.config().paystack?.secret_key;
-if (!PAYSTACK_SECRET_KEY) {
-    console.error("CRITICAL: PAYSTACK_SECRET_KEY is not configured. Payment functions will fail.");
-}
-
-const paystackClient = axios.create({
-    baseURL: "https://api.paystack.co",
-    headers: {
-        Authorization: `Bearer ${PAYSTACK_SECRET_KEY}`,
-        "Content-Type": "application/json",
-    },
-});
+const getPaystackClient = () => {
+    const key = process.env.PAYSTACK_SECRET_KEY || functions.config().paystack?.secret_key;
+    if (!key) {
+        console.error("CRITICAL: PAYSTACK_SECRET_KEY is not configured. Payment functions will fail.");
+    }
+    return axios.create({
+        baseURL: "https://api.paystack.co",
+        headers: {
+            Authorization: `Bearer ${key}`,
+            "Content-Type": "application/json",
+        },
+    });
+};
 
 // Helper: Verify Firebase Auth Token from Authorization header
 async function verifyAuthToken(req: functions.https.Request): Promise<admin.auth.DecodedIdToken> {
@@ -68,8 +69,9 @@ const wrapCors = (req: functions.https.Request, res: any, handler: () => Promise
  * Verify Paystack Webhook Signature
  */
 const verifyPaystackSignature = (payload: string, signature: string): boolean => {
+    const key = process.env.PAYSTACK_SECRET_KEY || functions.config().paystack?.secret_key;
     const hash = crypto
-        .createHmac("sha512", PAYSTACK_SECRET_KEY)
+        .createHmac("sha512", key || "")
         .update(payload)
         .digest("hex");
     return hash === signature;
@@ -570,7 +572,7 @@ export const initializePayment = functions.https.onRequest(async (req, res) => {
             return;
         }
 
-        const response = await paystackClient.post("/transaction/initialize", {
+        const response = await getPaystackClient().post("/transaction/initialize", {
             email,
             amount: amount.toString(),
             reference,
@@ -597,7 +599,7 @@ export const verifyPayment = functions.https.onRequest(async (req, res) => {
             return;
         }
 
-        const response = await paystackClient.get(`/transaction/verify/${reference}`);
+        const response = await getPaystackClient().get(`/transaction/verify/${reference}`);
         const data = response.data.data;
 
         if (data.status === "success") {
@@ -891,8 +893,8 @@ export const sendTermiiSms = functions.https.onCall(async (request: any) => {
 });
 
 /**
- * Send Email (SendGrid) - Callable Function
- * Secure endpoint to send emails from client
+ * Send Email (Resend) - Callable Function
+ * Secure endpoint to send transactional emails from the client via the Resend API.
  */
 export const sendEmail = functions.https.onCall(async (request: any) => {
     if (!request.auth) {
@@ -906,29 +908,147 @@ export const sendEmail = functions.https.onCall(async (request: any) => {
         throw new functions.https.HttpsError('invalid-argument', 'Recipient (to), subject, and html content are required');
     }
 
-    const apiKey = process.env.SENDGRID_API_KEY || functions.config().sendgrid?.api_key;
+    const apiKey = process.env.RESEND_API_KEY || functions.config().resend?.api_key;
 
     if (!apiKey) {
-        throw new functions.https.HttpsError('failed-precondition', 'SendGrid API key not configured');
+        throw new functions.https.HttpsError('failed-precondition', 'Resend API key not configured. Set RESEND_API_KEY in environment variables.');
     }
 
+    const fromEmail = process.env.RESEND_FROM_EMAIL || 'NIMEX <noreply@nimex.ng>';
+
     try {
-        await axios.post('https://api.sendgrid.com/v3/mail/send', {
-            personalizations: [{ to: [{ email: to }] }],
-            from: { email: 'noreply@nimex.ng', name: 'NIMEX' },
+        await axios.post('https://api.resend.com/emails', {
+            from: fromEmail,
+            to: Array.isArray(to) ? to : [to],
             subject,
-            content: [{ type: 'text/html', value: html }]
+            html,
         }, {
             headers: {
                 'Authorization': `Bearer ${apiKey}`,
-                'Content-Type': 'application/json'
-            }
+                'Content-Type': 'application/json',
+            },
         });
 
         return { success: true };
     } catch (error: any) {
-        console.error("SendGrid error:", error.response?.data || error.message);
-        throw new functions.https.HttpsError('internal', "Failed to send email via SendGrid");
+        console.error("Resend error:", error.response?.data || error.message);
+        throw new functions.https.HttpsError('internal', "Failed to send email via Resend");
+    }
+});
+
+
+/**
+ * Send Branded Password Reset Email via Resend
+ * Uses Firebase Admin SDK to generate the reset link, then delivers a
+ * NIMEX-branded HTML email via Resend instead of Firebase's default email.
+ *
+ * This function is PUBLIC (no auth required) because the user requesting
+ * a reset is by definition not logged in.
+ */
+export const sendPasswordResetEmailCustom = functions.https.onCall(async (request: any) => {
+    const data = request.data || request;
+    const { email } = data;
+
+    if (!email || typeof email !== 'string') {
+        throw new functions.https.HttpsError('invalid-argument', 'A valid email address is required.');
+    }
+
+    const apiKey     = process.env.RESEND_API_KEY     || functions.config().resend?.api_key;
+    const fromEmail  = process.env.RESEND_FROM_EMAIL  || 'NIMEX <noreply@nimex.ng>';
+    const appUrl     = (process.env.APP_URL           || 'https://nimex.ng').replace(/\/$/, '');
+
+    if (!apiKey) {
+        // Fall through gracefully — Firebase will send its own default reset email as a backup
+        console.warn('RESEND_API_KEY not configured; falling back to Firebase default reset email');
+        throw new functions.https.HttpsError('failed-precondition', 'Resend API key not configured.');
+    }
+
+    try {
+        // Generate the one-time Firebase password reset link via Admin SDK
+        const resetLink = await admin.auth().generatePasswordResetLink(email, {
+            url: `${appUrl}/reset-password`,
+            handleCodeInApp: false,
+        });
+
+        const year = new Date().getFullYear();
+
+        const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Reset Your NIMEX Password</title>
+</head>
+<body style="margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background-color:#f8fafc;">
+  <div style="max-width:600px;margin:0 auto;padding:40px 20px;">
+    <div style="background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 4px 6px rgba(0,0,0,0.08);">
+
+      <!-- Header -->
+      <div style="background:linear-gradient(135deg,#006400 0%,#008000 100%);padding:36px 30px;text-align:center;">
+        <h1 style="color:#ffffff;margin:0;font-size:30px;letter-spacing:-0.5px;">NIMEX</h1>
+        <p style="color:rgba(255,255,255,0.85);margin:8px 0 0;font-size:15px;">Nigeria's Trusted Marketplace</p>
+      </div>
+
+      <!-- Body -->
+      <div style="padding:36px 30px;">
+        <h2 style="color:#1e293b;margin:0 0 12px;font-size:22px;">Reset Your Password</h2>
+        <p style="color:#475569;margin:0 0 24px;line-height:1.6;font-size:15px;">
+          We received a request to reset the password for your NIMEX account associated with this email address.
+          Click the button below to choose a new password.
+        </p>
+
+        <div style="text-align:center;margin:32px 0;">
+          <a href="${resetLink}"
+             style="display:inline-block;background:#006400;color:#ffffff;padding:15px 36px;border-radius:8px;text-decoration:none;font-weight:600;font-size:16px;letter-spacing:0.2px;">
+            Reset Password
+          </a>
+        </div>
+
+        <p style="color:#64748b;font-size:14px;line-height:1.6;margin:0 0 12px;">
+          This link will expire in <strong>1 hour</strong>. If you didn't request a password reset, you can safely ignore this email — your password will remain unchanged.
+        </p>
+
+        <div style="background:#f1f5f9;border-radius:8px;padding:16px;margin-top:24px;">
+          <p style="color:#64748b;font-size:12px;margin:0 0 6px;">Or copy and paste this link into your browser:</p>
+          <p style="color:#006400;font-size:12px;margin:0;word-break:break-all;">${resetLink}</p>
+        </div>
+      </div>
+
+      <!-- Footer -->
+      <div style="background:#f8fafc;padding:20px 30px;text-align:center;border-top:1px solid #e2e8f0;">
+        <p style="margin:0;color:#94a3b8;font-size:13px;">
+          Need help? Contact us at
+          <a href="mailto:support@nimex.ng" style="color:#006400;text-decoration:none;">support@nimex.ng</a>
+        </p>
+        <p style="margin:8px 0 0;color:#cbd5e1;font-size:12px;">&copy; ${year} NIMEX. All rights reserved.</p>
+      </div>
+    </div>
+  </div>
+</body>
+</html>`;
+
+        await axios.post('https://api.resend.com/emails', {
+            from: fromEmail,
+            to:   [email],
+            subject: 'Reset Your NIMEX Password',
+            html,
+        }, {
+            headers: {
+                'Authorization':  `Bearer ${apiKey}`,
+                'Content-Type':   'application/json',
+            },
+        });
+
+        console.log(`Password reset email sent via Resend to: ${email}`);
+        return { success: true };
+    } catch (error: any) {
+        // auth/user-not-found — don't reveal whether the account exists
+        if (error?.errorInfo?.code === 'auth/user-not-found') {
+            console.info(`Password reset requested for non-existent email (silenced): ${email}`);
+            return { success: true };
+        }
+        console.error('sendPasswordResetEmailCustom error:', error.response?.data || error.message);
+        throw new functions.https.HttpsError('internal', 'Failed to send password reset email.');
     }
 });
 

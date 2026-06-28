@@ -8,6 +8,7 @@ import {
     signInWithEmailAndPassword,
     signOut as firebaseSignOut,
     sendPasswordResetEmail,
+    confirmPasswordReset,
     sendEmailVerification,
     updateProfile,
     signInWithPopup,
@@ -21,6 +22,8 @@ import {
     AuthError,
 } from 'firebase/auth';
 import { auth, GoogleAuthProvider } from '../lib/firebase.config';
+import { functions } from '../lib/firebase';
+import { httpsCallable } from 'firebase/functions';
 import { FirestoreService } from './firestore.service';
 import { COLLECTIONS } from '../lib/collections';
 import { logger } from '../lib/logger';
@@ -188,14 +191,31 @@ export class FirebaseAuthService {
                 (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_APP_URL) ||
                 (typeof window !== 'undefined' ? window.location.origin : 'https://nimex.ng');
 
+            // Attempt to send a NIMEX-branded reset email via the Resend Cloud Function.
+            // If the function is unavailable (e.g. key not yet configured), fall back to
+            // Firebase's built-in sendPasswordResetEmail so the flow never breaks.
+            try {
+                const sendResetFn = httpsCallable(functions, 'sendPasswordResetEmailCustom');
+                await sendResetFn({ email });
+                logger.info(`Branded password reset email sent via Resend to: ${email}`);
+                return { error: null };
+            } catch (fnError: any) {
+                // failed-precondition = Resend key not configured; fall back silently
+                if (fnError?.code !== 'functions/failed-precondition') {
+                    logger.warn('Cloud Function reset email failed, falling back to Firebase email:', fnError?.message);
+                }
+            }
+
+            // Fallback: Firebase built-in email (noreply@firebase.com)
             const actionCodeSettings: ActionCodeSettings = {
-                // After the user clicks the reset link, they will be redirected to this URL.
-                url: `${appUrl}/login`,
+                // After Firebase verifies the oobCode it redirects the user here.
+                // This MUST point to the /reset-password page so the user can enter a new password.
+                url: `${appUrl}/reset-password`,
                 handleCodeInApp: false,
             };
 
             await sendPasswordResetEmail(auth, email, actionCodeSettings);
-            logger.info(`Password reset email sent to: ${email}`);
+            logger.info(`Fallback password reset email sent (Firebase) to: ${email}`);
             return { error: null };
         } catch (error: any) {
             // Firebase throws auth/user-not-found when the email doesn't exist.
@@ -206,6 +226,24 @@ export class FirebaseAuthService {
                 return { error: null };
             }
             logger.error('Error sending password reset email', error);
+            return { error: error as Error };
+        }
+    }
+
+    /**
+     * Confirm password reset using the oobCode from the reset email link.
+     * Call this on the /reset-password page after the user enters their new password.
+     */
+    static async confirmReset(
+        oobCode: string,
+        newPassword: string
+    ): Promise<{ error: Error | null }> {
+        try {
+            await confirmPasswordReset(auth, oobCode, newPassword);
+            logger.info('Password reset confirmed successfully');
+            return { error: null };
+        } catch (error: any) {
+            logger.error('Error confirming password reset', error);
             return { error: error as Error };
         }
     }

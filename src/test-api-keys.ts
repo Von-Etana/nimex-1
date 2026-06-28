@@ -15,10 +15,7 @@ console.log('');
 
 // Set global environment variables for the entire process
 process.env.VITE_CLERK_PUBLISHABLE_KEY = process.env.VITE_CLERK_PUBLISHABLE_KEY || '';
-process.env.VITE_TWILIO_ACCOUNT_SID = process.env.VITE_TWILIO_ACCOUNT_SID || '';
-process.env.VITE_TWILIO_API_KEY = process.env.VITE_TWILIO_API_KEY || '';
-process.env.VITE_TWILIO_API_SECRET = process.env.VITE_TWILIO_API_SECRET || '';
-process.env.VITE_TWILIO_PHONE_NUMBER = process.env.VITE_TWILIO_PHONE_NUMBER || '';
+process.env.VITE_RESEND_API_KEY = process.env.VITE_RESEND_API_KEY || '';
 
 import { apiKeyTester } from './services/apiKeyTester';
 import { databaseTester } from './services/databaseTester';

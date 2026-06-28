@@ -6,6 +6,8 @@ import type { Order, OrderItem, Vendor } from '../types/firestore';
 import { notificationService } from './notificationService';
 import { auth, db } from '../lib/firebase.config';
 import { doc } from 'firebase/firestore';
+import { emailNotificationService } from './emailNotificationService';
+
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:5001/anima-project/us-central1'; // Default to local emulator for dev, or cloud url
 
@@ -146,6 +148,17 @@ class OrderService {
           orderNumber,
           totalAmount
         );
+
+        // Fetch vendor profile to send new order notification email
+        const vendorProfile = await FirestoreService.getDocument<any>(COLLECTIONS.PROFILES, request.vendorId);
+        if (vendorProfile && vendorProfile.email) {
+          emailNotificationService.sendVendorNewOrderEmail(
+            vendorProfile.email,
+            vendorProfile.full_name || 'Vendor',
+            orderNumber,
+            totalAmount
+          ).catch(e => logger.warn('Failed to send vendor order email', e));
+        }
       } catch (notifyError) {
         logger.warn('Failed to notify vendor about new order, but order was created successfully', notifyError);
       }
@@ -237,6 +250,31 @@ class OrderService {
           order.order_number,
           'confirmed'
         );
+
+        // Send order confirmation email to buyer (non-blocking)
+        try {
+          const buyerProfile = await FirestoreService.getDocument<any>(COLLECTIONS.PROFILES, order.buyer_id);
+          const itemsData = await FirestoreService.getDocuments<any>(COLLECTIONS.ORDER_ITEMS, {
+            filters: [{ field: 'order_id', operator: '==', value: orderId }]
+          });
+
+          if (buyerProfile && buyerProfile.email && itemsData) {
+            const mappedItems = itemsData.map(item => ({
+              title: item.product_title || item.title || 'Product',
+              quantity: item.quantity || 1,
+              price: item.unit_price || item.price || 0
+            }));
+
+            emailNotificationService.sendOrderConfirmation(
+              buyerProfile.email,
+              order.order_number,
+              order.total_amount,
+              mappedItems
+            ).catch(e => logger.warn('Failed to send buyer order confirmation email', e));
+          }
+        } catch (emailErr) {
+          logger.warn('Failed to prepare order confirmation email', emailErr);
+        }
       }
 
       return { success: true };

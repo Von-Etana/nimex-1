@@ -435,6 +435,47 @@ export const VendorAccountScreen: React.FC = () => {
     } finally {
       setSaving(false);
     }
+  const handleExportTransactions = () => {
+    if (transactions.length === 0) {
+      alert('No transactions to export.');
+      return;
+    }
+
+    const headers = ['Date', 'Description', 'Type', 'Amount (NGN)', 'Status', 'Reference'];
+    const rows = transactions.map(t => {
+      const date = t.created_at?.toDate
+        ? t.created_at.toDate().toLocaleDateString()
+        : t.created_at ? new Date(t.created_at).toLocaleDateString() : '';
+      const description = t.description || t.type || '';
+      const type = t.type || '';
+      const amount = t.amount || 0;
+      const status = t.status || '';
+      const reference = t.reference || '';
+
+      return [
+        `"${date.replace(/"/g, '""')}"`,
+        `"${description.replace(/"/g, '""')}"`,
+        `"${type.replace(/"/g, '""')}"`,
+        amount,
+        `"${status.replace(/"/g, '""')}"`,
+        `"${reference.replace(/"/g, '""')}"`
+      ];
+    });
+
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.join(','))
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `nimex_transactions_${Date.now()}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   const balance = vendor?.wallet_balance || 0;
@@ -540,7 +581,7 @@ export const VendorAccountScreen: React.FC = () => {
                   Transaction History
                 </h2>
                 <Button
-                  onClick={() => alert('Export feature coming soon!')}
+                  onClick={handleExportTransactions}
                   className="h-8 md:h-9 px-3 md:px-4 bg-white hover:bg-neutral-50 text-neutral-900 border border-neutral-200 font-sans text-xs md:text-sm flex items-center gap-2"
                 >
                   <Download className="w-3 h-3 md:w-4 md:h-4" />

@@ -8,7 +8,7 @@ import { MainLayout } from './components/navigation';
 import { VendorLayout } from './components/vendor';
 import { AdminLayout } from './layouts/AdminLayout';
 import { FrameScreen } from './screens/FrameScreen';
-import { LoginScreen, SignupScreen, ForgotPasswordScreen } from './screens/auth';
+import { LoginScreen, SignupScreen, ForgotPasswordScreen, ResetPasswordScreen } from './screens/auth';
 import { configValidator } from './services/configValidator';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { logger } from './lib/logger';
@@ -95,10 +95,13 @@ const App: React.FC = () => {
   React.useEffect(() => {
     const result = configValidator.validate();
     if (!result.isValid) {
-      logger.warn('Configuration validation warnings', {
+      logger.warn('Configuration validation errors', {
         missingVars: result.missingVars,
         errors: result.errors,
       });
+    }
+    if (result.warnings?.length) {
+      logger.warn('Configuration warnings (non-blocking)', result.warnings);
     }
 
     // Auto-create demo accounts logic removed for Firebase migration
@@ -115,6 +118,7 @@ const App: React.FC = () => {
                 <Route path="/signin" element={<LoginScreen />} />
                 <Route path="/signup" element={<SignupScreen />} />
                 <Route path="/forgot-password" element={<ForgotPasswordScreen />} />
+                <Route path="/reset-password" element={<ResetPasswordScreen />} />
                 <Route path="/marketer/register" element={<MarketerRegistrationScreen />} />
 
                 <Route

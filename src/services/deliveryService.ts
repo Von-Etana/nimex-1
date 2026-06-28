@@ -4,6 +4,8 @@ import { COLLECTIONS } from '../lib/collections';
 import { logger } from '../lib/logger';
 import { Timestamp } from 'firebase/firestore';
 import { terminalService } from './terminalService';
+import { emailNotificationService } from './emailNotificationService';
+
 
 interface CreateDeliveryRequest {
   orderId: string;
@@ -140,6 +142,21 @@ class DeliveryService {
         });
       });
 
+      // Notify buyer about status update (non-blocking)
+      try {
+        const order = await FirestoreService.getDocument<any>(COLLECTIONS.ORDERS, request.orderId);
+        const buyerProfile = await FirestoreService.getDocument<any>(COLLECTIONS.PROFILES, request.buyerId);
+        if (order && buyerProfile && buyerProfile.email) {
+          emailNotificationService.sendOrderStatusUpdate(
+            buyerProfile.email,
+            order.order_number,
+            'processing'
+          ).catch(e => logger.warn('Failed to send order status email', e));
+        }
+      } catch (notifyErr) {
+        logger.warn('Failed to prepare order status email', notifyErr);
+      }
+
       return {
         success: true,
         data: {
@@ -200,6 +217,26 @@ class DeliveryService {
           }
         }
       });
+
+      // Notify buyer about delivered status (non-blocking)
+      if (status === 'delivered') {
+        try {
+          const delivery = await FirestoreService.getDocument<any>(COLLECTIONS.DELIVERIES, deliveryId);
+          if (delivery) {
+            const order = await FirestoreService.getDocument<any>(COLLECTIONS.ORDERS, delivery.order_id);
+            const buyerProfile = await FirestoreService.getDocument<any>(COLLECTIONS.PROFILES, delivery.buyer_id);
+            if (order && buyerProfile && buyerProfile.email) {
+              emailNotificationService.sendOrderStatusUpdate(
+                buyerProfile.email,
+                order.order_number,
+                'delivered'
+              ).catch(e => logger.warn('Failed to send delivery status email', e));
+            }
+          }
+        } catch (notifyErr) {
+          logger.warn('Failed to prepare delivery status email', notifyErr);
+        }
+      }
 
       return { success: true };
     } catch (error) {

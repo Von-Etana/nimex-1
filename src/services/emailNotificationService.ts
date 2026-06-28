@@ -226,6 +226,51 @@ const EMAIL_TEMPLATES = {
       </body>
       </html>
     `
+  }),
+
+  vendorNewOrder: (data: { vendorName: string; orderNumber: string; totalAmount: number; dashboardUrl: string }) => ({
+    subject: `New Order Alert - #${data.orderNumber}`,
+    html: `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <title>New Order</title>
+      </head>
+      <body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #f8fafc;">
+        <div style="max-width: 600px; margin: 0 auto; padding: 40px 20px;">
+          <div style="background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+            <div style="background: linear-gradient(135deg, #006400 0%, #008000 100%); padding: 30px; text-align: center;">
+              <h1 style="color: white; margin: 0; font-size: 28px;">NIMEX</h1>
+              <p style="color: rgba(255,255,255,0.9); margin: 10px 0 0;">New Order Alert</p>
+            </div>
+            
+            <div style="padding: 30px;">
+              <h2 style="color: #1e293b; margin: 0 0 20px;">Hello ${sanitizeHtml(data.vendorName)},</h2>
+              <p style="color: #475569; margin: 0 0 20px; line-height: 1.6;">
+                You have received a new order on NIMEX! Here are the details:
+              </p>
+              
+              <div style="background: #f1f5f9; border-radius: 8px; padding: 20px; margin-bottom: 20px;">
+                <p style="margin: 0 0 5px; color: #64748b; font-size: 14px;">Order Number</p>
+                <p style="margin: 0 0 15px; color: #1e293b; font-size: 18px; font-weight: bold;">#${sanitizeHtml(data.orderNumber)}</p>
+                <p style="margin: 0 0 5px; color: #64748b; font-size: 14px;">Total Earnings</p>
+                <p style="margin: 0; color: #006400; font-size: 24px; font-weight: bold;">₦${data.totalAmount.toLocaleString()}</p>
+              </div>
+              
+              <div style="margin-top: 30px; text-align: center;">
+                <a href="${encodeURI(data.dashboardUrl)}" style="display: inline-block; background: #006400; color: white; padding: 14px 30px; border-radius: 8px; text-decoration: none; font-weight: 600;">Process Order</a>
+              </div>
+            </div>
+            
+            <div style="background: #f8fafc; padding: 20px; text-align: center; border-top: 1px solid #e2e8f0;">
+              <p style="margin: 0; color: #64748b; font-size: 14px;">Need help? Reply to this email or contact support@nimex.ng</p>
+            </div>
+          </div>
+        </div>
+      </body>
+      </html>
+    `
   })
 };
 
@@ -371,6 +416,27 @@ class EmailNotificationService {
       return await this.sendEmail(email, template.subject, template.html);
     } catch (error) {
       logger.error('Failed to send welcome email:', error);
+      return false;
+    }
+  }
+
+  async sendVendorNewOrderEmail(
+    email: string,
+    vendorName: string,
+    orderNumber: string,
+    totalAmount: number
+  ): Promise<boolean> {
+    try {
+      const template = EMAIL_TEMPLATES.vendorNewOrder({
+        vendorName,
+        orderNumber,
+        totalAmount,
+        dashboardUrl: `${this.baseUrl}/vendor/orders`
+      });
+
+      return await this.sendEmail(email, template.subject, template.html);
+    } catch (error) {
+      logger.error('Failed to send vendor new order email:', error);
       return false;
     }
   }

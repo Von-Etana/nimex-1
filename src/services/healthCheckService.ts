@@ -22,13 +22,23 @@ class HealthCheckService {
     };
   }
 
-  async checkSendGridHealth(): Promise<HealthCheckResult> {
-    // SendGrid/Twilio integration is disabled
+  async checkResendHealth(): Promise<HealthCheckResult> {
+    const apiKey = import.meta.env.VITE_RESEND_API_KEY;
+    if (!apiKey) {
+      return {
+        service: 'resend',
+        status: 'unhealthy',
+        timestamp: new Date().toISOString(),
+        error: 'VITE_RESEND_API_KEY is not configured',
+      };
+    }
+    // Key is present — we validate the format to avoid a live API call in health checks
+    const isValidFormat = apiKey.startsWith('re_') || /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(apiKey);
     return {
-      service: 'sendgrid',
-      status: 'unhealthy',
+      service: 'resend',
+      status: isValidFormat ? 'healthy' : 'unhealthy',
       timestamp: new Date().toISOString(),
-      error: 'SendGrid integration is disabled',
+      error: isValidFormat ? undefined : 'API key does not match expected Resend format (re_...) or UUID format',
     };
   }
 
@@ -64,9 +74,7 @@ class HealthCheckService {
 
   async runAllHealthChecks(): Promise<HealthCheckResult[]> {
     const checks = await Promise.allSettled([
-      // Twilio/SendGrid disabled
-      // this.checkTwilioHealth(),
-      // this.checkSendGridHealth(),
+      this.checkResendHealth(),
       this.checkFirestoreHealth(),
     ]);
 
