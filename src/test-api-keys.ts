@@ -15,7 +15,6 @@ console.log('');
 
 // Set global environment variables for the entire process
 process.env.VITE_CLERK_PUBLISHABLE_KEY = process.env.VITE_CLERK_PUBLISHABLE_KEY || '';
-process.env.VITE_RESEND_API_KEY = process.env.VITE_RESEND_API_KEY || '';
 
 import { apiKeyTester } from './services/apiKeyTester';
 import { databaseTester } from './services/databaseTester';

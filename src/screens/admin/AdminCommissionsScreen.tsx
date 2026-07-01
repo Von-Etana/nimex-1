@@ -2,9 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { Card, CardContent } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { FirestoreService } from '../../services/firestore.service';
-import { DollarSign, Settings, Check, Loader2 } from 'lucide-react';
+import { DollarSign, Settings, Check, Loader2, X } from 'lucide-react';
 import { Modal } from '../../components/ui/modal';
-import { useAuth } from '../../contexts/AuthContext';
+import { referralAdminService } from '../../services/referralAdminService';
 
 interface CommissionSetting {
   type: string;
@@ -17,11 +17,11 @@ interface PendingCommission {
   referrer_type: 'vendor' | 'marketer';
   referrer_id: string;
   commission_amount: number;
-  created_at: string;
+  status: 'pending' | 'completed';
+  created_at: any;
 }
 
 export const AdminCommissionsScreen: React.FC = () => {
-  const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
   const [settings, setSettings] = useState<CommissionSetting[]>([]);
@@ -46,7 +46,14 @@ export const AdminCommissionsScreen: React.FC = () => {
       // Fetch settings
       const settingsData = await FirestoreService.getDocuments<CommissionSetting>('commission_settings');
 
-      // Fetch pending vendor referrals
+      // Fetch pending vendor referral approvals
+      const pendingVendorReferrals = await FirestoreService.getDocuments<any>('vendor_referrals', {
+        filters: [
+          { field: 'status', operator: '==', value: 'pending' }
+        ]
+      });
+
+      // Fetch approved vendor referrals awaiting payment
       const vendorReferrals = await FirestoreService.getDocuments<any>('vendor_referrals', {
         filters: [
           { field: 'status', operator: '==', value: 'completed' },
@@ -54,7 +61,14 @@ export const AdminCommissionsScreen: React.FC = () => {
         ]
       });
 
-      // Fetch pending marketer referrals
+      // Fetch pending marketer referral approvals
+      const pendingMarketerReferrals = await FirestoreService.getDocuments<any>('marketer_referrals', {
+        filters: [
+          { field: 'status', operator: '==', value: 'pending' }
+        ]
+      });
+
+      // Fetch approved marketer referrals awaiting payment
       const marketerReferrals = await FirestoreService.getDocuments<any>('marketer_referrals', {
         filters: [
           { field: 'status', operator: '==', value: 'completed' },
@@ -74,8 +88,10 @@ export const AdminCommissionsScreen: React.FC = () => {
       }
 
       // Fetch related data for referrals
-      const vendorIds = Array.from(new Set(vendorReferrals.map(r => r.referrer_vendor_id).filter(Boolean)));
-      const marketerIds = Array.from(new Set(marketerReferrals.map(r => r.marketer_id).filter(Boolean)));
+      const allVendorReferrals = [...pendingVendorReferrals, ...vendorReferrals];
+      const allMarketerReferrals = [...pendingMarketerReferrals, ...marketerReferrals];
+      const vendorIds = Array.from(new Set(allVendorReferrals.map(r => r.referrer_vendor_id).filter(Boolean)));
+      const marketerIds = Array.from(new Set(allMarketerReferrals.map(r => r.marketer_id).filter(Boolean)));
 
       const vendorsMap = new Map();
       const marketersMap = new Map();
@@ -92,32 +108,34 @@ export const AdminCommissionsScreen: React.FC = () => {
 
       const pending: PendingCommission[] = [];
 
-      vendorReferrals.forEach((ref: any) => {
+      allVendorReferrals.forEach((ref: any) => {
         const vendor = vendorsMap.get(ref.referrer_vendor_id);
         pending.push({
           id: ref.id,
           referrer_name: vendor?.business_name || 'Unknown Vendor',
           referrer_type: 'vendor',
           referrer_id: ref.referrer_vendor_id,
-          commission_amount: Number(ref.commission_amount),
+          commission_amount: Number(ref.commission_amount || ref.requested_commission_amount || vendorAmount),
+          status: ref.status,
           created_at: ref.created_at,
         });
       });
 
-      marketerReferrals.forEach((ref: any) => {
+      allMarketerReferrals.forEach((ref: any) => {
         const marketer = marketersMap.get(ref.marketer_id);
         pending.push({
           id: ref.id,
           referrer_name: marketer?.full_name || 'Unknown Marketer',
           referrer_type: 'marketer',
           referrer_id: ref.marketer_id,
-          commission_amount: Number(ref.commission_amount),
+          commission_amount: Number(ref.commission_amount || ref.requested_commission_amount || marketerAmount),
+          status: ref.status,
           created_at: ref.created_at,
         });
       });
 
       setPendingCommissions(pending.sort((a, b) =>
-        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        getDateValue(b.created_at) - getDateValue(a.created_at)
       ));
     } catch (error) {
       console.error('Error loading data:', error);
@@ -164,6 +182,44 @@ export const AdminCommissionsScreen: React.FC = () => {
     setIsPaymentModalOpen(true);
   };
 
+  const handleApproveReferral = async (commission: PendingCommission) => {
+    setProcessing(true);
+    try {
+      await referralAdminService.approveReferral({
+        referralType: commission.referrer_type,
+        referralId: commission.id,
+      });
+      await loadData();
+      alert('Referral approved successfully');
+    } catch (error: any) {
+      console.error('Error approving referral:', error);
+      alert('Failed to approve referral: ' + (error.message || 'Unknown error'));
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const handleRejectReferral = async (commission: PendingCommission) => {
+    const reason = window.prompt('Reason for rejecting this referral?', 'Rejected by administrator');
+    if (reason === null) return;
+
+    setProcessing(true);
+    try {
+      await referralAdminService.rejectReferral({
+        referralType: commission.referrer_type,
+        referralId: commission.id,
+        reason,
+      });
+      await loadData();
+      alert('Referral rejected successfully');
+    } catch (error: any) {
+      console.error('Error rejecting referral:', error);
+      alert('Failed to reject referral: ' + (error.message || 'Unknown error'));
+    } finally {
+      setProcessing(false);
+    }
+  };
+
   const handleConfirmPayment = async () => {
     if (!selectedCommission || !paymentMethod) {
       alert('Please select a payment method');
@@ -172,35 +228,16 @@ export const AdminCommissionsScreen: React.FC = () => {
 
     setProcessing(true);
     try {
-      // 1. Record the payment
-      await FirestoreService.createDocument('commission_payments', {
-        recipient_type: selectedCommission.referrer_type,
-        recipient_id: selectedCommission.referrer_id,
-        amount: selectedCommission.commission_amount,
-        payment_method: paymentMethod,
-        reference_number: referenceNumber || null,
-        status: 'completed',
-        referral_ids: [selectedCommission.id],
-        notes: paymentNotes || null,
-        processed_by: user?.uid,
-        processed_at: new Date().toISOString(),
+      await referralAdminService.markCommissionPaid({
+        referralType: selectedCommission.referrer_type,
+        referralId: selectedCommission.id,
+        paymentMethod,
+        referenceNumber,
+        notes: paymentNotes,
       });
 
-      // 2. Update the referral status
-      if (selectedCommission.referrer_type === 'vendor') {
-        await FirestoreService.updateDocument('vendor_referrals', selectedCommission.id, {
-          commission_paid: true,
-          commission_paid_at: new Date().toISOString(),
-        });
-      } else {
-        await FirestoreService.updateDocument('marketer_referrals', selectedCommission.id, {
-          commission_paid: true,
-          commission_paid_at: new Date().toISOString(),
-        });
-      }
-
       setIsPaymentModalOpen(false);
-      loadData();
+      await loadData();
       alert('Commission marked as paid successfully');
     } catch (error: any) {
       console.error('Error processing payment:', error);
@@ -214,6 +251,12 @@ export const AdminCommissionsScreen: React.FC = () => {
     (sum, comm) => sum + comm.commission_amount,
     0
   );
+
+  function getDateValue(value: any): number {
+    const date = value?.toDate ? value.toDate() : new Date(value);
+    const time = date.getTime();
+    return Number.isFinite(time) ? time : 0;
+  }
 
   if (loading) {
     return (
@@ -372,17 +415,40 @@ export const AdminCommissionsScreen: React.FC = () => {
                           ₦{commission.commission_amount.toLocaleString()}
                         </td>
                         <td className="px-4 py-3 font-sans text-sm text-neutral-600">
-                          {new Date(commission.created_at).toLocaleDateString()}
+                          {(commission.created_at?.toDate ? commission.created_at.toDate() : new Date(commission.created_at)).toLocaleDateString()}
                         </td>
                         <td className="px-4 py-3">
-                          <Button
-                            onClick={() => handleOpenPaymentModal(commission)}
-                            size="sm"
-                            className="bg-green-600 hover:bg-green-700 text-white flex items-center gap-2"
-                          >
-                            <Check className="w-4 h-4" />
-                            Mark as Paid
-                          </Button>
+                          {commission.status === 'pending' ? (
+                            <div className="flex flex-wrap gap-2">
+                              <Button
+                                onClick={() => handleApproveReferral(commission)}
+                                disabled={processing}
+                                size="sm"
+                                className="bg-green-600 hover:bg-green-700 text-white flex items-center gap-2"
+                              >
+                                <Check className="w-4 h-4" />
+                                Approve
+                              </Button>
+                              <Button
+                                onClick={() => handleRejectReferral(commission)}
+                                disabled={processing}
+                                size="sm"
+                                className="bg-white hover:bg-neutral-50 text-neutral-900 border border-neutral-200 flex items-center gap-2"
+                              >
+                                <X className="w-4 h-4" />
+                                Reject
+                              </Button>
+                            </div>
+                          ) : (
+                            <Button
+                              onClick={() => handleOpenPaymentModal(commission)}
+                              size="sm"
+                              className="bg-green-600 hover:bg-green-700 text-white flex items-center gap-2"
+                            >
+                              <Check className="w-4 h-4" />
+                              Mark as Paid
+                            </Button>
+                          )}
                         </td>
                       </tr>
                     ))}

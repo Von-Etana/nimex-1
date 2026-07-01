@@ -22,26 +22,6 @@ class HealthCheckService {
     };
   }
 
-  async checkResendHealth(): Promise<HealthCheckResult> {
-    const apiKey = import.meta.env.VITE_RESEND_API_KEY;
-    if (!apiKey) {
-      return {
-        service: 'resend',
-        status: 'unhealthy',
-        timestamp: new Date().toISOString(),
-        error: 'VITE_RESEND_API_KEY is not configured',
-      };
-    }
-    // Key is present — we validate the format to avoid a live API call in health checks
-    const isValidFormat = apiKey.startsWith('re_') || /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(apiKey);
-    return {
-      service: 'resend',
-      status: isValidFormat ? 'healthy' : 'unhealthy',
-      timestamp: new Date().toISOString(),
-      error: isValidFormat ? undefined : 'API key does not match expected Resend format (re_...) or UUID format',
-    };
-  }
-
   async checkFirestoreHealth(): Promise<HealthCheckResult> {
     const startTime = Date.now();
     try {
@@ -74,7 +54,6 @@ class HealthCheckService {
 
   async runAllHealthChecks(): Promise<HealthCheckResult[]> {
     const checks = await Promise.allSettled([
-      this.checkResendHealth(),
       this.checkFirestoreHealth(),
     ]);
 

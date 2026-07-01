@@ -217,7 +217,7 @@ describe('FlutterwaveService Unit Tests', () => {
         },
       };
 
-      mockHttpsCallables['processFlutterwaveWithdrawal'] = vi.fn().mockResolvedValue(mockResult);
+      mockHttpsCallables['requestFlutterwaveWithdrawal'] = vi.fn().mockResolvedValue(mockResult);
       mockFirestoreService.addDocument.mockResolvedValueOnce('tx-987');
 
       const result = await flutterwaveService.transferToVendor(

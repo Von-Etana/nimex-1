@@ -435,6 +435,8 @@ export const VendorAccountScreen: React.FC = () => {
     } finally {
       setSaving(false);
     }
+  };
+
   const handleExportTransactions = () => {
     if (transactions.length === 0) {
       alert('No transactions to export.');

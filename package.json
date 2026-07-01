@@ -15,6 +15,8 @@
     "test:run": "vitest run",
     "test:coverage": "vitest run --coverage",
     "type-check": "tsc --noEmit",
+    "audit:production": "npm audit --omit=dev --audit-level=moderate",
+    "audit:all": "npm audit --audit-level=moderate",
     "seed:admin": "tsx scripts/seed-admin-accounts.ts",
     "seed:demo": "tsx scripts/seed-demo-data.ts",
     "seed:demo:server": "tsx scripts/seed-demo-data-server.ts"
@@ -48,9 +50,9 @@
     "@types/react": "18.2.0",
     "@types/react-dom": "18.2.0",
     "@vitejs/plugin-react": "^5.1.4",
-    "@vitest/ui": "^4.0.18",
-    "esbuild": "0.24.0",
-    "firebase-admin": "^13.6.0",
+    "@vitest/ui": "^4.1.9",
+    "esbuild": "^0.28.1",
+    "firebase-admin": "^14.1.0",
     "globals": "15.12.0",
     "jsdom": "^19.0.0",
     "rollup-plugin-visualizer": "^6.0.5",
@@ -58,7 +60,7 @@
     "tsx": "^4.21.0",
     "typescript": "^5.9.3",
     "vite": "^7.3.1",
-    "vitest": "^4.0.18",
+    "vitest": "^4.1.9",
     "webpack-bundle-analyzer": "^5.0.0"
   },
   "alias": {

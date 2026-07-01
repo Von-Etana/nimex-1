@@ -180,32 +180,11 @@ class ReferralService {
         referrer_vendor_id: referrerVendorId,
         referred_vendor_id: referredVendorId,
         referral_code: referralCode,
-        commission_amount: commissionAmount,
-        status: 'completed',
+        commission_amount: 0,
+        requested_commission_amount: commissionAmount,
+        status: 'pending',
         created_at: Timestamp.now()
       });
-
-      // Update referrer vendor stats
-      try {
-        const referrer = await FirestoreService.getDocument<any>(COLLECTIONS.VENDORS, referrerVendorId);
-        if (referrer) {
-          const currentReferrals = referrer.total_referrals || 0;
-          await FirestoreService.updateDocument(COLLECTIONS.VENDORS, referrerVendorId, {
-            total_referrals: currentReferrals + 1
-          });
-        }
-      } catch (err) {
-        logger.error('Failed to update referrer vendor stats:', err);
-      }
-
-      // Link referrer to referred vendor
-      try {
-        await FirestoreService.updateDocument(COLLECTIONS.VENDORS, referredVendorId, {
-          referred_by_vendor_id: referrerVendorId
-        });
-      } catch (err) {
-        logger.error('Failed to link referred vendor to referrer vendor:', err);
-      }
 
       return { success: true };
     } catch (error) {
@@ -226,8 +205,9 @@ class ReferralService {
         marketer_id: marketerId,
         vendor_id: vendorId,
         referral_code: referralCode,
-        commission_amount: commissionAmount,
-        status: 'completed',
+        commission_amount: 0,
+        requested_commission_amount: commissionAmount,
+        status: 'pending',
         created_at: Timestamp.now()
       });
 
@@ -237,29 +217,6 @@ class ReferralService {
         marketer = await FirestoreService.getDocument<any>(COLLECTIONS.MARKETERS, marketerId);
       } catch (err) {
         logger.error('Failed to fetch marketer details:', err);
-      }
-
-      // Update marketer stats
-      if (marketer) {
-        try {
-          const currentReferrals = marketer.total_referrals || 0;
-          const currentCommission = marketer.total_commission_earned || 0;
-          await FirestoreService.updateDocument(COLLECTIONS.MARKETERS, marketerId, {
-            total_referrals: currentReferrals + 1,
-            total_commission_earned: currentCommission + commissionAmount
-          });
-        } catch (err) {
-          logger.error('Failed to update marketer stats:', err);
-        }
-      }
-
-      // Link marketer to referred vendor
-      try {
-        await FirestoreService.updateDocument(COLLECTIONS.VENDORS, vendorId, {
-          referred_by_marketer_id: marketerId
-        });
-      } catch (err) {
-        logger.error('Failed to link referred vendor to marketer:', err);
       }
 
       // Send email notification to marketer

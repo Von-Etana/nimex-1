@@ -3,12 +3,14 @@ import * as admin from "firebase-admin";
 import * as crypto from "crypto";
 import axios, { AxiosError } from "axios";
 
+const legacyConfig = () => ((functions as any).config?.() ?? {});
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Config helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
 const getTerminalConfig = () => {
-    const config = functions.config().terminal;
+    const config = legacyConfig().terminal;
     return {
         baseUrl:
             process.env.TERMINAL_BASE_URL ||

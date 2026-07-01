@@ -11,6 +11,7 @@ dotenv.config();
 // Initialize Firebase Admin safely
 const app = admin.apps.length ? admin.app() : admin.initializeApp();
 const db = app.firestore();
+const legacyConfig = () => ((functions as any).config?.() ?? {});
 
 // CORS Handler - Restrict to known origins
 const allowedOrigins = [
@@ -24,7 +25,7 @@ const corsHandler = cors({ origin: allowedOrigins });
 
 // Configuration
 const getPaystackClient = () => {
-    const key = process.env.PAYSTACK_SECRET_KEY || functions.config().paystack?.secret_key;
+    const key = process.env.PAYSTACK_SECRET_KEY || legacyConfig().paystack?.secret_key;
     if (!key) {
         console.error("CRITICAL: PAYSTACK_SECRET_KEY is not configured. Payment functions will fail.");
     }
@@ -69,7 +70,7 @@ const wrapCors = (req: functions.https.Request, res: any, handler: () => Promise
  * Verify Paystack Webhook Signature
  */
 const verifyPaystackSignature = (payload: string, signature: string): boolean => {
-    const key = process.env.PAYSTACK_SECRET_KEY || functions.config().paystack?.secret_key;
+    const key = process.env.PAYSTACK_SECRET_KEY || legacyConfig().paystack?.secret_key;
     const hash = crypto
         .createHmac("sha512", key || "")
         .update(payload)
@@ -156,7 +157,7 @@ export const paystackWebhook = functions.https.onRequest(async (req, res) => {
  * Verify Flutterwave Webhook Signature
  */
 const verifyFlutterwaveSignature = (signature: string | undefined): boolean => {
-    const secretHash = process.env.FLUTTERWAVE_WEBHOOK_HASH || functions.config().flutterwave?.webhook_hash;
+    const secretHash = process.env.FLUTTERWAVE_WEBHOOK_HASH || legacyConfig().flutterwave?.webhook_hash;
     if (!secretHash) {
         console.warn("FLUTTERWAVE_WEBHOOK_HASH is not configured.");
         // Dev fallback to prevent signature failure during local testing
@@ -832,9 +833,10 @@ export const refundEscrow = functions.https.onRequest(async (req, res) => {
 
 // Helper: Send SMS via Termii
 async function sendSmsViaTermii(to: string, message: string) {
-    const apiKey = process.env.TERMII_API_KEY || functions.config().termii?.api_key;
-    const baseUrl = process.env.TERMII_BASE_URL || functions.config().termii?.base_url || "https://v3.api.termii.com";
-    const senderId = process.env.TERMII_SENDER_ID || functions.config().termii?.sender_id || "NIMEX";
+    const config = legacyConfig();
+    const apiKey = process.env.TERMII_API_KEY || config.termii?.api_key;
+    const baseUrl = process.env.TERMII_BASE_URL || config.termii?.base_url || "https://v3.api.termii.com";
+    const senderId = process.env.TERMII_SENDER_ID || config.termii?.sender_id || "NIMEX";
 
     if (!apiKey) {
         throw new Error("Termii API Key is missing");
@@ -908,7 +910,7 @@ export const sendEmail = functions.https.onCall(async (request: any) => {
         throw new functions.https.HttpsError('invalid-argument', 'Recipient (to), subject, and html content are required');
     }
 
-    const apiKey = process.env.RESEND_API_KEY || functions.config().resend?.api_key;
+    const apiKey = process.env.RESEND_API_KEY || legacyConfig().resend?.api_key;
 
     if (!apiKey) {
         throw new functions.https.HttpsError('failed-precondition', 'Resend API key not configured. Set RESEND_API_KEY in environment variables.');
@@ -953,7 +955,7 @@ export const sendPasswordResetEmailCustom = functions.https.onCall(async (reques
         throw new functions.https.HttpsError('invalid-argument', 'A valid email address is required.');
     }
 
-    const apiKey     = process.env.RESEND_API_KEY     || functions.config().resend?.api_key;
+    const apiKey     = process.env.RESEND_API_KEY     || legacyConfig().resend?.api_key;
     const fromEmail  = process.env.RESEND_FROM_EMAIL  || 'NIMEX <noreply@nimex.ng>';
     const appUrl     = (process.env.APP_URL           || 'https://nimex.ng').replace(/\/$/, '');
 
@@ -1079,3 +1081,9 @@ export const quickTerminalShipment = terminal.quickTerminalShipment;
 export const trackTerminalShipment = terminal.trackTerminalShipment;
 export const getTerminalCarriers = terminal.getTerminalCarriers;
 export const terminalWebhook = terminal.terminalWebhook;
+
+// Export Referral Admin Functions
+import * as referrals from './referrals';
+export const approveReferralCommission = referrals.approveReferralCommission;
+export const rejectReferralCommission = referrals.rejectReferralCommission;
+export const markReferralCommissionPaid = referrals.markReferralCommissionPaid;

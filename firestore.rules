@@ -33,6 +33,16 @@ service cloud.firestore {
         exists(/databases/$(database)/documents/vendors/$(request.auth.uid)) &&
         get(/databases/$(database)/documents/vendors/$(request.auth.uid)).data.subscription_status == 'active';
     }
+
+    function isOrderParticipant(orderId) {
+      return isAuthenticated() &&
+        exists(/databases/$(database)/documents/orders/$(orderId)) &&
+        (
+          get(/databases/$(database)/documents/orders/$(orderId)).data.buyer_id == request.auth.uid ||
+          get(/databases/$(database)/documents/orders/$(orderId)).data.vendor_id == request.auth.uid ||
+          isAdmin()
+        );
+    }
     
     // Profiles - users can read all, write own
     match /profiles/{userId} {
@@ -57,7 +67,10 @@ service cloud.firestore {
           (!('wallet_balance' in request.resource.data) || request.resource.data.wallet_balance == resource.data.wallet_balance) &&
           (!('verification_status' in request.resource.data) || request.resource.data.verification_status == resource.data.verification_status) && 
           (!('verification_badge' in request.resource.data) || request.resource.data.verification_badge == resource.data.verification_badge) &&
-          (!('total_sales' in request.resource.data) || request.resource.data.total_sales == resource.data.total_sales)
+          (!('total_sales' in request.resource.data) || request.resource.data.total_sales == resource.data.total_sales) &&
+          (!('total_referrals' in request.resource.data) || request.resource.data.total_referrals == resource.data.total_referrals) &&
+          (!('referred_by_vendor_id' in request.resource.data) || request.resource.data.referred_by_vendor_id == resource.data.referred_by_vendor_id) &&
+          (!('referred_by_marketer_id' in request.resource.data) || request.resource.data.referred_by_marketer_id == resource.data.referred_by_marketer_id)
         )
       );
       allow delete: if isAdmin();
@@ -75,7 +88,9 @@ service cloud.firestore {
     
     // Carts - owner only
     match /carts/{cartId} {
-      allow read, write: if isAuthenticated() && 
+      allow create: if isAuthenticated() &&
+        request.resource.data.user_id == request.auth.uid;
+      allow read, update, delete: if isAuthenticated() &&
         resource.data.user_id == request.auth.uid;
     }
     
@@ -91,7 +106,8 @@ service cloud.firestore {
     // Reviews - public read, buyer write
     match /reviews/{reviewId} {
       allow read: if true;
-      allow create: if isAuthenticated();
+      allow create: if isAuthenticated() &&
+        request.resource.data.buyer_id == request.auth.uid;
       allow update, delete: if isAuthenticated() && 
         resource.data.buyer_id == request.auth.uid;
     }
@@ -108,7 +124,9 @@ service cloud.firestore {
     
     // Wishlists - owner only
     match /wishlists/{wishlistId} {
-      allow read, write: if isAuthenticated() && 
+      allow create: if isAuthenticated() &&
+        request.resource.data.user_id == request.auth.uid;
+      allow read, update, delete: if isAuthenticated() &&
         resource.data.user_id == request.auth.uid;
     }
     
@@ -184,10 +202,7 @@ service cloud.firestore {
     match /marketers/{marketerId} {
       allow read: if true;
       allow create: if isOwner(marketerId);
-      allow update: if isOwner(marketerId) || isAdmin() || (
-        isAuthenticated() &&
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['total_referrals', 'total_commission_earned', 'updated_at'])
-      );
+      allow update: if isOwner(marketerId) || isAdmin();
     }
     
     // Referrals - restricted read, authenticated write
@@ -209,7 +224,8 @@ service cloud.firestore {
       allow read: if isAuthenticated() && (
         resource.data.user_id == request.auth.uid || isAdmin()
       );
-      allow create: if isAuthenticated();
+      allow create: if isAuthenticated() &&
+        request.resource.data.user_id == request.auth.uid;
       allow update: if isAuthenticated() && (
         resource.data.user_id == request.auth.uid || isAdmin()
       );
@@ -241,14 +257,16 @@ service cloud.firestore {
     // Disputes - participants and admin
     match /disputes/{disputeId} {
       allow read: if isAuthenticated() && (
-        resource.data.buyer_id == request.auth.uid ||
-        resource.data.vendor_id == request.auth.uid ||
+        resource.data.filed_by == request.auth.uid ||
+        isOrderParticipant(resource.data.order_id) ||
         isAdmin()
       );
-      allow create: if isAuthenticated();
+      allow create: if isAuthenticated() &&
+        request.resource.data.filed_by == request.auth.uid &&
+        isOrderParticipant(request.resource.data.order_id);
       allow update: if isAuthenticated() && (
-        resource.data.buyer_id == request.auth.uid ||
-        resource.data.vendor_id == request.auth.uid ||
+        resource.data.filed_by == request.auth.uid ||
+        isOrderParticipant(resource.data.order_id) ||
         isAdmin()
       );
       allow delete: if isAdmin();
@@ -305,7 +323,12 @@ service cloud.firestore {
         isAdmin()
       );
       // Order creation requires email verification for security
-      allow create: if isAuthenticated() && isEmailVerified();
+      allow create: if isAuthenticated() &&
+        isEmailVerified() &&
+        request.resource.data.buyer_id == request.auth.uid &&
+        request.resource.data.payment_status == 'pending' &&
+        request.resource.data.status == 'pending' &&
+        (!('escrow_status' in request.resource.data) || request.resource.data.escrow_status == 'pending');
       
       // Update: Prevent users from faking payment status
       allow update: if isAuthenticated() && (
@@ -329,7 +352,10 @@ service cloud.firestore {
         get(/databases/$(database)/documents/orders/$(resource.data.order_id)).data.vendor_id == request.auth.uid ||
         isAdmin()
       );
-      allow create: if isAuthenticated() && isEmailVerified();
+      allow create: if isAuthenticated() &&
+        isEmailVerified() &&
+        isOrderParticipant(request.resource.data.order_id) &&
+        get(/databases/$(database)/documents/orders/$(request.resource.data.order_id)).data.buyer_id == request.auth.uid;
       allow update: if false; // Order items should be immutable after creation
       allow delete: if isAdmin();
     }
@@ -358,7 +384,10 @@ service cloud.firestore {
     }
 
     match /ad_campaigns/{campaignId} {
-       allow read, write: if isAuthenticated() && (
+      allow create: if isAuthenticated() && (
+        request.resource.data.vendor_id == request.auth.uid || isAdmin()
+      );
+      allow read, update, delete: if isAuthenticated() && (
         resource.data.vendor_id == request.auth.uid || isAdmin()
       );
     }
@@ -368,8 +397,7 @@ service cloud.firestore {
       allow read: if isAuthenticated() && (
         resource.data.recipient_id == request.auth.uid || isAdmin()
       );
-      allow create: if isAdmin();
-      allow update, delete: if isAdmin();
+      allow write: if false; // Backend only
     }
 
     // Vendor Referrals
@@ -379,8 +407,11 @@ service cloud.firestore {
         resource.data.referred_vendor_id == request.auth.uid ||
         isAdmin()
       );
-      allow create: if isAuthenticated();
-      allow update, delete: if isAdmin();
+      allow create: if isAuthenticated() &&
+        request.resource.data.referred_vendor_id == request.auth.uid &&
+        request.resource.data.status == 'pending' &&
+        (!('commission_amount' in request.resource.data) || request.resource.data.commission_amount == 0);
+      allow update, delete: if false; // Backend only
     }
 
     // Marketer Referrals
@@ -390,8 +421,11 @@ service cloud.firestore {
         resource.data.vendor_id == request.auth.uid ||
         isAdmin()
       );
-      allow create: if isAuthenticated();
-      allow update, delete: if isAdmin();
+      allow create: if isAuthenticated() &&
+        request.resource.data.vendor_id == request.auth.uid &&
+        request.resource.data.status == 'pending' &&
+        (!('commission_amount' in request.resource.data) || request.resource.data.commission_amount == 0);
+      allow update, delete: if false; // Backend only
     }
     
     // Deliveries - Read for participants & admin, write for vendors/admins

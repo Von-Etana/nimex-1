@@ -18,7 +18,6 @@ class ConfigValidator {
 
   /** Recommended vars — missing ones produce a warning but don't block startup. */
   private recommendedEnvVars = [
-    'VITE_RESEND_API_KEY',
     'VITE_APP_URL',
   ];
 
@@ -47,11 +46,6 @@ class ConfigValidator {
     const firebaseAuthDomain = import.meta.env.VITE_FIREBASE_AUTH_DOMAIN;
     if (firebaseAuthDomain && !firebaseAuthDomain.includes('.firebaseapp.com')) {
       errors.push('VITE_FIREBASE_AUTH_DOMAIN must be a valid Firebase Auth Domain');
-    }
-
-    const resendKey = import.meta.env.VITE_RESEND_API_KEY;
-    if (resendKey && !resendKey.startsWith('re_') && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(resendKey)) {
-      errors.push('VITE_RESEND_API_KEY does not appear to be a valid Resend API key (should start with re_ or be a valid UUID)');
     }
 
     return {

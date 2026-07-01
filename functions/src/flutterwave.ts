@@ -5,6 +5,7 @@ import * as admin from "firebase-admin";
 // Use existing admin app or initialize
 const app = admin.apps.length ? admin.app() : admin.initializeApp();
 const db = app.firestore();
+const legacyConfig = () => ((functions as any).config?.() ?? {});
 
 // Flutterwave API v3 base URL
 const FLW_BASE_URL = "https://api.flutterwave.com/v3";
@@ -15,7 +16,7 @@ const FLW_BASE_URL = "https://api.flutterwave.com/v3";
 function getFlwClient(): AxiosInstance {
     const secretKey =
         process.env.FLUTTERWAVE_SECRET_KEY ||
-        functions.config().flutterwave?.secret_key;
+        legacyConfig().flutterwave?.secret_key;
 
     if (!secretKey) {
         throw new functions.https.HttpsError(

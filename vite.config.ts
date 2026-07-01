@@ -8,10 +8,9 @@ import path from "path";
 export default defineConfig(({ mode }) => ({
   plugins: [
     react(),
-    // Bundle analyzer - only in production build
-    mode === 'production' && visualizer({
+    process.env.ANALYZE === 'true' && visualizer({
       filename: 'dist/bundle-analysis.html',
-      open: true,
+      open: false,
       gzipSize: true,
       brotliSize: true,
     }),
@@ -39,8 +38,7 @@ export default defineConfig(({ mode }) => ({
         },
       },
     },
-    // Enable source maps for better debugging
-    sourcemap: true,
+    sourcemap: mode !== 'production',
     // Optimize chunk size
     chunkSizeWarningLimit: 1000,
   },
