@@ -1,4 +1,5 @@
 import * as functions from "firebase-functions";
+import { setGlobalOptions } from "firebase-functions/v2";
 import * as admin from "firebase-admin";
 import axios from "axios";
 import cors from "cors";
@@ -7,6 +8,12 @@ import * as dotenv from "dotenv";
 
 // Load environment variables
 dotenv.config();
+
+// Set global options to prevent GCP CPU quota issues on trial accounts
+setGlobalOptions({
+    maxInstances: 1,
+    memory: "256MiB"
+});
 
 // Initialize Firebase Admin safely
 const app = admin.apps.length ? admin.app() : admin.initializeApp();
