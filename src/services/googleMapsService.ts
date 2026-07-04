@@ -40,14 +40,24 @@ interface DistanceMatrixResult {
 }
 
 class GoogleMapsService {
-  private config: GoogleMapsConfig;
+  private config: GoogleMapsConfig | null;
 
   constructor() {
     const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
     if (!apiKey) {
-      throw new Error('Missing required environment variable: VITE_GOOGLE_MAPS_API_KEY');
+      console.warn('Google Maps API key not configured. Map and location autocomplete features will be disabled.');
+      this.config = null;
+      return;
     }
     this.config = { apiKey };
+  }
+
+  hasApiKey(): boolean {
+    return this.config !== null;
+  }
+
+  private getApiKey(): string | null {
+    return this.config?.apiKey ?? null;
   }
 
   /**
@@ -55,8 +65,11 @@ class GoogleMapsService {
    */
   async searchPlaces(query: string, location?: { lat: number; lng: number }): Promise<PlaceResult[]> {
     try {
+      const apiKey = this.getApiKey();
+      if (!apiKey) return [];
+
       const params = new URLSearchParams({
-        key: this.config.apiKey,
+        key: apiKey,
         query: query,
         fields: 'place_id,formatted_address,geometry,name,types'
       });
@@ -90,8 +103,11 @@ class GoogleMapsService {
    */
   async getPlaceDetails(placeId: string): Promise<PlaceResult | null> {
     try {
+      const apiKey = this.getApiKey();
+      if (!apiKey) return null;
+
       const params = new URLSearchParams({
-        key: this.config.apiKey,
+        key: apiKey,
         place_id: placeId,
         fields: 'place_id,formatted_address,geometry,name,types'
       });
@@ -120,8 +136,11 @@ class GoogleMapsService {
    */
   async geocodeAddress(address: string): Promise<PlaceResult[]> {
     try {
+      const apiKey = this.getApiKey();
+      if (!apiKey) return [];
+
       const params = new URLSearchParams({
-        key: this.config.apiKey,
+        key: apiKey,
         address: address
       });
 
@@ -161,11 +180,16 @@ class GoogleMapsService {
     destinations: Array<{ lat: number; lng: number }>
   ): Promise<DistanceMatrixResult> {
     try {
+      const apiKey = this.getApiKey();
+      if (!apiKey) {
+        throw new Error('Google Maps API key is not configured');
+      }
+
       const originStrings = origins.map(origin => `${origin.lat},${origin.lng}`);
       const destinationStrings = destinations.map(dest => `${dest.lat},${dest.lng}`);
 
       const params = new URLSearchParams({
-        key: this.config.apiKey,
+        key: apiKey,
         origins: originStrings.join('|'),
         destinations: destinationStrings.join('|'),
         units: 'metric'
@@ -195,8 +219,11 @@ class GoogleMapsService {
    */
   async searchNigerianLocations(query: string): Promise<PlaceResult[]> {
     try {
+      const apiKey = this.getApiKey();
+      if (!apiKey) return [];
+
       const params = new URLSearchParams({
-        key: this.config.apiKey,
+        key: apiKey,
         query: query,
         fields: 'place_id,formatted_address,geometry,name,types'
       });
@@ -229,8 +256,11 @@ class GoogleMapsService {
    */
   async getAutocompleteSuggestions(input: string, location?: { lat: number; lng: number }): Promise<string[]> {
     try {
+      const apiKey = this.getApiKey();
+      if (!apiKey) return [];
+
       const params = new URLSearchParams({
-        key: this.config.apiKey,
+        key: apiKey,
         input: input,
         types: '(cities)',
         components: 'country:ng' // Restrict to Nigeria

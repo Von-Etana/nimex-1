@@ -35,6 +35,7 @@ export const LocationPicker: React.FC<LocationPickerProps> = ({
   const [map, setMap] = useState<google.maps.Map | null>(null);
   const [marker, setMarker] = useState<google.maps.Marker | null>(null);
   const [showMap, setShowMap] = useState(variant === 'default');
+  const hasGoogleMapsKey = googleMapsService.hasApiKey();
 
   const mapRef = useRef<HTMLDivElement>(null);
   const searchTimeoutRef = useRef<NodeJS.Timeout>();
@@ -48,6 +49,8 @@ export const LocationPicker: React.FC<LocationPickerProps> = ({
   }, [initialLocation]);
 
   useEffect(() => {
+    if (!hasGoogleMapsKey) return;
+
     const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
     if (!apiKey) return;
 
@@ -62,7 +65,7 @@ export const LocationPicker: React.FC<LocationPickerProps> = ({
       };
       document.head.appendChild(script);
     }
-  }, [showMap]);
+  }, [showMap, hasGoogleMapsKey]);
 
   useEffect(() => {
     if (autoDetect && !initialLocation) {
@@ -350,7 +353,7 @@ export const LocationPicker: React.FC<LocationPickerProps> = ({
         )}
 
         {/* Map View */}
-        {(variant === 'default' || (variant === 'minimal' && showMap)) && (
+        {hasGoogleMapsKey && (variant === 'default' || (variant === 'minimal' && showMap)) && (
           <div className="space-y-3 animate-in fade-in slide-in-from-top-2 duration-300">
             <div
               ref={mapRef}
@@ -371,6 +374,14 @@ export const LocationPicker: React.FC<LocationPickerProps> = ({
                 </div>
               </div>
             )}
+          </div>
+        )}
+
+        {!hasGoogleMapsKey && (
+          <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+            <p className="font-sans text-xs text-amber-800">
+              Location map features are unavailable right now. You can still type an address manually.
+            </p>
           </div>
         )}
       </div>

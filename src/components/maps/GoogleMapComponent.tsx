@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { googleMapsService } from '../../services/googleMapsService';
 
 interface GoogleMapComponentProps {
   center?: { lat: number; lng: number };
@@ -21,8 +22,13 @@ export const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
   const [map, setMap] = useState<google.maps.Map | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
   const markersRef = useRef<google.maps.Marker[]>([]);
+  const hasGoogleMapsKey = googleMapsService.hasApiKey();
 
   useEffect(() => {
+    if (!hasGoogleMapsKey) {
+      return;
+    }
+
     const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
     if (!apiKey) {
       console.error('Google Maps API key not found');
@@ -50,7 +56,7 @@ export const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
         existingScript.parentNode.removeChild(existingScript);
       }
     };
-  }, []);
+  }, [hasGoogleMapsKey]);
 
   useEffect(() => {
     if (!isLoaded || !mapRef.current || map) return;
@@ -107,6 +113,21 @@ export const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
       map.setCenter(center);
     }
   }, [map, center.lat, center.lng]);
+
+  if (!hasGoogleMapsKey) {
+    return (
+      <div
+        className={`flex items-center justify-center bg-neutral-100 ${className}`}
+        style={{ minHeight: '400px', ...style }}
+      >
+        <div className="text-center px-4">
+          <p className="font-sans text-sm text-neutral-600">
+            Map preview is unavailable right now.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   if (!isLoaded) {
     return (
