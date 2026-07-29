@@ -354,8 +354,8 @@ service cloud.firestore {
       );
       allow create: if isAuthenticated() &&
         isEmailVerified() &&
-        isOrderParticipant(request.resource.data.order_id) &&
-        get(/databases/$(database)/documents/orders/$(request.resource.data.order_id)).data.buyer_id == request.auth.uid;
+        existsAfter(/databases/$(database)/documents/orders/$(request.resource.data.order_id)) &&
+        getAfter(/databases/$(database)/documents/orders/$(request.resource.data.order_id)).data.buyer_id == request.auth.uid;
       allow update: if false; // Order items should be immutable after creation
       allow delete: if isAdmin();
     }

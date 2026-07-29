@@ -298,18 +298,6 @@ export const CheckoutScreen: React.FC = () => {
           const verifyResult = await flutterwaveService.verifyPayment(response.transaction_id || response.tx_ref);
 
           if (verifyResult.success) {
-            const reference = response.tx_ref || response.flw_ref || paymentResult.data!.tx_ref;
-            for (const orderResult of orderResults) {
-              if (orderResult.data) {
-                await orderService.updateOrderPaymentStatus(
-                  orderResult.data.orderId,
-                  'paid',
-                  reference,
-                  'flutterwave'
-                );
-              }
-            }
-
             // Send order confirmation email
             if (user.email) {
               const orderItems = cartItems.map(item => ({

@@ -4,6 +4,8 @@ import { PackageIcon, Eye, EyeOff } from 'lucide-react';
 import { Button } from '../../components/ui/button';
 import { useAuth } from '../../contexts/AuthContext';
 import { getFriendlyErrorMessage } from '../../utils/errorHandling';
+import { auth } from '../../lib/firebase';
+import { setPersistence, browserLocalPersistence, browserSessionPersistence } from 'firebase/auth';
 
 export const LoginScreen: React.FC = () => {
   const navigate = useNavigate();
@@ -18,6 +20,7 @@ export const LoginScreen: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState('');
+  const [rememberMe, setRememberMe] = useState(true);
 
   // Track if we've initiated a sign-in to detect stuck states
   const signInAttempted = useRef(false);
@@ -111,6 +114,15 @@ export const LoginScreen: React.FC = () => {
     setLoading(true);
     signInAttempted.current = true;
 
+    try {
+      await setPersistence(
+        auth,
+        rememberMe ? browserLocalPersistence : browserSessionPersistence
+      );
+    } catch (persistenceError) {
+      console.warn('Unable to update auth persistence:', persistenceError);
+    }
+
     // Set a timeout to prevent infinite loading state
     signInTimeout.current = setTimeout(() => {
       if (loading) {
@@ -141,6 +153,15 @@ export const LoginScreen: React.FC = () => {
     setError('');
     setGoogleLoading(true);
     signInAttempted.current = true;
+
+    try {
+      await setPersistence(
+        auth,
+        rememberMe ? browserLocalPersistence : browserSessionPersistence
+      );
+    } catch (persistenceError) {
+      console.warn('Unable to update auth persistence:', persistenceError);
+    }
 
     // Set a timeout to prevent infinite loading state
     signInTimeout.current = setTimeout(() => {
@@ -265,7 +286,12 @@ export const LoginScreen: React.FC = () => {
 
             <div className="flex items-center justify-between">
               <label className="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" className="w-4 h-4 rounded border-neutral-300 text-primary-500 focus:ring-primary-500" />
+                <input
+                  type="checkbox"
+                  checked={rememberMe}
+                  onChange={(e) => setRememberMe(e.target.checked)}
+                  className="w-4 h-4 rounded border-neutral-300 text-primary-500 focus:ring-primary-500"
+                />
                 <span className="font-sans text-sm text-neutral-600">Remember me</span>
               </label>
               <Link to="/forgot-password" className="font-sans text-sm text-primary-500 hover:text-primary-600">

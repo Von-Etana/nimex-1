@@ -113,7 +113,7 @@ class OrderService {
 
         // 4. Write Order Items and Decrement Stock atomically (HIGH-05)
         for (const p of productDocs) {
-          const { item, ref, data } = p;
+          const { item } = p;
           const itemId = `item_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
           const itemRef = doc(db, COLLECTIONS.ORDER_ITEMS, itemId);
           
@@ -126,13 +126,6 @@ class OrderService {
             unit_price: item.unitPrice,
             total_price: item.unitPrice * item.quantity,
             created_at: Timestamp.now(),
-            updated_at: Timestamp.now(),
-          });
-
-          // Atomic Stock Decrement
-          const newStock = Math.max(0, (data.stock_quantity || 0) - item.quantity);
-          transaction.update(ref, {
-            stock_quantity: newStock,
             updated_at: Timestamp.now(),
           });
         }

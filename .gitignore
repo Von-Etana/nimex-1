@@ -25,6 +25,7 @@ dist-ssr
 
 # Firebase
 .firebase/
+functions/lib/
 
 # Sensitive credentials - DO NOT COMMIT
 ADMIN_CREDENTIALS.md

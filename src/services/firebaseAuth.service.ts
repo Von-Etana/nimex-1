@@ -157,6 +157,26 @@ export class FirebaseAuthService {
                 data.password
             );
 
+            const profile = await this.getUserProfile(userCredential.user.uid);
+            if (!profile) {
+                await firebaseSignOut(auth);
+                return {
+                    user: null,
+                    error: new Error('Account profile is missing. Please contact support.') as AuthError,
+                };
+            }
+
+            if (profile.role === 'vendor') {
+                const vendor = await FirestoreService.getDocument(COLLECTIONS.VENDORS, userCredential.user.uid);
+                if (vendor && vendor.is_active === false) {
+                    await firebaseSignOut(auth);
+                    return {
+                        user: null,
+                        error: new Error('This vendor account is inactive. Please contact support.') as AuthError,
+                    };
+                }
+            }
+
             logger.info(`User signed in successfully: ${userCredential.user.uid}`);
             return { user: userCredential.user, error: null };
         } catch (error) {
@@ -521,5 +541,4 @@ export class FirebaseAuthService {
 }
 
 export default FirebaseAuthService;
-
 

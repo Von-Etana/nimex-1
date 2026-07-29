@@ -91,7 +91,7 @@ class SubscriptionService {
    */
   isSubscriptionActive(status: SubscriptionStatus, endDate: Date | null): boolean {
     if (status !== 'active') return false;
-    if (!endDate) return false;
+    if (!endDate) return true;
     return new Date() < endDate;
   }
 

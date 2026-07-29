@@ -14,9 +14,6 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import { logger } from './lib/logger';
 import { Loader2 } from 'lucide-react';
 
-// PWA Install Prompt
-const InstallPrompt = React.lazy(() => import('./components/InstallPrompt').then(module => ({ default: module.InstallPrompt })));
-
 // Lazy load screens
 const AdminDashboardScreen = React.lazy(() => import('./screens/admin').then(module => ({ default: module.AdminDashboardScreen })));
 const AdminUsersScreen = React.lazy(() => import('./screens/admin').then(module => ({ default: module.AdminUsersScreen })));
@@ -680,9 +677,6 @@ const App: React.FC = () => {
 
                 <Route path="*" element={<NotFoundScreen />} />
               </Routes>
-            </Suspense>
-            <Suspense fallback={null}>
-              <InstallPrompt />
             </Suspense>
           </ToastProvider>
         </AuthProvider>

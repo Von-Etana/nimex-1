@@ -360,7 +360,7 @@ async function handleOrderPayment(reference: string, amount: number, data: any) 
                 if (orderData && !orderData.escrow_id) {
                     const escrowRef = await db.collection("escrow_transactions").add({
                         order_id: orderId,
-                        buyer_id: orderData.user_id,
+                        buyer_id: orderData.buyer_id || orderData.user_id,
                         vendor_id: orderData.vendor_id,
                         total_amount: amount,
                         platform_fee: Math.round(amount * 0.05 * 100) / 100, // 5% platform fee
@@ -387,6 +387,41 @@ async function handleOrderPayment(reference: string, amount: number, data: any) 
                     } catch (smsError) {
                         console.error("Failed to send order SMS to vendor:", smsError);
                     }
+                }
+
+                // Decrement product stock after payment is confirmed.
+                // This happens server-side so the client checkout does not need
+                // elevated product write permissions.
+                try {
+                    const itemsSnap = await db.collection("order_items")
+                        .where("order_id", "==", orderId)
+                        .get();
+
+                    if (!itemsSnap.empty) {
+                        await db.runTransaction(async (transaction) => {
+                            for (const itemDoc of itemsSnap.docs) {
+                                const itemData = itemDoc.data();
+                                const productRef = db.collection("products").doc(itemData.product_id);
+                                const productDoc = await transaction.get(productRef);
+
+                                if (!productDoc.exists) {
+                                    console.warn(`Product ${itemData.product_id} not found while decrementing stock for order ${orderId}`);
+                                    continue;
+                                }
+
+                                const currentStock = Number(productDoc.data()?.stock_quantity || 0);
+                                const quantity = Number(itemData.quantity || 0);
+                                const newStock = Math.max(0, currentStock - quantity);
+
+                                transaction.update(productRef, {
+                                    stock_quantity: newStock,
+                                    updated_at: admin.firestore.FieldValue.serverTimestamp(),
+                                });
+                            }
+                        });
+                    }
+                } catch (stockError) {
+                    console.error("Failed to decrement product stock for paid order:", stockError);
                 }
 
                 console.log(`Order ${orderId} marked as paid`);
@@ -639,7 +674,8 @@ export const releaseEscrow = functions.https.onRequest(async (req, res) => {
         const orderInfo = orderCheck.data()!;
         const callerProfile = await db.collection("profiles").doc(callerUid).get();
         const isAdmin = callerProfile.exists && callerProfile.data()?.role === "admin";
-        if (!isAdmin && callerUid !== orderInfo.user_id && callerUid !== orderInfo.vendor_id) {
+        const orderBuyerId = orderInfo.buyer_id || orderInfo.user_id;
+        if (!isAdmin && callerUid !== orderBuyerId && callerUid !== orderInfo.vendor_id) {
             throw { status: 403, message: "Not authorized to release escrow for this order" };
         }
 
@@ -752,8 +788,9 @@ export const releaseEscrow = functions.https.onRequest(async (req, res) => {
             const orderSnap = await db.collection("orders").doc(orderId).get();
             const orderData = orderSnap.data();
 
-            if (orderData?.user_id) {
-                const profileSnap = await db.collection("profiles").doc(orderData.user_id).get();
+            const buyerId = orderData?.buyer_id || orderData?.user_id;
+            if (buyerId) {
+                const profileSnap = await db.collection("profiles").doc(buyerId).get();
                 const profileData = profileSnap.data();
                 const buyerPhone = profileData?.phone;
 
@@ -792,7 +829,8 @@ export const refundEscrow = functions.https.onRequest(async (req, res) => {
         const orderInfo = orderCheck.data()!;
         const callerProfile = await db.collection("profiles").doc(callerUid).get();
         const isAdmin = callerProfile.exists && callerProfile.data()?.role === "admin";
-        if (!isAdmin && callerUid !== orderInfo.user_id) {
+        const orderBuyerId = orderInfo.buyer_id || orderInfo.user_id;
+        if (!isAdmin && callerUid !== orderBuyerId) {
             throw { status: 403, message: "Not authorized to refund this order" };
         }
 

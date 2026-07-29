@@ -18,10 +18,30 @@ function getPasswordIssues(password: string): string[] {
     return issues;
 }
 
+function getResetCode(searchParams: URLSearchParams): string {
+    const queryCode = searchParams.get('oobCode');
+    if (queryCode) return queryCode;
+
+    if (typeof window === 'undefined') {
+        return '';
+    }
+
+    const hash = window.location.hash || '';
+    if (!hash) {
+        return '';
+    }
+
+    const normalizedHash = hash.startsWith('#') ? hash.slice(1) : hash;
+    const queryStart = normalizedHash.indexOf('?');
+    const hashQuery = queryStart >= 0 ? normalizedHash.slice(queryStart + 1) : normalizedHash;
+    const hashParams = new URLSearchParams(hashQuery.startsWith('?') ? hashQuery.slice(1) : hashQuery);
+    return hashParams.get('oobCode') ?? '';
+}
+
 export const ResetPasswordScreen: React.FC = () => {
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
-    const oobCode = searchParams.get('oobCode') ?? '';
+    const oobCode = getResetCode(searchParams);
 
     const [password, setPassword]       = useState('');
     const [confirm, setConfirm]         = useState('');
