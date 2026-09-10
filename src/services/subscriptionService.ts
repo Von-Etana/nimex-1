@@ -32,7 +32,7 @@ export const SUBSCRIPTION_TIERS: SubscriptionTier[] = [
     duration: 3,
     features: [
       'All monthly features',
-      'Up to 50 products',
+      'Up to 30 products',
       'Advanced analytics',
       'Priority support',
       'Featured listings'
@@ -45,7 +45,7 @@ export const SUBSCRIPTION_TIERS: SubscriptionTier[] = [
     duration: 6,
     features: [
       'All quarterly features',
-      'Unlimited products',
+      'Up to 50 products',
       'Premium analytics',
       'Phone support',
       'Custom branding'
@@ -58,6 +58,7 @@ export const SUBSCRIPTION_TIERS: SubscriptionTier[] = [
     duration: 12,
     features: [
       'All semi-annual features',
+      'Unlimited products',
       'API access',
       'White-label solution',
       'Dedicated account manager',
@@ -224,8 +225,9 @@ class SubscriptionService {
       case 'monthly':
         return 10;
       case 'quarterly':
-        return 50;
+        return 30;
       case 'semi_annual':
+        return 50;
       case 'annual':
         return -1; // Unlimited
       default:

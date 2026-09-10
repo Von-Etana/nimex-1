@@ -646,12 +646,52 @@ export const verifyPayment = functions.https.onRequest(async (req, res) => {
         const data = response.data.data;
 
         if (data.status === "success") {
+            // Process order or subscription payment server-side via Admin SDK
+            await handleChargeSuccess(data);
             res.json({ success: true, data });
         } else {
             res.json({ success: false, error: "Payment verification failed" });
         }
     });
 });
+
+/**
+ * Delete User Account & Associated Data
+ */
+export const deleteAccount = functions.https.onRequest(async (req, res) => {
+    wrapCors(req, res, async () => {
+        const decodedToken = await verifyAuthToken(req);
+        const uid = decodedToken.uid;
+
+        const batch = db.batch();
+
+        // 1. Delete profile doc
+        batch.delete(db.collection("profiles").doc(uid));
+
+        // 2. Delete cart doc & cart items
+        const cartSnap = await db.collection("carts").where("user_id", "==", uid).get();
+        cartSnap.forEach(doc => batch.delete(doc.ref));
+
+        const cartItemsSnap = await db.collection("cart_items").where("user_id", "==", uid).get();
+        cartItemsSnap.forEach(doc => batch.delete(doc.ref));
+
+        // 3. Delete wishlists & addresses
+        const wishSnap = await db.collection("wishlists").where("user_id", "==", uid).get();
+        wishSnap.forEach(doc => batch.delete(doc.ref));
+
+        const addrSnap = await db.collection("addresses").where("user_id", "==", uid).get();
+        addrSnap.forEach(doc => batch.delete(doc.ref));
+
+        await batch.commit();
+
+        // 4. Delete Auth User
+        await admin.auth().deleteUser(uid);
+
+        console.log(`Account deleted successfully for user UID: ${uid}`);
+        res.json({ success: true, message: "Account deleted successfully" });
+    });
+});
+
 
 /**
  * Release Escrow (Secure Backend Logic)

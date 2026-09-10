@@ -183,8 +183,8 @@ describe('SubscriptionService Unit Tests', () => {
     it('should return correct product limits by plan', () => {
       expect(subscriptionService.getProductLimit('free')).toBe(0);
       expect(subscriptionService.getProductLimit('monthly')).toBe(10);
-      expect(subscriptionService.getProductLimit('quarterly')).toBe(50);
-      expect(subscriptionService.getProductLimit('semi_annual')).toBe(-1);
+      expect(subscriptionService.getProductLimit('quarterly')).toBe(30);
+      expect(subscriptionService.getProductLimit('semi_annual')).toBe(50);
       expect(subscriptionService.getProductLimit('annual')).toBe(-1);
     });
   });
