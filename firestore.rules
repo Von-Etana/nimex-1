@@ -361,18 +361,7 @@ service cloud.firestore {
     }
     
     // Payouts & Banking
-    match /vendor_payout_accounts/{accountId} {
-      allow read, write: if isAuthenticated() && (
-        resource.data.vendor_id == request.auth.uid || isAdmin()
-      );
-    }
 
-    match /payouts/{payoutId} {
-      allow read: if isAuthenticated() && (
-        resource.data.vendor_id == request.auth.uid || isAdmin()
-      );
-      allow write: if false; // Backend only
-    }
 
     // Ads
     match /ads/{adId} {

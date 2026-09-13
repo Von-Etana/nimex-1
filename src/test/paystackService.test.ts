@@ -39,6 +39,7 @@ describe('PaystackService Unit Tests', () => {
       publicKey: 'pk_test_mock_123456',
     };
     (paystackService as any).apiUrl = 'https://api.test-nimex.com';
+    vi.stubEnv('VITE_API_URL', 'https://api.test-nimex.com');
 
     // Mock global fetch
     mockFetch = vi.fn();

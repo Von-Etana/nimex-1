@@ -104,7 +104,9 @@ export const RecommendationsSection = (): JSX.Element => {
         reviews: p.reviews_count || 0,
         category: p.category_name || 'General',
         inStock: (p.stock_quantity || 0) > 0,
-        discount: p.compare_at_price ? Math.round(((p.compare_at_price - p.price) / p.compare_at_price) * 100) : undefined,
+        discount: p.compare_at_price && p.compare_at_price > p.price
+            ? Math.min(100, Math.max(0, Math.round(((p.compare_at_price - p.price) / p.compare_at_price) * 100)))
+            : undefined,
         tags: p.tags || [],
         video_url: p.video_url,
         location: p.location,

@@ -7,9 +7,14 @@ import { notificationService } from './notificationService';
 import { auth, db } from '../lib/firebase.config';
 import { doc } from 'firebase/firestore';
 import { emailNotificationService } from './emailNotificationService';
+import { fetchWithTimeout } from '../lib/fetchWithTimeout';
 
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:5001/anima-project/us-central1'; // Default to local emulator for dev, or cloud url
+const API_URL = import.meta.env.VITE_API_URL;
+
+if (!API_URL) {
+  logger.error('VITE_API_URL is not configured. Escrow release/refund will fail.');
+}
 
 
 interface CreateOrderRequest {
@@ -308,7 +313,7 @@ class OrderService {
       }
       const idToken = await currentUser.getIdToken();
 
-      const response = await fetch(`${API_URL}/releaseEscrow`, {
+      const response = await fetchWithTimeout(`${API_URL}/releaseEscrow`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -347,7 +352,7 @@ class OrderService {
       }
       const idToken = await currentUser.getIdToken();
 
-      const response = await fetch(`${API_URL}/refundEscrow`, {
+      const response = await fetchWithTimeout(`${API_URL}/refundEscrow`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

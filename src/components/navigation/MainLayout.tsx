@@ -46,7 +46,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children, showBottomNav 
       <DesktopHeader />
       <MobileHeader />
 
-      <main className="flex-1 w-full pb-16 md:pb-0">
+      <main className="flex-1 w-full pb-16 lg:pb-0">
         {children}
       </main>
 

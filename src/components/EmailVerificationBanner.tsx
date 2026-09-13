@@ -54,8 +54,7 @@ export const EmailVerificationBanner: React.FC<EmailVerificationBannerProps> = (
                     // Force page reload to update all auth state
                     window.location.reload();
                 } else {
-                    setError('Email not yet verified. Please check your inbox.');
-                    setTimeout(() => setError(''), 3000);
+                    setError('Email not yet verified. Please check your inbox (and spam folder).');
                 }
             }
         } catch {

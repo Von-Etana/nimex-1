@@ -20,6 +20,7 @@ import { FirestoreService } from '../../services/firestore.service';
 import { COLLECTIONS } from '../../lib/collections';
 import { where, orderBy, limit } from 'firebase/firestore';
 import { deliveryService } from '../../services/deliveryService';
+import { getVendorPickupLocation } from '../../services/vendorLocationService';
 
 interface Order {
     id: string;
@@ -122,15 +123,16 @@ export const VendorOrderDetailsScreen: React.FC = () => {
             setAddress(deliveryAddr);
         }
 
-        if (!deliveryAddr) return;
+        if (!deliveryAddr || !orderData.vendor_id) return;
 
         try {
+            const vendorLocation = await getVendorPickupLocation(orderData.vendor_id);
             const quote = await deliveryService.calculateDeliveryCost(
-                'Ikeja', // Vendor Address (Hardcoded for now)
-                'Lagos',
+                vendorLocation?.city || '',
+                vendorLocation?.state || '',
                 deliveryAddr.city,
                 deliveryAddr.state,
-                items.length * 1, // Approx weight
+                1,
                 'standard'
             );
 
@@ -144,21 +146,23 @@ export const VendorOrderDetailsScreen: React.FC = () => {
 
 
     const handleCreateShipment = async () => {
-        if (!order || !address) return;
+        if (!order || !address || !order.vendor_id) return;
         setProcessingShipment(true);
         setQuoteError('');
 
         try {
+            const vendorLocation = await getVendorPickupLocation(order.vendor_id);
+
             const result = await deliveryService.createDelivery({
                 orderId: order.id,
-                vendorId: (order as any).vendor_id || user?.uid || '',
+                vendorId: order.vendor_id,
                 buyerId: order.buyer_id,
                 pickupAddress: {
-                    fullName: user?.displayName || 'Vendor',
-                    phone: user?.phoneNumber || '08000000000',
-                    addressLine1: 'Vendor Shop, Lagos',
-                    city: 'Ikeja',
-                    state: 'Lagos'
+                    fullName: vendorLocation?.businessName || user?.displayName || 'Vendor',
+                    phone: vendorLocation?.phone || user?.phoneNumber || '08000000000',
+                    addressLine1: vendorLocation?.address || 'Vendor Shop, Lagos',
+                    city: vendorLocation?.city || 'Ikeja',
+                    state: vendorLocation?.state || 'Lagos'
                 },
                 deliveryAddress: {
                     fullName: address.full_name,
@@ -169,7 +173,7 @@ export const VendorOrderDetailsScreen: React.FC = () => {
                     state: address.state
                 },
                 packageDetails: {
-                    weight: (order.items || []).length * 1 || 1,
+                    weight: (order.items || []).reduce((sum, item) => sum + (item.quantity || 1), 0) * 1 || 1,
                     description: (order.items || []).map(i => i.product_title).join(', ').substring(0, 100) || 'Order items',
                     value: order.total_amount
                 },

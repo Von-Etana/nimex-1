@@ -50,6 +50,8 @@ export const CreateProductScreen: React.FC = () => {
     tags: [] as string[],
   });
 
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+
   const [vendorId, setVendorId] = useState<string>('');
   const [tempProductId, setTempProductId] = useState<string>('');
 
@@ -185,10 +187,56 @@ export const CreateProductScreen: React.FC = () => {
     });
   };
 
+  /**
+   * Validate form fields; returns error messages keyed by field name.
+   * An empty object means the form is valid.
+   */
+  const validateForm = (): Record<string, string> => {
+    const errors: Record<string, string> = {};
+    const name = formData.name.trim();
+    const price = parseFloat(formData.price);
+    const compareAt = formData.compare_at_price ? parseFloat(formData.compare_at_price) : null;
+    const stock = parseInt(formData.stock_quantity, 10);
+
+    if (!name) errors.name = 'Product name is required.';
+    else if (name.length > 120) errors.name = 'Product name must be 120 characters or fewer.';
+
+    if (!formData.price) errors.price = 'Selling price is required.';
+    else if (isNaN(price) || price <= 0) errors.price = 'Selling price must be a positive number.';
+    else if (price > 1_000_000_000) errors.price = 'Selling price is unrealistically large.';
+
+    if (formData.compare_at_price) {
+      if (isNaN(compareAt as number) || (compareAt as number) <= 0) {
+        errors.compare_at_price = 'Original price must be a positive number.';
+      } else if ((compareAt as number) <= price) {
+        // Guard against inverted price data — the root cause of the "-100% OFF" bug.
+        errors.compare_at_price = 'Original price must be greater than the selling price to show a discount.';
+      }
+    }
+
+    if (!formData.stock_quantity) errors.stock_quantity = 'Stock quantity is required.';
+    else if (isNaN(stock) || stock < 0) errors.stock_quantity = 'Stock quantity must be 0 or more.';
+    else if (stock > 1_000_000) errors.stock_quantity = 'Stock quantity is unrealistically large.';
+
+    return errors;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setSuccess('');
+
+    // Visible validation — never fail silently.
+    const errors = validateForm();
+    setFieldErrors(errors);
+    if (Object.keys(errors).length > 0) {
+      // Focus the first invalid field so the user sees exactly what to fix.
+      const firstKey = Object.keys(errors)[0];
+      const el = e.currentTarget.querySelector<HTMLInputElement>(`[name="${firstKey}"]`);
+      el?.focus();
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -333,12 +381,20 @@ export const CreateProductScreen: React.FC = () => {
                   </label>
                   <input
                     type="text"
+                    name="name"
                     value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    onChange={(e) => {
+                      setFormData({ ...formData, name: e.target.value });
+                      if (fieldErrors.name) setFieldErrors({ ...fieldErrors, name: '' });
+                    }}
                     required
-                    className="w-full h-10 md:h-12 px-3 md:px-4 rounded-lg border border-neutral-200 font-sans text-sm md:text-base text-neutral-900 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                    aria-invalid={!!fieldErrors.name}
+                    className={`w-full h-10 md:h-12 px-3 md:px-4 rounded-lg border font-sans text-sm md:text-base text-neutral-900 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent ${fieldErrors.name ? 'border-red-300' : 'border-neutral-200'}`}
                     placeholder="e.g., Handwoven Basket"
                   />
+                  {fieldErrors.name && (
+                    <p role="alert" className="font-sans text-xs text-red-600 mt-1">{fieldErrors.name}</p>
+                  )}
                 </div>
 
                 <div>
@@ -361,14 +417,22 @@ export const CreateProductScreen: React.FC = () => {
                     </label>
                     <input
                       type="number"
+                      name="price"
                       value={formData.price}
-                      onChange={(e) => setFormData({ ...formData, price: e.target.value })}
+                      onChange={(e) => {
+                        setFormData({ ...formData, price: e.target.value });
+                        if (fieldErrors.price) setFieldErrors({ ...fieldErrors, price: '' });
+                      }}
                       required
                       min="0"
                       step="0.01"
-                      className="w-full h-10 md:h-12 px-3 md:px-4 rounded-lg border border-neutral-200 font-sans text-sm md:text-base text-neutral-900 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                      aria-invalid={!!fieldErrors.price}
+                      className={`w-full h-10 md:h-12 px-3 md:px-4 rounded-lg border font-sans text-sm md:text-base text-neutral-900 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent ${fieldErrors.price ? 'border-red-300' : 'border-neutral-200'}`}
                       placeholder="0.00"
                     />
+                    {fieldErrors.price && (
+                      <p role="alert" className="font-sans text-xs text-red-600 mt-1">{fieldErrors.price}</p>
+                    )}
                   </div>
 
                   <div>
@@ -377,14 +441,22 @@ export const CreateProductScreen: React.FC = () => {
                     </label>
                     <input
                       type="number"
+                      name="compare_at_price"
                       value={formData.compare_at_price}
-                      onChange={(e) => setFormData({ ...formData, compare_at_price: e.target.value })}
+                      onChange={(e) => {
+                        setFormData({ ...formData, compare_at_price: e.target.value });
+                        if (fieldErrors.compare_at_price) setFieldErrors({ ...fieldErrors, compare_at_price: '' });
+                      }}
                       min="0"
                       step="0.01"
-                      className="w-full h-10 md:h-12 px-3 md:px-4 rounded-lg border border-neutral-200 font-sans text-sm md:text-base text-neutral-900 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                      aria-invalid={!!fieldErrors.compare_at_price}
+                      className={`w-full h-10 md:h-12 px-3 md:px-4 rounded-lg border font-sans text-sm md:text-base text-neutral-900 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent ${fieldErrors.compare_at_price ? 'border-red-300' : 'border-neutral-200'}`}
                       placeholder="0.00"
                     />
-                    {discountPercentage > 0 && (
+                    {fieldErrors.compare_at_price && (
+                      <p role="alert" className="font-sans text-xs text-red-600 mt-1">{fieldErrors.compare_at_price}</p>
+                    )}
+                    {discountPercentage > 0 && !fieldErrors.compare_at_price && (
                       <p className="text-xs text-green-600 mt-1">
                         {discountPercentage}% off
                       </p>
@@ -399,13 +471,21 @@ export const CreateProductScreen: React.FC = () => {
                     </label>
                     <input
                       type="number"
+                      name="stock_quantity"
                       value={formData.stock_quantity}
-                      onChange={(e) => setFormData({ ...formData, stock_quantity: e.target.value })}
+                      onChange={(e) => {
+                        setFormData({ ...formData, stock_quantity: e.target.value });
+                        if (fieldErrors.stock_quantity) setFieldErrors({ ...fieldErrors, stock_quantity: '' });
+                      }}
                       required
                       min="0"
-                      className="w-full h-10 md:h-12 px-3 md:px-4 rounded-lg border border-neutral-200 font-sans text-sm md:text-base text-neutral-900 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                      aria-invalid={!!fieldErrors.stock_quantity}
+                      className={`w-full h-10 md:h-12 px-3 md:px-4 rounded-lg border font-sans text-sm md:text-base text-neutral-900 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent ${fieldErrors.stock_quantity ? 'border-red-300' : 'border-neutral-200'}`}
                       placeholder="0"
                     />
+                    {fieldErrors.stock_quantity && (
+                      <p role="alert" className="font-sans text-xs text-red-600 mt-1">{fieldErrors.stock_quantity}</p>
+                    )}
                   </div>
 
                   <div>

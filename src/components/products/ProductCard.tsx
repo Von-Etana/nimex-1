@@ -63,9 +63,12 @@ export const ProductCard: React.FC<ProductCardProps> = ({
         onToggleWishlist?.(e);
     };
 
-    const discountPercentage = product.originalPrice
+    // Clamp to [0, 100] and only treat a real discount as such — inverted price
+    // data (price >= originalPrice) must not render a "-N%" badge.
+    const rawDiscount = product.originalPrice
         ? Math.round(((product.originalPrice - product.price) / product.originalPrice) * 100)
-        : product.discount;
+        : (product.discount ?? 0);
+    const discountPercentage = rawDiscount > 0 ? Math.min(100, rawDiscount) : undefined;
 
     const renderStars = (rating: number) => {
         return (

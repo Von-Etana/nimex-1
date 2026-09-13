@@ -38,6 +38,10 @@ function getFlwClient(): AxiosInstance {
 
 export const initializeFlutterwavePayment = functions.https.onCall(
     async (request: any) => {
+    if (!request.app) {
+        throw new functions.https.HttpsError('failed-precondition', 'The function must be called from an App Check verified app.');
+    }
+
         const data = request.data || request;
         const { email, amount, tx_ref, redirect_url, customer, metadata } = data;
 
@@ -86,6 +90,10 @@ export const initializeFlutterwavePayment = functions.https.onCall(
 
 export const verifyFlutterwavePayment = functions.https.onCall(
     async (request: any) => {
+    if (!request.app) {
+        throw new functions.https.HttpsError('failed-precondition', 'The function must be called from an App Check verified app.');
+    }
+
         const data = request.data || request;
         const { transaction_id } = data;
 
@@ -129,6 +137,10 @@ export const verifyFlutterwavePayment = functions.https.onCall(
 
 export const createFlutterwaveVirtualAccount = functions.https.onCall(
     async (request: any) => {
+    if (!request.app) {
+        throw new functions.https.HttpsError('failed-precondition', 'The function must be called from an App Check verified app.');
+    }
+
         const data = request.data || request;
         const {
             email,
@@ -186,6 +198,10 @@ export const createFlutterwaveVirtualAccount = functions.https.onCall(
 
 export const createFlutterwaveSubaccount = functions.https.onCall(
     async (request: any) => {
+    if (!request.app) {
+        throw new functions.https.HttpsError('failed-precondition', 'The function must be called from an App Check verified app.');
+    }
+
         const data = request.data || request;
         const {
             business_name,
@@ -240,6 +256,10 @@ export const createFlutterwaveSubaccount = functions.https.onCall(
 
 export const requestFlutterwaveWithdrawal = functions.https.onCall(
     async (request: any) => {
+    if (!request.app) {
+        throw new functions.https.HttpsError('failed-precondition', 'The function must be called from an App Check verified app.');
+    }
+
         // 1. Verify Authentication
         if (!request.auth || !request.auth.uid) {
             throw new functions.https.HttpsError(
@@ -352,6 +372,10 @@ export const requestFlutterwaveWithdrawal = functions.https.onCall(
 
 export const approveFlutterwaveWithdrawal = functions.https.onCall(
     async (request: any) => {
+    if (!request.app) {
+        throw new functions.https.HttpsError('failed-precondition', 'The function must be called from an App Check verified app.');
+    }
+
         // 1. Verify Authentication
         if (!request.auth || !request.auth.uid) {
             throw new functions.https.HttpsError(
@@ -507,6 +531,10 @@ export const approveFlutterwaveWithdrawal = functions.https.onCall(
 
 export const rejectFlutterwaveWithdrawal = functions.https.onCall(
     async (request: any) => {
+    if (!request.app) {
+        throw new functions.https.HttpsError('failed-precondition', 'The function must be called from an App Check verified app.');
+    }
+
         // 1. Verify Authentication
         if (!request.auth || !request.auth.uid) {
             throw new functions.https.HttpsError(
@@ -607,6 +635,10 @@ export const rejectFlutterwaveWithdrawal = functions.https.onCall(
 
 export const getFlutterwaveBankList = functions.https.onCall(
     async (request: any) => {
+    if (!request.app) {
+        throw new functions.https.HttpsError('failed-precondition', 'The function must be called from an App Check verified app.');
+    }
+
         const data = request.data || request;
         const country = data?.country || "NG";
 
@@ -634,6 +666,10 @@ export const getFlutterwaveBankList = functions.https.onCall(
 
 export const resolveFlutterwaveAccount = functions.https.onCall(
     async (request: any) => {
+    if (!request.app) {
+        throw new functions.https.HttpsError('failed-precondition', 'The function must be called from an App Check verified app.');
+    }
+
         const data = request.data || request;
         const { account_number, account_bank } = data;
 

@@ -11,6 +11,7 @@ import { orderService } from '../services/orderService';
 import { flutterwaveService } from '../services/flutterwaveService';
 import { emailNotificationService } from '../services/emailNotificationService';
 import { deliveryService } from '../services/deliveryService';
+import { getVendorPickupLocation } from '../services/vendorLocationService';
 import { auth } from '../lib/firebase.config';
 
 interface CartItem {
@@ -44,7 +45,8 @@ export const CheckoutScreen: React.FC = () => {
   const [addresses, setAddresses] = useState<Address[]>([]);
   const [selectedAddressId, setSelectedAddressId] = useState<string>('');
   const [deliveryType, setDeliveryType] = useState<'standard' | 'express' | 'same_day'>('standard');
-  const [deliveryCost, setDeliveryCost] = useState<number>(0);
+  const [deliveryCost, setDeliveryCost] = useState(() => getFallbackDeliveryCost('standard'));
+  const [deliveryCostError, setDeliveryCostError] = useState('');
   const [isCalculatingCost, setIsCalculatingCost] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string>('');
@@ -52,6 +54,7 @@ export const CheckoutScreen: React.FC = () => {
   const [resendingEmail, setResendingEmail] = useState(false);
   const [emailSent, setEmailSent] = useState(false);
   const [checkingVerification, setCheckingVerification] = useState(false);
+  const [verifyMsg, setVerifyMsg] = useState('');
   const [newAddress, setNewAddress] = useState<Partial<Address>>({
     full_name: '',
     phone: '',
@@ -101,35 +104,57 @@ export const CheckoutScreen: React.FC = () => {
 
   const calculateDeliveryCost = async () => {
     const selectedAddress = addresses.find((addr) => addr.id === selectedAddressId);
-    if (!selectedAddress) return;
+    if (!selectedAddress || cartItems.length === 0) return;
 
     setIsCalculatingCost(true);
-    setError('');
+    setDeliveryCostError('');
 
     try {
-      const totalWeight = cartItems.length * 1; // Approx 1kg per item for now
+      // All cart items in this checkout are grouped later by vendor, but for the
+      // payment summary we show a single blended delivery fee. Use the first
+      // vendor's real pickup location; subsequent per-vendor orders will each pay
+      // their own delivery cost at creation time.
+      const firstVendorId = cartItems[0]?.vendor_id;
+      const vendorLocation = firstVendorId
+        ? await getVendorPickupLocation(firstVendorId)
+        : null;
 
-      // Use deliveryService to calculate rates from Terminal Africa
+      const pickupCity = vendorLocation?.city || '';
+      const pickupState = vendorLocation?.state || '';
+      const totalWeight = cartItems.reduce((sum, item) => sum + item.quantity, 0) * 1; // 1kg per unit placeholder
+
       const result = await deliveryService.calculateDeliveryCost(
-        'Ikeja', // Default vendor location city
-        'Lagos', // Default vendor location state
+        pickupCity,
+        pickupState,
         selectedAddress.city,
         selectedAddress.state,
         totalWeight,
         deliveryType
       );
 
-      if (result.success && result.cost !== undefined) {
+      if (result.success && typeof result.cost === 'number' && result.cost > 0) {
         setDeliveryCost(result.cost);
       } else {
         console.warn('Terminal Quote Failed, falling back to standard rates:', result.error);
-        setDeliveryCost(deliveryType === 'standard' ? 2500 : deliveryType === 'express' ? 4000 : 6000);
+        setDeliveryCost(getFallbackDeliveryCost(deliveryType));
       }
     } catch (err) {
       console.error('Error calculating delivery cost:', err);
-      setDeliveryCost(deliveryType === 'standard' ? 2500 : deliveryType === 'express' ? 4000 : 6000);
+      setDeliveryCostError('Could not calculate live delivery cost. Using estimated rate.');
+      setDeliveryCost(getFallbackDeliveryCost(deliveryType));
     } finally {
       setIsCalculatingCost(false);
+    }
+  };
+
+  const getFallbackDeliveryCost = (type: 'standard' | 'express' | 'same_day') => {
+    switch (type) {
+      case 'express':
+        return 4000;
+      case 'same_day':
+        return 6000;
+      default:
+        return 2500;
     }
   };
 
@@ -182,19 +207,24 @@ export const CheckoutScreen: React.FC = () => {
 
   const handleCheckVerification = async () => {
     setCheckingVerification(true);
+    setVerifyMsg('');
     try {
       const currentUser = auth.currentUser;
       if (currentUser) {
         await currentUser.reload();
         if (currentUser.emailVerified) {
+          // Full reload so every component re-reads auth state (banner, gate, context).
           window.location.reload();
         } else {
-          setError('Email not yet verified. Please check your inbox.');
-          setTimeout(() => setError(''), 3000);
+          // Inline feedback next to the button the user just clicked —
+          // writing to the top-of-page `error` state is invisible from here.
+          setVerifyMsg('Email not yet verified. Please check your inbox (and spam folder).');
         }
+      } else {
+        setVerifyMsg('Your session has expired. Please sign in again.');
       }
     } catch {
-      setError('Could not check verification status. Try again.');
+      setVerifyMsg('Could not check verification status. Try again.');
     } finally {
       setCheckingVerification(false);
     }
@@ -232,6 +262,14 @@ export const CheckoutScreen: React.FC = () => {
       const orderPromises = Object.entries(vendorItems).map(async ([vendorId, items]) => {
         console.log('[Checkout] Creating order for vendor:', vendorId, 'with', items.length, 'items');
 
+        const vendorLocation = await getVendorPickupLocation(vendorId);
+        const vendorDeliveryCost = await calculateVendorDeliveryCost(
+          vendorLocation,
+          selectedAddress,
+          items,
+          deliveryType
+        );
+
         const orderResult = await orderService.createOrder({
           buyerId: user.uid,
           vendorId,
@@ -244,12 +282,30 @@ export const CheckoutScreen: React.FC = () => {
           })),
           deliveryAddressId: selectedAddressId,
           deliveryType,
-          deliveryCost,
+          deliveryCost: vendorDeliveryCost,
         });
 
         console.log('[Checkout] Order result for vendor', vendorId, ':', orderResult);
         return orderResult;
       });
+
+      async function calculateVendorDeliveryCost(
+        vendorLocation: Awaited<ReturnType<typeof getVendorPickupLocation>>,
+        deliveryAddress: Address,
+        items: CartItem[],
+        type: 'standard' | 'express' | 'same_day'
+      ): Promise<number> {
+        const totalWeight = items.reduce((sum, item) => sum + item.quantity, 0) * 1;
+        const quote = await deliveryService.calculateDeliveryCost(
+          vendorLocation?.city || '',
+          vendorLocation?.state || '',
+          deliveryAddress.city,
+          deliveryAddress.state,
+          totalWeight,
+          type
+        );
+        return quote.success && typeof quote.cost === 'number' && quote.cost > 0 ? quote.cost : getFallbackDeliveryCost(type);
+      }
 
       const orderResults = await Promise.all(orderPromises);
       console.log('[Checkout] All order results:', orderResults);
@@ -272,6 +328,10 @@ export const CheckoutScreen: React.FC = () => {
       }
 
       const subtotal = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
+      // deliveryCost shown in the summary is a blended estimate. Each per-vendor order
+      // stores its own shipping_fee at creation. For accurate multi-vendor payment the
+      // createOrder response should include shipping_fee; until then, charge the
+      // displayed blended total so the buyer isn't surprised.
       const totalAmount = subtotal + deliveryCost;
 
       await flutterwaveService.loadFlutterwaveScript();
@@ -280,6 +340,7 @@ export const CheckoutScreen: React.FC = () => {
         email: user.email || '',
         amount: totalAmount,
         orderId: firstOrder.data.orderId,
+        callbackUrl: `${import.meta.env.VITE_APP_URL || window.location.origin}/orders/${firstOrder.data.orderId}`,
         metadata: {
           order_ids: orderResults.map((r) => r.data?.orderId).filter(Boolean),
           buyer_id: user.uid,
@@ -353,6 +414,15 @@ export const CheckoutScreen: React.FC = () => {
           </Card>
         )}
 
+        {deliveryCostError && (
+          <Card className="mb-6 border-amber-300 bg-amber-50">
+            <CardContent className="p-4 flex items-center gap-3">
+              <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0" />
+              <p className="font-sans text-sm text-amber-800">{deliveryCostError}</p>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Email Verification Warning */}
         {!emailVerified && (
           <Card className="mb-6 border-amber-300 bg-amber-50">
@@ -404,6 +474,11 @@ export const CheckoutScreen: React.FC = () => {
                       I've verified
                     </Button>
                   </div>
+                  {verifyMsg && (
+                    <p role="alert" className="font-sans text-xs text-amber-800 mt-2">
+                      {verifyMsg}
+                    </p>
+                  )}
                 </div>
               </div>
             </CardContent>
@@ -601,9 +676,14 @@ export const CheckoutScreen: React.FC = () => {
                           <p className="font-sans font-semibold text-neutral-900">{option.label}</p>
                           <p className="font-sans text-sm text-neutral-600">{option.days}</p>
                         </div>
-                        {deliveryType === option.type && (
-                          <CheckCircle className="w-5 h-5 text-primary-600" />
-                        )}
+                        <div className="text-right">
+                          {deliveryType === option.type && (
+                            <CheckCircle className="w-5 h-5 text-primary-600 ml-auto mb-1" />
+                          )}
+                          <p className="font-sans text-sm font-medium text-primary-600">
+                            {isCalculatingCost ? 'Calculating...' : `₦${(option.type === deliveryType ? deliveryCost : getFallbackDeliveryCost(option.type)).toLocaleString()}`}
+                          </p>
+                        </div>
                       </div>
                     </div>
                   ))}

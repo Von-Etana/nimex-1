@@ -99,6 +99,10 @@ async function getCommissionAmount(referralType: ReferralType): Promise<number> 
 }
 
 export const approveReferralCommission = functions.https.onCall(async (request: any) => {
+    if (!request.app) {
+        throw new functions.https.HttpsError('failed-precondition', 'The function must be called from an App Check verified app.');
+    }
+
     const adminUid = await assertAdmin(request);
     const { referralType, referralId } = getRequestData(request);
     const config = referralConfig[referralType];
@@ -171,6 +175,10 @@ export const approveReferralCommission = functions.https.onCall(async (request: 
 });
 
 export const rejectReferralCommission = functions.https.onCall(async (request: any) => {
+    if (!request.app) {
+        throw new functions.https.HttpsError('failed-precondition', 'The function must be called from an App Check verified app.');
+    }
+
     const adminUid = await assertAdmin(request);
     const { referralType, referralId, reason } = getRequestData(request);
     const { collection } = referralConfig[referralType];
@@ -204,6 +212,10 @@ export const rejectReferralCommission = functions.https.onCall(async (request: a
 });
 
 export const markReferralCommissionPaid = functions.https.onCall(async (request: any) => {
+    if (!request.app) {
+        throw new functions.https.HttpsError('failed-precondition', 'The function must be called from an App Check verified app.');
+    }
+
     const adminUid = await assertAdmin(request);
     const { referralType, referralId, paymentMethod, referenceNumber, notes } = getRequestData(request);
 

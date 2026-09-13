@@ -663,26 +663,37 @@ export const deleteAccount = functions.https.onRequest(async (req, res) => {
         const decodedToken = await verifyAuthToken(req);
         const uid = decodedToken.uid;
 
-        const batch = db.batch();
+        const deleteQuery = async (query: any) => {
+            const snap = await query.get();
+            if (snap.empty) return;
+            const bulkWriter = db.bulkWriter();
+            snap.forEach((doc: any) => bulkWriter.delete(doc.ref));
+            await bulkWriter.close();
+        };
 
-        // 1. Delete profile doc
-        batch.delete(db.collection("profiles").doc(uid));
+        // 1. Delete dependent collections for buyer
+        await deleteQuery(db.collection("carts").where("user_id", "==", uid));
+        await deleteQuery(db.collection("cart_items").where("user_id", "==", uid));
+        await deleteQuery(db.collection("wishlists").where("user_id", "==", uid));
+        await deleteQuery(db.collection("addresses").where("user_id", "==", uid));
+        await deleteQuery(db.collection("orders").where("buyer_id", "==", uid));
+        await deleteQuery(db.collection("escrow_transactions").where("buyer_id", "==", uid));
+        await deleteQuery(db.collection("payment_transactions").where("buyer_id", "==", uid));
 
-        // 2. Delete cart doc & cart items
-        const cartSnap = await db.collection("carts").where("user_id", "==", uid).get();
-        cartSnap.forEach(doc => batch.delete(doc.ref));
+        // 2. Delete dependent collections for vendor
+        await deleteQuery(db.collection("products").where("vendor_id", "==", uid));
+        await deleteQuery(db.collection("payouts").where("vendor_id", "==", uid));
+        await deleteQuery(db.collection("wallet_transactions").where("vendor_id", "==", uid));
+        await deleteQuery(db.collection("vendor_payout_accounts").where("vendor_id", "==", uid));
+        await deleteQuery(db.collection("orders").where("vendor_id", "==", uid));
+        await deleteQuery(db.collection("escrow_transactions").where("vendor_id", "==", uid));
+        await deleteQuery(db.collection("payment_transactions").where("vendor_id", "==", uid));
+        await deleteQuery(db.collection("deliveries").where("vendor_id", "==", uid));
+        await deleteQuery(db.collection("deliveries").where("buyer_id", "==", uid));
 
-        const cartItemsSnap = await db.collection("cart_items").where("user_id", "==", uid).get();
-        cartItemsSnap.forEach(doc => batch.delete(doc.ref));
-
-        // 3. Delete wishlists & addresses
-        const wishSnap = await db.collection("wishlists").where("user_id", "==", uid).get();
-        wishSnap.forEach(doc => batch.delete(doc.ref));
-
-        const addrSnap = await db.collection("addresses").where("user_id", "==", uid).get();
-        addrSnap.forEach(doc => batch.delete(doc.ref));
-
-        await batch.commit();
+        // 3. Delete Profile and Vendor docs
+        await db.collection("profiles").doc(uid).delete();
+        await db.collection("vendors").doc(uid).delete();
 
         // 4. Delete Auth User
         await admin.auth().deleteUser(uid);
@@ -952,22 +963,26 @@ async function sendSmsViaTermii(to: string, message: string) {
  * Secure endpoint to send SMS from client
  */
 export const sendTermiiSms = functions.https.onCall(async (request: any) => {
+    if (!request.app) {
+        throw new functions.https.HttpsError('failed-precondition', 'The function must be called from an App Check verified app.');
+    }
+
     if (!request.auth) {
         throw new functions.https.HttpsError('unauthenticated', 'Authentication required to send SMS');
     }
 
-    // Determine if it's v1 (data, context) or v2 (request)
-    // The type error suggested it's CallableRequest, so let's handle both or assume v2 structure if typed that way.
-    // Actually, to be safe and avoid type errors, let's cast or check.
-    // However, since we saw "Property 'to' does not exist on type 'CallableRequest'", the first arg IS the request object.
-
-    const data = request.data || request; // Fallback if it's actually v1 and request IS data
-    // const context = request.auth ? { auth: request.auth } : request.context; // Unused
-
+    const data = request.data || request;
     const { to, message } = data;
 
     if (!to || !message) {
         throw new functions.https.HttpsError('invalid-argument', 'Recipient (to) and message are required');
+    }
+
+    // Restrict arbitrary SMS sending from client. Only internal system callers
+    // (server-side triggers / admin processes) may use this endpoint.
+    const isInternal = data.internal === true && data.secret === process.env.TERMII_INTERNAL_SECRET;
+    if (!isInternal) {
+        throw new functions.https.HttpsError('permission-denied', 'SMS sending is restricted to internal system callers');
     }
 
     try {
@@ -984,6 +999,10 @@ export const sendTermiiSms = functions.https.onCall(async (request: any) => {
  * Secure endpoint to send transactional emails from the client via the Resend API.
  */
 export const sendEmail = functions.https.onCall(async (request: any) => {
+    if (!request.app) {
+        throw new functions.https.HttpsError('failed-precondition', 'The function must be called from an App Check verified app.');
+    }
+
     if (!request.auth) {
         throw new functions.https.HttpsError('unauthenticated', 'Authentication required to send email');
     }
@@ -1033,6 +1052,10 @@ export const sendEmail = functions.https.onCall(async (request: any) => {
  * a reset is by definition not logged in.
  */
 export const sendPasswordResetEmailCustom = functions.https.onCall(async (request: any) => {
+    if (!request.app) {
+        throw new functions.https.HttpsError('failed-precondition', 'The function must be called from an App Check verified app.');
+    }
+
     const data = request.data || request;
     const { email } = data;
 

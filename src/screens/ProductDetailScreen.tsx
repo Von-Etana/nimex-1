@@ -303,8 +303,10 @@ export const ProductDetailScreen: React.FC = () => {
     ? product.images
     : ['/image-1.png', '/image-2.png'];
 
-  const discount = product.compare_at_price
-    ? Math.round(((product.compare_at_price - product.price) / product.compare_at_price) * 100)
+  // Clamp to [0, 100]: if price >= compare_at_price there is no valid discount
+  // (protects against inverted price data producing "-100% OFF").
+  const discount = product.compare_at_price && product.compare_at_price > product.price
+    ? Math.min(100, Math.max(0, Math.round(((product.compare_at_price - product.price) / product.compare_at_price) * 100)))
     : 0;
 
   return (
@@ -403,7 +405,7 @@ export const ProductDetailScreen: React.FC = () => {
                 <span className="font-heading font-bold text-3xl text-primary-500">
                   ₦{product.price.toLocaleString()}
                 </span>
-                {product.compare_at_price && (
+                {discount > 0 && product.compare_at_price && (
                   <>
                     <span className="font-sans text-lg text-neutral-400 line-through">
                       ₦{product.compare_at_price.toLocaleString()}

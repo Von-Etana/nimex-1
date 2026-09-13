@@ -16,7 +16,7 @@ export const MobileBottomNav: React.FC = () => {
   ];
 
   return (
-    <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-neutral-200 z-50 shadow-[0_-2px_10px_rgba(0,0,0,0.05)]">
+    <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-neutral-200 z-50 shadow-[0_-2px_10px_rgba(0,0,0,0.05)]">
       <div className="w-full max-w-screen-xl mx-auto">
         <div className="flex justify-around items-center h-16 px-2">
           {navItems.map((item) => {

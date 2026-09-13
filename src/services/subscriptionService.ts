@@ -92,7 +92,8 @@ class SubscriptionService {
    */
   isSubscriptionActive(status: SubscriptionStatus, endDate: Date | null): boolean {
     if (status !== 'active') return false;
-    if (!endDate) return true;
+    // A missing end date is bad data, not a perpetual subscription — treat as inactive.
+    if (!endDate) return false;
     return new Date() < endDate;
   }
 

@@ -3,6 +3,17 @@ import * as admin from "firebase-admin";
 import * as crypto from "crypto";
 import axios, { AxiosError } from "axios";
 
+/**
+ * Terminal Africa API documentation references:
+ * - Rates: https://docs.terminal.africa/rates
+ * - Shipments: https://docs.terminal.africa/shipments
+ * - Webhooks: https://docs.terminal.africa/webhooks
+ *
+ * The implementation below uses the v1 endpoints. If Terminal Africa has
+ * changed the endpoint for booking a shipment from a rate, update the
+ * `createTerminalShipment` path accordingly.
+ */
+
 const legacyConfig = () => ((functions as any).config?.() ?? {});
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -91,22 +102,28 @@ const extractAxiosErrorMessage = (error: unknown): string => {
  * Falls back to mock data when TERMINAL_SECRET_KEY is not configured.
  */
 export const getTerminalRates = functions.https.onCall(async (request: any) => {
+    if (!request.app) {
+        throw new functions.https.HttpsError('failed-precondition', 'The function must be called from an App Check verified app.');
+    }
+
     const data = request.data || request;
-    const { pickup_address, delivery_address, parcels } = data;
+    const { pickup_address, delivery_address, parcels, weight } = data;
 
-    if (!pickup_address || !delivery_address || !parcels) {
+    if (!pickup_address || !delivery_address) {
         throw new functions.https.HttpsError(
             "invalid-argument",
-            "Missing required shipment details: pickup_address, delivery_address, parcels."
+            "Missing required shipment details: pickup_address, delivery_address."
         );
     }
 
-    if (!Array.isArray(parcels) || parcels.length === 0) {
-        throw new functions.https.HttpsError(
-            "invalid-argument",
-            "parcels must be a non-empty array."
-        );
-    }
+    const shipmentParcels = Array.isArray(parcels) && parcels.length > 0
+        ? parcels
+        : [{
+              weight: typeof weight === "number" && weight > 0 ? weight : 1,
+              height: 10,
+              width: 10,
+              length: 10,
+          }];
 
     const { secretKey } = getTerminalConfig();
 
@@ -114,31 +131,34 @@ export const getTerminalRates = functions.https.onCall(async (request: any) => {
     if (!secretKey) {
         console.log("Terminal API Secret Key missing. Returning mock rates.");
         const shipmentId = "mock_shipment_" + Math.floor(Math.random() * 1000000);
+        const estimatedSameDay = 6500;
+        const estimatedExpress = 4500;
+        const estimatedStandard = 2500;
         return {
             success: true,
             data: {
                 shipmentId,
                 rates: [
                     {
-                        id: "rate_mock_sendbox",
+                        id: "rate_mock_sendbox_standard",
                         carrier_name: "Sendbox (Mock)",
-                        amount: 1500,
+                        amount: estimatedStandard,
                         currency: "NGN",
                         duration: "3-5 Days",
                         carrier_id: "carrier_mock_sendbox",
                     },
                     {
-                        id: "rate_mock_dhl",
+                        id: "rate_mock_dhl_express",
                         carrier_name: "DHL Express (Mock)",
-                        amount: 3500,
+                        amount: estimatedExpress,
                         currency: "NGN",
                         duration: "1-2 Days",
                         carrier_id: "carrier_mock_dhl",
                     },
                     {
-                        id: "rate_mock_fedex",
+                        id: "rate_mock_fedex_same_day",
                         carrier_name: "FedEx (Mock)",
-                        amount: 5000,
+                        amount: estimatedSameDay,
                         currency: "NGN",
                         duration: "1 Day",
                         carrier_id: "carrier_mock_fedex",
@@ -156,7 +176,7 @@ export const getTerminalRates = functions.https.onCall(async (request: any) => {
         const shipmentResponse = await client.post("/shipments", {
             pickup_address,
             delivery_address,
-            parcels,
+            parcels: shipmentParcels,
         });
 
         const shipmentId = shipmentResponse.data.data.id;
@@ -186,6 +206,10 @@ export const getTerminalRates = functions.https.onCall(async (request: any) => {
  * Finalise a shipment by booking it with the chosen rate.
  */
 export const createTerminalShipment = functions.https.onCall(async (request: any) => {
+    if (!request.app) {
+        throw new functions.https.HttpsError('failed-precondition', 'The function must be called from an App Check verified app.');
+    }
+
     const data = request.data || request;
     const { shipmentId, rateId } = data;
 
@@ -206,7 +230,7 @@ export const createTerminalShipment = functions.https.onCall(async (request: any
             : rateId.includes("fedex")
                 ? "FedEx (Mock)"
                 : "Sendbox (Mock)";
-        const amount = rateId.includes("dhl") ? 3500 : rateId.includes("fedex") ? 5000 : 1500;
+        const amount = rateId.includes("dhl") ? 4500 : rateId.includes("fedex") ? 6500 : 2500;
         return {
             success: true,
             data: {
@@ -224,8 +248,9 @@ export const createTerminalShipment = functions.https.onCall(async (request: any
     // ── Live mode ─────────────────────────────────────────────────────────────
     try {
         const client = terminalClient();
-        const response = await client.post(`/shipments/${shipmentId}/arrange-pickup`, {
-            rate: rateId,
+        // Terminal Africa endpoint: book shipment using selected rate.
+        const response = await client.post(`/shipments/${shipmentId}/rates/${rateId}/ship`, {
+            rate_id: rateId,
         });
 
         return {
@@ -248,6 +273,10 @@ export const createTerminalShipment = functions.https.onCall(async (request: any
  * Validates required fields before forwarding to Terminal Africa.
  */
 export const quickTerminalShipment = functions.https.onCall(async (request: any) => {
+    if (!request.app) {
+        throw new functions.https.HttpsError('failed-precondition', 'The function must be called from an App Check verified app.');
+    }
+
     const data = request.data || request;
 
     // ── Input validation ───────────────────────────────────────────────────────
@@ -306,6 +335,10 @@ export const quickTerminalShipment = functions.https.onCall(async (request: any)
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const trackTerminalShipment = functions.https.onCall(async (request: any) => {
+    if (!request.app) {
+        throw new functions.https.HttpsError('failed-precondition', 'The function must be called from an App Check verified app.');
+    }
+
     const data = request.data || request;
     const { shipmentId } = data;
 

@@ -1,3 +1,5 @@
+import { fetchWithTimeout } from '../lib/fetchWithTimeout';
+
 interface GoogleMapsConfig {
   apiKey: string;
 }
@@ -79,22 +81,24 @@ class GoogleMapsService {
         params.append('radius', '50000'); // 50km radius
       }
 
-      const response = await fetch(`https://maps.googleapis.com/maps/api/place/textsearch/json?${params}`);
+      const response = await fetchWithTimeout(`https://maps.googleapis.com/maps/api/place/textsearch/json?${params}`, {
+        timeoutMs: 10000
+      });
 
       if (!response.ok) {
-        throw new Error(`Google Places API error: ${response.status}`);
+        throw new Error('Location service unavailable');
       }
 
       const data: { results: PlaceResult[]; status: string } = await response.json();
 
       if (data.status !== 'OK' && data.status !== 'ZERO_RESULTS') {
-        throw new Error(`Google Places API returned status: ${data.status}`);
+        throw new Error('Location service unavailable');
       }
 
       return data.results || [];
     } catch (error) {
       console.error('Error searching places:', error);
-      throw error;
+      throw new Error('Location service unavailable');
     }
   }
 
@@ -112,22 +116,24 @@ class GoogleMapsService {
         fields: 'place_id,formatted_address,geometry,name,types'
       });
 
-      const response = await fetch(`https://maps.googleapis.com/maps/api/place/details/json?${params}`);
+      const response = await fetchWithTimeout(`https://maps.googleapis.com/maps/api/place/details/json?${params}`, {
+        timeoutMs: 10000
+      });
 
       if (!response.ok) {
-        throw new Error(`Google Places Details API error: ${response.status}`);
+        throw new Error('Location service unavailable');
       }
 
       const data: { result: PlaceResult; status: string } = await response.json();
 
       if (data.status !== 'OK') {
-        throw new Error(`Google Places Details API returned status: ${data.status}`);
+        throw new Error('Location service unavailable');
       }
 
       return data.result;
     } catch (error) {
       console.error('Error getting place details:', error);
-      throw error;
+      throw new Error('Location service unavailable');
     }
   }
 
@@ -144,16 +150,18 @@ class GoogleMapsService {
         address: address
       });
 
-      const response = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?${params}`);
+      const response = await fetchWithTimeout(`https://maps.googleapis.com/maps/api/geocode/json?${params}`, {
+        timeoutMs: 10000
+      });
 
       if (!response.ok) {
-        throw new Error(`Google Geocoding API error: ${response.status}`);
+        throw new Error('Location service unavailable');
       }
 
       const data: GeocodeResult = await response.json();
 
       if (data.status !== 'OK' && data.status !== 'ZERO_RESULTS') {
-        throw new Error(`Google Geocoding API returned status: ${data.status}`);
+        throw new Error('Location service unavailable');
       }
 
       if (data.status === 'ZERO_RESULTS') return [];
@@ -168,7 +176,7 @@ class GoogleMapsService {
       }));
     } catch (error) {
       console.error('Error geocoding address:', error);
-      throw error;
+      throw new Error('Location service unavailable');
     }
   }
 
@@ -182,7 +190,7 @@ class GoogleMapsService {
     try {
       const apiKey = this.getApiKey();
       if (!apiKey) {
-        throw new Error('Google Maps API key is not configured');
+        throw new Error('Location service unavailable');
       }
 
       const originStrings = origins.map(origin => `${origin.lat},${origin.lng}`);
@@ -195,22 +203,24 @@ class GoogleMapsService {
         units: 'metric'
       });
 
-      const response = await fetch(`https://maps.googleapis.com/maps/api/distancematrix/json?${params}`);
+      const response = await fetchWithTimeout(`https://maps.googleapis.com/maps/api/distancematrix/json?${params}`, {
+        timeoutMs: 10000
+      });
 
       if (!response.ok) {
-        throw new Error(`Google Distance Matrix API error: ${response.status}`);
+        throw new Error('Location service unavailable');
       }
 
       const data: DistanceMatrixResult = await response.json();
 
       if (data.status !== 'OK') {
-        throw new Error(`Google Distance Matrix API returned status: ${data.status}`);
+        throw new Error('Location service unavailable');
       }
 
       return data;
     } catch (error) {
       console.error('Error calculating distance matrix:', error);
-      throw error;
+      throw new Error('Location service unavailable');
     }
   }
 
@@ -232,22 +242,24 @@ class GoogleMapsService {
       params.append('location', '9.0820,8.6753'); // Center of Nigeria
       params.append('radius', '1000000'); // 1000km radius
 
-      const response = await fetch(`https://maps.googleapis.com/maps/api/place/textsearch/json?${params}`);
+      const response = await fetchWithTimeout(`https://maps.googleapis.com/maps/api/place/textsearch/json?${params}`, {
+        timeoutMs: 10000
+      });
 
       if (!response.ok) {
-        throw new Error(`Google Places API error: ${response.status}`);
+        throw new Error('Location service unavailable');
       }
 
       const data: { results: PlaceResult[]; status: string } = await response.json();
 
       if (data.status !== 'OK' && data.status !== 'ZERO_RESULTS') {
-        throw new Error(`Google Places API returned status: ${data.status}`);
+        throw new Error('Location service unavailable');
       }
 
       return data.results || [];
     } catch (error) {
       console.error('Error searching Nigerian locations:', error);
-      throw error;
+      throw new Error('Location service unavailable');
     }
   }
 
@@ -271,22 +283,24 @@ class GoogleMapsService {
         params.append('radius', '50000');
       }
 
-      const response = await fetch(`https://maps.googleapis.com/maps/api/place/autocomplete/json?${params}`);
+      const response = await fetchWithTimeout(`https://maps.googleapis.com/maps/api/place/autocomplete/json?${params}`, {
+        timeoutMs: 10000
+      });
 
       if (!response.ok) {
-        throw new Error(`Google Autocomplete API error: ${response.status}`);
+        throw new Error('Location service unavailable');
       }
 
       const data: { predictions: Array<{ description: string }>; status: string } = await response.json();
 
       if (data.status !== 'OK' && data.status !== 'ZERO_RESULTS') {
-        throw new Error(`Google Autocomplete API returned status: ${data.status}`);
+        throw new Error('Location service unavailable');
       }
 
       return (data.predictions || []).map(prediction => prediction.description);
     } catch (error) {
       console.error('Error getting autocomplete suggestions:', error);
-      throw error;
+      throw new Error('Location service unavailable');
     }
   }
 }

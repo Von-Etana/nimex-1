@@ -15,8 +15,31 @@ interface SMSRequest {
   message: string;
 }
 
+const VALID_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const VALID_PHONE_RE = /^\+?[0-9]{7,15}$/;
+
 class MessagingService {
+  private validateEmail(to: string): boolean {
+    return VALID_EMAIL_RE.test(to);
+  }
+
+  private validatePhone(to: string): boolean {
+    return VALID_PHONE_RE.test(to.replace(/\s|-/g, ''));
+  }
+
   async sendEmail(request: EmailRequest): Promise<{ success: boolean; error?: ServiceError }> {
+    if (!this.validateEmail(request.to)) {
+      return {
+        success: false,
+        error: { code: 'INVALID_ARGUMENT', message: 'Invalid recipient email address', retryable: false }
+      };
+    }
+    if (!request.subject?.trim() || !request.html?.trim()) {
+      return {
+        success: false,
+        error: { code: 'INVALID_ARGUMENT', message: 'Email subject and body are required', retryable: false }
+      };
+    }
     try {
       const sendEmailFn = httpsCallable(functions, 'sendEmail');
       const response = await sendEmailFn(request);
@@ -47,6 +70,18 @@ class MessagingService {
   }
 
   async sendSMS(request: SMSRequest): Promise<{ success: boolean; error?: ServiceError }> {
+    if (!this.validatePhone(request.to)) {
+      return {
+        success: false,
+        error: { code: 'INVALID_ARGUMENT', message: 'Invalid recipient phone number', retryable: false }
+      };
+    }
+    if (!request.message?.trim()) {
+      return {
+        success: false,
+        error: { code: 'INVALID_ARGUMENT', message: 'SMS message body is required', retryable: false }
+      };
+    }
     try {
       const sendSmsFn = httpsCallable(functions, 'sendTermiiSms');
       const response = await sendSmsFn(request);

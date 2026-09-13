@@ -16,7 +16,7 @@ export const MobileHeader: React.FC = () => {
 
   return (
     <>
-      <header className="md:hidden fixed top-0 left-0 right-0 bg-white shadow-sm border-b border-neutral-100 z-50">
+      <header className="lg:hidden fixed top-0 left-0 right-0 bg-white shadow-sm border-b border-neutral-100 z-50">
         <div className="flex items-center justify-between h-14 px-4">
           <Link to="/" className="flex items-center gap-2">
             <div className="w-8 h-8 bg-primary-500 rounded-md flex items-center justify-center">
@@ -78,7 +78,7 @@ export const MobileHeader: React.FC = () => {
 
       {showMenu && user && (
         <div
-          className="md:hidden fixed inset-0 bg-black/50 z-50"
+          className="lg:hidden fixed inset-0 bg-black/50 z-50"
           onClick={() => setShowMenu(false)}
         >
           <div
@@ -159,7 +159,7 @@ export const MobileHeader: React.FC = () => {
         </div>
       )}
 
-      <div className="md:hidden h-14"></div>
+      <div className="lg:hidden h-14"></div>
     </>
   );
 };

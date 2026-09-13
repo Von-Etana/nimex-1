@@ -6,6 +6,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { FirestoreService } from '../../services/firestore.service';
 import { COLLECTIONS } from '../../lib/collections';
 import { deliveryService } from '../../services/deliveryService';
+import { getVendorPickupLocation } from '../../services/vendorLocationService';
 
 interface Order {
   id: string;
@@ -155,20 +156,31 @@ export const DeliveryManagementScreen: React.FC = () => {
       }
       const vendorData = vendors[0];
 
+      const vendorLocation = await getVendorPickupLocation(vendorData.id);
+
       const result = await deliveryService.createDelivery({
         orderId: order.id,
         vendorId: vendorData.id,
         buyerId: order.buyer.id,
         pickupAddress: {
-          fullName: vendorData.business_name,
-          phone: vendorData.business_phone || '',
-          addressLine1: vendorData.business_address || '',
-          city: 'Lagos',
-          state: 'Lagos',
+          fullName: vendorLocation?.businessName || vendorData.business_name || 'Vendor Store',
+          email: vendorData.email || 'vendor@nimex.ng',
+          phone: vendorLocation?.phone || vendorData.business_phone || '08000000000',
+          addressLine1: vendorLocation?.address || vendorData.business_address || 'Vendor Store',
+          city: vendorLocation?.city || 'Lagos',
+          state: vendorLocation?.state || 'Lagos',
         },
-        deliveryAddress: order.delivery_address,
+        deliveryAddress: {
+          fullName: order.delivery_address?.fullName || order.delivery_address?.recipientName || 'Buyer',
+          email: order.delivery_address?.email || 'buyer@nimex.ng',
+          phone: order.delivery_address?.phone || '08000000000',
+          addressLine1: order.delivery_address?.addressLine1 || order.delivery_address?.streetAddress || 'Buyer Address',
+          addressLine2: order.delivery_address?.addressLine2 || '',
+          city: order.delivery_address?.city || 'Lagos',
+          state: order.delivery_address?.state || 'Lagos',
+        },
         packageDetails: {
-          weight: 2,
+          weight: 1,
           description: `Order ${order.order_number}`,
           value: order.total_amount,
         },

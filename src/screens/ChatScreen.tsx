@@ -8,7 +8,7 @@ import { COLLECTIONS } from '../lib/collections';
 import { logger } from '../lib/logger';
 import { sanitizeText } from '../lib/sanitization';
 import { useAuth } from '../contexts/AuthContext';
-import { where, orderBy, onSnapshot, query, collection, Timestamp, doc, increment } from 'firebase/firestore';
+import { where, orderBy, onSnapshot, query, collection, Timestamp, doc, increment, limit } from 'firebase/firestore';
 import { db } from '../lib/firebase.config';
 import { notificationService } from '../services/notificationService';
 
@@ -68,18 +68,22 @@ export const ChatScreen: React.FC = () => {
   useEffect(() => {
     if (!user?.uid) return;
 
+    setLoading(true);
+
     // We need two queries since Firestore doesn't support OR across different fields
     const buyerQuery = query(
       collection(db, COLLECTIONS.CHAT_CONVERSATIONS),
-      where('buyer_id', '==', user.uid)
+      where('buyer_id', '==', user.uid),
+      orderBy('last_message_at', 'desc')
     );
 
     const vendorQuery = profile?.role === 'vendor'
-      ? query(collection(db, COLLECTIONS.CHAT_CONVERSATIONS), where('vendor_id', '==', user.uid))
+      ? query(collection(db, COLLECTIONS.CHAT_CONVERSATIONS), where('vendor_id', '==', user.uid), orderBy('last_message_at', 'desc'))
       : null;
 
     let buyerConvos: Conversation[] = [];
     let vendorConvos: Conversation[] = [];
+    let isMounted = true;
 
     const enrichConversations = async (rawConvos: any[]) => {
       return Promise.all(rawConvos.map(async (convo) => {
@@ -110,28 +114,51 @@ export const ChatScreen: React.FC = () => {
         const timeB = b.last_message_at ? new Date(b.last_message_at).getTime() : 0;
         return timeB - timeA;
       });
-      setConversations(enriched);
-      setLoading(false);
+      if (isMounted) {
+        setConversations(enriched);
+        setLoading(false);
+      }
     };
 
-    const unsubBuyer = onSnapshot(buyerQuery, async (snapshot) => {
-      buyerConvos = snapshot.docs.map(d => ({ id: d.id, ...d.data() })) as Conversation[];
-      await mergeAndSet();
-    });
-
+    let unsubBuyer: (() => void) | null = null;
     let unsubVendor: (() => void) | null = null;
-    if (vendorQuery) {
-      unsubVendor = onSnapshot(vendorQuery, async (snapshot) => {
-        vendorConvos = snapshot.docs.map(d => ({ id: d.id, ...d.data() })) as Conversation[];
-        await mergeAndSet();
+    let loadedCount = 0;
+
+    const maybeFinishLoading = () => {
+      loadedCount += 1;
+      if (loadedCount >= (vendorQuery ? 2 : 1)) {
+        mergeAndSet();
+      }
+    };
+
+    try {
+      unsubBuyer = onSnapshot(buyerQuery, async (snapshot) => {
+        buyerConvos = snapshot.docs.map(d => ({ id: d.id, ...d.data() })) as Conversation[];
+        maybeFinishLoading();
+      }, (error) => {
+        logger.error('Buyer conversations subscription error', error);
+        if (isMounted) setLoading(false);
       });
-    } else {
-      // If not a vendor, just trigger merge with empty vendor list
-      mergeAndSet();
+
+      if (vendorQuery) {
+        unsubVendor = onSnapshot(vendorQuery, async (snapshot) => {
+          vendorConvos = snapshot.docs.map(d => ({ id: d.id, ...d.data() })) as Conversation[];
+          maybeFinishLoading();
+        }, (error) => {
+          logger.error('Vendor conversations subscription error', error);
+          if (isMounted) setLoading(false);
+        });
+      } else {
+        maybeFinishLoading();
+      }
+    } catch (error) {
+      logger.error('Failed to subscribe to conversations', error);
+      if (isMounted) setLoading(false);
     }
 
     return () => {
-      unsubBuyer();
+      isMounted = false;
+      unsubBuyer?.();
       unsubVendor?.();
     };
   }, [user?.uid, profile?.role]);
@@ -190,39 +217,52 @@ export const ChatScreen: React.FC = () => {
 
   // Real-time subscription for messages in selected conversation
   useEffect(() => {
-    if (!selectedConversation) return;
+    if (!selectedConversation || !user?.uid) return;
+
+    setMessages([]);
 
     const q = query(
       collection(db, COLLECTIONS.CHAT_MESSAGES),
       where('conversation_id', '==', selectedConversation.id),
-      orderBy('created_at', 'asc')
+      orderBy('created_at', 'asc'),
+      limit(200)
     );
 
+    let isMounted = true;
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const newMessages = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       })) as Message[];
 
-      setMessages(newMessages);
+      if (isMounted) {
+        setMessages(newMessages);
 
-      // Mark as read if the last message is not from current user
-      if (newMessages.length > 0) {
-        const lastMsg = newMessages[newMessages.length - 1];
-        if (lastMsg.sender_id !== user?.uid && !lastMsg.is_read) {
-          markMessagesAsRead(selectedConversation.id);
+        // Mark as read if the last message is not from current user
+        if (newMessages.length > 0) {
+          const lastMsg = newMessages[newMessages.length - 1];
+          if (lastMsg.sender_id !== user.uid && !lastMsg.is_read) {
+            markMessagesAsRead(selectedConversation.id);
+          }
         }
       }
+    }, (error) => {
+      logger.error('Messages subscription error', error);
     });
 
-    return () => unsubscribe();
-  }, [selectedConversation?.id]);
+    return () => {
+      isMounted = false;
+      unsubscribe();
+    };
+  }, [selectedConversation?.id, user?.uid]);
 
   // Real-time subscription for conversation data (typing status)
   useEffect(() => {
     if (!selectedConversation || !user?.uid) return;
 
+    let isMounted = true;
     const unsubscribe = onSnapshot(doc(db, COLLECTIONS.CHAT_CONVERSATIONS, selectedConversation.id), (docSnapshot) => {
+      if (!isMounted) return;
       if (docSnapshot.exists()) {
         const data = docSnapshot.data() as Conversation;
         if (user.uid === data.buyer_id) {
@@ -231,9 +271,14 @@ export const ChatScreen: React.FC = () => {
           setIsOtherUserTyping(data.buyer_typing || false);
         }
       }
+    }, (error) => {
+      logger.error('Conversation typing subscription error', error);
     });
 
-    return () => unsubscribe();
+    return () => {
+      isMounted = false;
+      unsubscribe();
+    };
   }, [selectedConversation?.id, user?.uid]);
 
   // Subscribe to other user's presence
@@ -259,41 +304,32 @@ export const ChatScreen: React.FC = () => {
     return () => unsubscribe();
   }, [selectedConversation?.id, user?.uid]);
 
-  const handleTyping = () => {
+  const isTypingRef = useRef(false);
+
+  const handleTyping = useCallback(() => {
     if (!selectedConversation || !user?.uid) return;
 
-    // Clear existing timeout
     if (typingTimeoutRef.current) {
       clearTimeout(typingTimeoutRef.current);
     }
 
-    // Set typing status to true (optimization: only update if not already recently updated? 
-    // For now, simple approach is fine, but maybe check a local ref to avoid too many writes?
-    // Actually, writing on every keystroke is bad. Let's create a local ref to track if we've already set it to true.)
-
-    // Better approach: locally track 'isTyping' state to avoid redundant 'true' writes.
-    // However, for simplicity and robustness (in case of page refresh), just writing 'true' is okay as long as not *every* keystroke triggers a write if it's already true.
-
-    // Let's implement a simple debounce for setting it to true? No, we want it immediate.
-    // We can assume if we have a timeout pending, we are "typing".
-
     const field = selectedConversation.buyer_id === user.uid ? 'buyer_typing' : 'vendor_typing';
 
-    if (!typingTimeoutRef.current) {
-      // Only write 'true' if we weren't already typing (timeout is null)
+    if (!isTypingRef.current) {
+      isTypingRef.current = true;
       FirestoreService.updateDocument(COLLECTIONS.CHAT_CONVERSATIONS, selectedConversation.id, {
         [field]: true
-      }).catch(e => console.error(e));
+      }).catch(e => logger.error('Failed to set typing status', e));
     }
 
-    // Reset timeout to clear typing status
     typingTimeoutRef.current = setTimeout(() => {
       FirestoreService.updateDocument(COLLECTIONS.CHAT_CONVERSATIONS, selectedConversation.id, {
         [field]: false
-      }).catch(e => console.error(e));
+      }).catch(e => logger.error('Failed to clear typing status', e));
+      isTypingRef.current = false;
       typingTimeoutRef.current = null;
     }, 2000);
-  };
+  }, [selectedConversation?.id, user?.uid]);
 
   useEffect(() => {
     if (selectedConversation) {
@@ -303,7 +339,7 @@ export const ChatScreen: React.FC = () => {
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages]);
+  }, [messages, isOtherUserTyping]);
 
   // loadConversations is now handled by the real-time subscription above
 
@@ -350,6 +386,8 @@ export const ChatScreen: React.FC = () => {
   const sendMessage = async () => {
     if (!newMessage.trim() || !selectedConversation || !user?.uid) return;
 
+    const text = newMessage.trim();
+    setNewMessage('');
     setSending(true);
     try {
       const messageId = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -357,14 +395,14 @@ export const ChatScreen: React.FC = () => {
       await FirestoreService.setDocument(COLLECTIONS.CHAT_MESSAGES, messageId, {
         conversation_id: selectedConversation.id,
         sender_id: user.uid,
-        message_text: newMessage.trim(),
+        message_text: text,
         is_read: false,
         created_at: Timestamp.now()
       });
 
       // Update conversation last message using Firestore increment for unread counts
       const updates: any = {
-        last_message: newMessage.trim(),
+        last_message: text,
         last_message_at: new Date().toISOString(),
       };
 
@@ -377,7 +415,7 @@ export const ChatScreen: React.FC = () => {
 
       await FirestoreService.updateDocument(COLLECTIONS.CHAT_CONVERSATIONS, selectedConversation.id, updates);
 
-      // Notify the recipient about new message
+      // Notify the recipient about new message (non-blocking)
       const recipientId = selectedConversation.buyer_id === user.uid
         ? selectedConversation.vendor_id
         : selectedConversation.buyer_id;
@@ -386,18 +424,17 @@ export const ChatScreen: React.FC = () => {
         ? selectedConversation.buyer?.full_name || 'Buyer'
         : selectedConversation.vendor?.business_name || 'Vendor';
 
-      await notificationService.createNotification({
+      notificationService.createNotification({
         userId: recipientId,
         type: 'new_message',
         title: 'New Message 💬',
-        message: `${senderName}: ${newMessage.trim().substring(0, 50)}${newMessage.length > 50 ? '...' : ''}`,
+        message: `${senderName}: ${text.substring(0, 50)}${text.length > 50 ? '...' : ''}`,
         data: { conversationId: selectedConversation.id },
-      });
-
-      setNewMessage('');
-      // Conversations and messages update via real-time subscriptions
+      }).catch(e => logger.warn('Failed to create message notification', e));
     } catch (error) {
       logger.error('Error sending message', error);
+      // Restore input on failure so user can retry
+      setNewMessage(text);
     } finally {
       setSending(false);
     }
@@ -413,13 +450,13 @@ export const ChatScreen: React.FC = () => {
 
     // Validate file type
     if (!file.type.startsWith('image/')) {
-      logger.error('Invalid file type');
+      alert('Please select a valid image file (JPG, PNG, GIF, WEBP).');
       return;
     }
 
     // Validate file size (max 5MB)
     if (file.size > 5 * 1024 * 1024) {
-      logger.error('File too large');
+      alert('Image must be smaller than 5MB.');
       return;
     }
 
@@ -594,14 +631,17 @@ export const ChatScreen: React.FC = () => {
                             </p>
                           )}
                           {conversation.last_message && (
-                            <p className="font-sans text-xs text-neutral-600 truncate">
+                            <p className={`font-sans text-xs truncate ${unreadCount > 0 ? 'text-neutral-900 font-semibold' : 'text-neutral-600'}`}>
                               {conversation.last_message}
                             </p>
                           )}
                           {unreadCount > 0 && (
-                            <span className="inline-flex items-center justify-center w-5 h-5 bg-green-700 text-white text-xs font-bold rounded-full mt-1">
-                              {unreadCount}
-                            </span>
+                            <div className="flex items-center gap-1.5 mt-1">
+                              <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 bg-green-700 text-white text-xs font-bold rounded-full">
+                                {unreadCount}
+                              </span>
+                              <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+                            </div>
                           )}
                         </div>
                       </div>
@@ -661,25 +701,38 @@ export const ChatScreen: React.FC = () => {
                         className={`flex ${isOwnMessage ? 'justify-end' : 'justify-start'}`}
                       >
                         <div
-                          className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${isOwnMessage
-                            ? 'bg-green-700 text-white'
-                            : 'bg-neutral-100 text-neutral-900'
+                          className={`max-w-[85%] lg:max-w-md px-4 py-2.5 rounded-2xl ${isOwnMessage
+                            ? 'bg-green-700 text-white rounded-br-md'
+                            : 'bg-white border border-neutral-200 text-neutral-900 rounded-bl-md shadow-sm'
                             }`}
                         >
                           {message.message_text && (
-                            <p className="font-sans text-sm">{sanitizeText(message.message_text)}</p>
+                            <p className="font-sans text-sm whitespace-pre-wrap leading-relaxed">{sanitizeText(message.message_text)}</p>
                           )}
                           {message.image_url && (
-                            <img
-                              src={message.image_url}
-                              alt="Shared image"
-                              className="max-w-full rounded mt-2"
-                            />
+                            <a href={message.image_url} target="_blank" rel="noopener noreferrer" className="block mt-2">
+                              <img
+                                src={message.image_url}
+                                alt="Shared image"
+                                className="max-w-full rounded-lg max-h-64 object-cover"
+                                loading="lazy"
+                              />
+                            </a>
                           )}
-                          <p className={`font-sans text-xs mt-1 ${isOwnMessage ? 'text-green-100' : 'text-neutral-500'
-                            }`}>
-                            {formatTime(message.created_at)}
-                          </p>
+                          <div className={`flex items-center gap-1.5 mt-1.5 ${isOwnMessage ? 'justify-end' : 'justify-start'}`}>
+                            <p className={`font-sans text-[11px] ${isOwnMessage ? 'text-green-100' : 'text-neutral-500'}`}>
+                              {formatTime(message.created_at)}
+                            </p>
+                            {isOwnMessage && (
+                              <span title={message.is_read ? 'Read' : 'Sent'}>
+                                {message.is_read ? (
+                                  <svg className="w-3 h-3 text-green-100" viewBox="0 0 24 24" fill="currentColor"><path d="M18 7l-8.5 8.5-5-5L3 12l6.5 6.5L21 7z"/></svg>
+                                ) : (
+                                  <svg className="w-3 h-3 text-green-200" viewBox="0 0 24 24" fill="currentColor"><path d="M5 12l5 5L20 7"/></svg>
+                                )}
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </div>
                     );

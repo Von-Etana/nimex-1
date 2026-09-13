@@ -1,4 +1,5 @@
 import type { NormalizedPaymentRequest, ServiceError } from '../types/serviceTypes';
+import { fetchWithTimeout } from '../lib/fetchWithTimeout';
 
 interface PaystackConfig {
   publicKey: string;
@@ -38,7 +39,11 @@ class PaystackService {
       publicKey: import.meta.env.VITE_PAYSTACK_PUBLIC_KEY,
     };
     // Placeholder for Firebase Functions URL
-    this.apiUrl = import.meta.env.VITE_API_URL || 'https://your-firebase-project.cloudfunctions.net';
+    this.apiUrl = import.meta.env.VITE_API_URL;
+
+    if (!this.apiUrl) {
+      console.warn('Missing required environment variable: VITE_API_URL');
+    }
 
     if (!this.config.publicKey) {
       console.warn('Missing required environment variable: VITE_PAYSTACK_PUBLIC_KEY');
@@ -62,7 +67,7 @@ class PaystackService {
       const reference = `NIMEX-SUB-${vendorId}-${plan}-${Date.now()}`;
 
       // Try actual backend first
-      const response = await fetch(`${this.apiUrl}/initializePayment`, {
+      const response = await fetchWithTimeout(`${this.apiUrl}/initializePayment`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -75,7 +80,7 @@ class PaystackService {
             plan: plan,
             price: tier.price,
           },
-          callback_url: `${window.location.origin}/vendor/subscription/success`,
+          callback_url: `${import.meta.env.VITE_APP_URL || window.location.origin}/vendor/subscription/success`,
         }),
       });
 
@@ -118,7 +123,7 @@ class PaystackService {
     try {
       const reference = request.reference || `NIMEX-${request.orderId}-${Date.now()}`;
 
-      const response = await fetch(`${this.apiUrl}/initializePayment`, {
+      const response = await fetchWithTimeout(`${this.apiUrl}/initializePayment`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -129,7 +134,7 @@ class PaystackService {
             order_id: request.orderId,
             ...request.metadata,
           },
-          callback_url: request.callbackUrl || `${window.location.origin}/orders/${request.orderId}`,
+          callback_url: request.callbackUrl || `${import.meta.env.VITE_APP_URL || window.location.origin}/orders/${request.orderId}`,
         }),
       });
 
@@ -230,7 +235,7 @@ class PaystackService {
 
   async verifyPayment(reference: string): Promise<VerifyPaymentResponse> {
     try {
-      const response = await fetch(`${this.apiUrl}/verifyPayment`, {
+      const response = await fetchWithTimeout(`${this.apiUrl}/verifyPayment`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reference }),

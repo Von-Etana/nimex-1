@@ -114,8 +114,7 @@ export const DesktopHeader: React.FC = () => {
   };
 
   return (
-    <header
-      className={`hidden md:block w-full sticky top-0 z-50 transition-all duration-300 ${isScrolled
+    <header className={`hidden lg:block w-full sticky top-0 z-50 transition-all duration-300 ${isScrolled
         ? 'bg-white/95 backdrop-blur-md shadow-md border-b border-neutral-100'
         : 'bg-white border-b border-neutral-100'
         }`}

@@ -60,7 +60,9 @@ const transformProduct = (p: any, vendorMap: Map<string, any>): Product => ({
   reviews: p.reviews_count || 0,
   category: p.category_name || p.category_id || 'General',
   inStock: (p.stock_quantity || 0) > 0,
-  discount: p.compare_at_price ? Math.round(((p.compare_at_price - p.price) / p.compare_at_price) * 100) : undefined,
+  discount: p.compare_at_price && p.compare_at_price > p.price
+    ? Math.min(100, Math.max(0, Math.round(((p.compare_at_price - p.price) / p.compare_at_price) * 100)))
+    : undefined,
   tags: p.tags || [],
   location: vendorMap.get(p.vendor_id)?.market_location || p.location || '',
   isVerified: p.is_verified || false
