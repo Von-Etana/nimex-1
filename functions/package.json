@@ -5,6 +5,8 @@
         "lint": "eslint",
         "build": "tsc",
         "build:watch": "tsc --watch",
+        "test": "jest",
+        "test:watch": "jest --watch",
         "serve": "npm run build && firebase emulators:start --only functions",
         "shell": "npm run build && firebase functions:shell",
         "start": "npm run shell",
@@ -25,11 +27,14 @@
         "firebase-functions": "^7.2.5"
     },
     "devDependencies": {
+        "@types/jest": "^29.5.14",
         "@typescript-eslint/eslint-plugin": "^7.18.0",
         "@typescript-eslint/parser": "^7.18.0",
         "eslint": "^8.57.0",
         "eslint-config-google": "^0.14.0",
         "eslint-plugin-import": "^2.29.1",
+        "jest": "^29.7.0",
+        "ts-jest": "^29.4.12",
         "typescript": "^5.5.4"
     },
     "private": true

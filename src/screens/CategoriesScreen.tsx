@@ -12,11 +12,11 @@ import {
   BookOpenIcon,
   HeartPulseIcon,
   MapPinIcon,
-  Sparkles,
   TrendingUpIcon,
   ArrowRight,
   SearchIcon,
 } from 'lucide-react';
+import { DEFAULT_LOCATION_LABEL } from '../lib/locationDefaults';
 
 const categoryGroups = [
   {
@@ -89,7 +89,7 @@ const categoryGroups = [
 export const CategoriesScreen: React.FC = () => {
   const navigate = useNavigate();
   const [activeFilter, setActiveFilter] = useState<'nearest' | 'popular'>('nearest');
-  const [location, setLocation] = useState('Lagos, Nigeria');
+  const [location, setLocation] = useState(DEFAULT_LOCATION_LABEL);
 
   return (
     <div className="flex flex-col w-full min-h-screen bg-white">

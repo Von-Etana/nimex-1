@@ -1,12 +1,14 @@
 import React from 'react';
 import { Outlet } from 'react-router-dom';
 import { AdminHeader } from './AdminHeader';
+import { SkipToContent } from '../SkipToContent';
 
 export const AdminLayout: React.FC = () => {
     return (
         <div className="min-h-screen bg-neutral-50">
+            <SkipToContent targetId="main-content" />
             <AdminHeader />
-            <main>
+            <main id="main-content" tabIndex={-1}>
                 <Outlet />
             </main>
             <footer className="w-full bg-white border-t border-neutral-200 mt-12">

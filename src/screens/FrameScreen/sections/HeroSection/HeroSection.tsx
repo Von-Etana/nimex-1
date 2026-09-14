@@ -27,6 +27,7 @@ import { COLLECTIONS } from "../../../../lib/collections";
 import { LocationPicker } from "../../../../components/maps/LocationPicker";
 import { Loader2 } from "lucide-react";
 import { calculateDistance, formatDistance } from "../../../../lib/utils";
+import { DEFAULT_LOCATION_LABEL } from "../../../../lib/locationDefaults";
 const categories = [
   { icon: TvIcon, title: "Electronics", id: "electronics", color: "bg-blue-500" },
   { icon: ShirtIcon, title: "Fashion", id: "fashion", color: "bg-pink-500" },
@@ -178,7 +179,7 @@ export const HeroSection = (): JSX.Element => {
         price: `₦ ${(p.price || 0).toLocaleString()}`,
         vendor: "Vendor", // We could look up vendor name if needed, but 'Vendor' is fine for now on grid
         vendorImage: "/image-1.png",
-        location: "Lagos",
+        location: DEFAULT_LOCATION_LABEL,
         views: (p.views_count || 0).toString(),
         rating: p.rating || 4.5,
         verified: true,
@@ -195,7 +196,7 @@ export const HeroSection = (): JSX.Element => {
       price: "100+ Products",
       vendor: v.business_name || 'Vendor',
       vendorImage: v.avatar_url || v.logo_url || "/image-1.png",
-      location: v.market_location || v.business_address || "Lagos",
+      location: v.market_location || v.business_address || DEFAULT_LOCATION_LABEL,
       views: "1k",
       rating: v.rating || 5,
       verified: v.verification_status === 'verified',

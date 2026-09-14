@@ -8,6 +8,7 @@ import { recommendationService, ProductRecommendation, VendorRanking } from "../
 import { Loader2, Star, MapPin, TrendingUp, Clock } from "lucide-react";
 import { FirestoreService } from "../../../../services/firestore.service";
 import { COLLECTIONS } from "../../../../lib/collections";
+import { DEFAULT_LOCATION_LABEL } from "../../../../lib/locationDefaults";
 
 const socialIcons = [
   { src: "/container-3.svg", alt: "Facebook" },
@@ -143,7 +144,7 @@ export const RecommendationsSection = (): JSX.Element => {
           </h3>
           <div className="flex items-center gap-1 text-xs text-neutral-600">
             <MapPin className="w-3 h-3" />
-            <span>{vendor.market_location || 'Lagos, Nigeria'}</span>
+            <span>{vendor.market_location || DEFAULT_LOCATION_LABEL}</span>
           </div>
         </div>
       </div>

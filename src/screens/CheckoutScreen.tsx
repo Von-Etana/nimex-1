@@ -55,6 +55,9 @@ export const CheckoutScreen: React.FC = () => {
   const [emailSent, setEmailSent] = useState(false);
   const [checkingVerification, setCheckingVerification] = useState(false);
   const [verifyMsg, setVerifyMsg] = useState('');
+  const [paymentError, setPaymentError] = useState<{ message: string; retryable: boolean } | null>(null);
+  const [paymentRetryCount, setPaymentRetryCount] = useState(0);
+  const [pendingOrderIds, setPendingOrderIds] = useState<string[] | null>(null);
   const [newAddress, setNewAddress] = useState<Partial<Address>>({
     full_name: '',
     phone: '',
@@ -230,13 +233,84 @@ export const CheckoutScreen: React.FC = () => {
     }
   };
 
+  const initializeOrderPayment = async (orderIds: string[]) => {
+    if (!user) return;
+
+    const subtotal = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
+    const totalAmount = subtotal + deliveryCost;
+
+    await flutterwaveService.loadFlutterwaveScript();
+
+    const paymentResult = await flutterwaveService.initializePayment({
+      email: user.email || '',
+      amount: totalAmount,
+      orderId: orderIds[0],
+      callbackUrl: `${import.meta.env.VITE_APP_URL || window.location.origin}/orders/${orderIds[0]}`,
+      metadata: {
+        order_ids: orderIds,
+        buyer_id: user.uid,
+        type: 'order',
+      },
+    });
+
+    if (!paymentResult.success || !paymentResult.data) {
+      throw new Error(
+        typeof paymentResult.error === 'string'
+          ? paymentResult.error
+          : paymentResult.error?.message || 'Failed to initialize payment'
+      );
+    }
+
+    flutterwaveService.openPaymentModal(
+      paymentResult.data,
+      async (response) => {
+        const verifyResult = await flutterwaveService.verifyPayment(response.transaction_id || response.tx_ref);
+
+        if (verifyResult.success) {
+          if (user.email) {
+            const orderItems = cartItems.map((item) => ({
+              title: item.title,
+              quantity: item.quantity,
+              price: item.price,
+            }));
+
+            emailNotificationService
+              .sendOrderConfirmation(user.email, orderIds[0], totalAmount, orderItems)
+              .catch((err) => console.error('Failed to send order confirmation email:', err));
+          }
+
+          localStorage.removeItem('nimex_cart');
+          navigate('/orders/' + orderIds[0], {
+            state: { paymentSuccess: true },
+          });
+        } else {
+          setPaymentError({
+            message: verifyResult.error?.message || 'Payment verification failed. You can retry.',
+            retryable: true,
+          });
+          setIsProcessing(false);
+        }
+      },
+      () => {
+        setIsProcessing(false);
+        setPaymentError((prev) =>
+          prev
+            ? prev
+            : {
+                message: 'Payment was cancelled or could not be completed. You can retry.',
+                retryable: true,
+              }
+        );
+      }
+    );
+  };
+
   const handleCheckout = async () => {
     if (!user || !selectedAddressId) {
       setError('Please select a delivery address');
       return;
     }
 
-    // Check email verification before checkout
     if (!emailVerified) {
       setError('Please verify your email address before placing an order. Check your inbox for the verification link.');
       return;
@@ -244,10 +318,25 @@ export const CheckoutScreen: React.FC = () => {
 
     setIsProcessing(true);
     setError('');
+    setPaymentError(null);
+
+    if (pendingOrderIds && pendingOrderIds.length > 0) {
+      try {
+        await initializeOrderPayment(pendingOrderIds);
+      } catch (err) {
+        setPaymentError({
+          message: err instanceof Error ? err.message : 'Payment failed. You can retry.',
+          retryable: true,
+        });
+        setIsProcessing(false);
+      }
+      return;
+    }
+
+    let createdOrderIds: string[] = [];
 
     try {
       console.log('[Checkout] Starting checkout with', cartItems.length, 'items');
-      console.log('[Checkout] Cart items:', JSON.stringify(cartItems, null, 2));
 
       const vendorItems = cartItems.reduce((acc, item) => {
         if (!acc[item.vendor_id]) {
@@ -259,13 +348,18 @@ export const CheckoutScreen: React.FC = () => {
 
       console.log('[Checkout] Grouped by vendors:', Object.keys(vendorItems).length, 'vendors');
 
+      const deliveryAddress = addresses.find((addr) => addr.id === selectedAddressId);
+      if (!deliveryAddress) {
+        throw new Error('Selected delivery address not found');
+      }
+
       const orderPromises = Object.entries(vendorItems).map(async ([vendorId, items]) => {
         console.log('[Checkout] Creating order for vendor:', vendorId, 'with', items.length, 'items');
 
         const vendorLocation = await getVendorPickupLocation(vendorId);
         const vendorDeliveryCost = await calculateVendorDeliveryCost(
           vendorLocation,
-          selectedAddress,
+          deliveryAddress,
           items,
           deliveryType
         );
@@ -314,7 +408,6 @@ export const CheckoutScreen: React.FC = () => {
 
       if (failedOrders.length > 0) {
         console.error('[Checkout] Failed orders:', failedOrders);
-        // Get specific error messages from failed orders
         const errorMessages = failedOrders
           .map((order) => order.error)
           .filter(Boolean)
@@ -322,77 +415,42 @@ export const CheckoutScreen: React.FC = () => {
         throw new Error(errorMessages || 'Failed to create some orders');
       }
 
-      const firstOrder = orderResults[0];
-      if (!firstOrder.data) {
+      createdOrderIds = orderResults
+        .map((r) => r.data?.orderId)
+        .filter((id): id is string => Boolean(id));
+
+      if (createdOrderIds.length === 0) {
         throw new Error('No order data returned');
       }
 
-      const subtotal = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
-      // deliveryCost shown in the summary is a blended estimate. Each per-vendor order
-      // stores its own shipping_fee at creation. For accurate multi-vendor payment the
-      // createOrder response should include shipping_fee; until then, charge the
-      // displayed blended total so the buyer isn't surprised.
-      const totalAmount = subtotal + deliveryCost;
-
-      await flutterwaveService.loadFlutterwaveScript();
-
-      const paymentResult = await flutterwaveService.initializePayment({
-        email: user.email || '',
-        amount: totalAmount,
-        orderId: firstOrder.data.orderId,
-        callbackUrl: `${import.meta.env.VITE_APP_URL || window.location.origin}/orders/${firstOrder.data.orderId}`,
-        metadata: {
-          order_ids: orderResults.map((r) => r.data?.orderId).filter(Boolean),
-          buyer_id: user.uid,
-          type: 'order',
-        },
-      });
-
-      if (!paymentResult.success || !paymentResult.data) {
-        throw new Error(paymentResult.error || 'Failed to initialize payment');
-      }
-
-      flutterwaveService.openPaymentModal(
-        paymentResult.data,
-        async (response) => {
-          // Verify
-          const verifyResult = await flutterwaveService.verifyPayment(response.transaction_id || response.tx_ref);
-
-          if (verifyResult.success) {
-            // Send order confirmation email
-            if (user.email) {
-              const orderItems = cartItems.map(item => ({
-                title: item.title,
-                quantity: item.quantity,
-                price: item.price
-              }));
-
-              emailNotificationService.sendOrderConfirmation(
-                user.email,
-                firstOrder.data.orderId,
-                totalAmount,
-                orderItems
-              ).catch(err => console.error('Failed to send order confirmation email:', err));
-            }
-
-            localStorage.removeItem('nimex_cart');
-            navigate('/orders/' + firstOrder.data.orderId, {
-              state: { paymentSuccess: true },
-            });
-          } else {
-            setError('Payment verification failed');
-            setIsProcessing(false);
-          }
-        },
-        () => {
-          setIsProcessing(false);
-        }
-      );
+      setPendingOrderIds(createdOrderIds);
+      await initializeOrderPayment(createdOrderIds);
     } catch (err) {
       console.error('Checkout error:', err);
-      setError(err instanceof Error ? err.message : 'Failed to process checkout');
+      if (createdOrderIds.length > 0) {
+        setPaymentError({
+          message: err instanceof Error ? err.message : 'Payment could not be started. You can retry without creating a new order.',
+          retryable: true,
+        });
+      } else {
+        setError(err instanceof Error ? err.message : 'Failed to process checkout');
+      }
       setIsProcessing(false);
     }
+  };
+
+  const handleRetryPayment = () => {
+    if (!pendingOrderIds || pendingOrderIds.length === 0) return;
+    setPaymentRetryCount((c) => c + 1);
+    setPaymentError(null);
+    setIsProcessing(true);
+    initializeOrderPayment(pendingOrderIds).catch((err) => {
+      setPaymentError({
+        message: err instanceof Error ? err.message : 'Retry failed. Please try again.',
+        retryable: true,
+      });
+      setIsProcessing(false);
+    });
   };
 
   const subtotal = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
@@ -410,6 +468,35 @@ export const CheckoutScreen: React.FC = () => {
             <CardContent className="p-4 flex items-center gap-3">
               <AlertCircle className="w-5 h-5 text-error flex-shrink-0" />
               <p className="font-sans text-sm text-error">{error}</p>
+            </CardContent>
+          </Card>
+        )}
+
+        {paymentError && (
+          <Card className="mb-6 border-error bg-error/5">
+            <CardContent className="p-4">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="w-5 h-5 text-error flex-shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <p className="font-sans text-sm text-error mb-3">{paymentError.message}</p>
+                  {paymentError.retryable && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleRetryPayment}
+                      disabled={isProcessing}
+                      className="border-error text-error hover:bg-error/10"
+                    >
+                      {isProcessing ? (
+                        <RefreshCw className="w-4 h-4 animate-spin mr-2" />
+                      ) : (
+                        <RefreshCw className="w-4 h-4 mr-2" />
+                      )}
+                      Retry Payment {paymentRetryCount > 0 ? `(attempt ${paymentRetryCount + 1})` : ''}
+                    </Button>
+                  )}
+                </div>
+              </div>
             </CardContent>
           </Card>
         )}
@@ -763,7 +850,13 @@ export const CheckoutScreen: React.FC = () => {
                   disabled={!selectedAddressId || isProcessing || isCalculatingCost || !emailVerified}
                   className="w-full h-12 bg-primary-500 hover:bg-primary-600 disabled:opacity-50"
                 >
-                  {isProcessing ? 'Processing...' : !emailVerified ? 'Verify Email to Checkout' : 'Proceed to Payment'}
+                  {isProcessing
+                    ? 'Processing...'
+                    : !emailVerified
+                    ? 'Verify Email to Checkout'
+                    : pendingOrderIds
+                    ? 'Retry Payment'
+                    : 'Proceed to Payment'}
                 </Button>
 
                 <div className="mt-6 pt-6 border-t border-neutral-100">

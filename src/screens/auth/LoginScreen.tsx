@@ -24,7 +24,7 @@ export const LoginScreen: React.FC = () => {
 
   // Track if we've initiated a sign-in to detect stuck states
   const signInAttempted = useRef(false);
-  const signInTimeout = useRef<NodeJS.Timeout | null>(null);
+  const signInTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Handle automatic redirection when logged in
   useEffect(() => {
@@ -65,7 +65,7 @@ export const LoginScreen: React.FC = () => {
   }, [user, profile, navigate, location]);
 
   // Track if we're waiting for profile to load
-  const profileLoadTimeout = useRef<NodeJS.Timeout | null>(null);
+  const profileLoadTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Reset loading state if user exists but profile is null (profile fetch failed or doesn't exist)
   useEffect(() => {

@@ -55,18 +55,21 @@ export const VendorDashboardScreen: React.FC = () => {
   const [topProducts, setTopProducts] = useState<any[]>([]);
   const [orderStatusCounts, setOrderStatusCounts] = useState<Record<string, number>>({});
   const [dailySales, setDailySales] = useState<{ date: string; amount: number; orders: number }[]>([]);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (user) {
-      fetchDashboardData();
-    }
+    fetchDashboardData();
   }, [user]);
 
   const fetchDashboardData = async () => {
     try {
       setLoading(true);
+      setError(null);
 
-      if (!user) return;
+      if (!user?.uid) {
+        setLoading(false);
+        return;
+      }
 
       // Get vendor ID - try direct lookup first, then by user_id field
       let vendorId = user.uid;
@@ -153,8 +156,10 @@ export const VendorDashboardScreen: React.FC = () => {
       }
       setDailySales(last7Days);
 
-    } catch (error) {
-      console.error('Error fetching dashboard data:', error);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to load dashboard data';
+      console.error('Error fetching dashboard data:', err);
+      setError(message);
     } finally {
       setLoading(false);
     }
@@ -185,6 +190,28 @@ export const VendorDashboardScreen: React.FC = () => {
     return (
       <div className="flex items-center justify-center min-h-screen bg-neutral-50">
         <Loader2 className="w-8 h-8 animate-spin text-primary-600" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen bg-neutral-50 px-4 text-center">
+        <div className="w-16 h-16 rounded-full bg-red-100 flex items-center justify-center mb-4">
+          <TrendingUp className="w-8 h-8 text-red-600" />
+        </div>
+        <h2 className="font-heading font-bold text-xl text-neutral-900 mb-2">
+          Could not load dashboard
+        </h2>
+        <p className="font-sans text-sm text-neutral-600 mb-6 max-w-md">
+          {error}
+        </p>
+        <Button
+          onClick={fetchDashboardData}
+          className="bg-green-700 hover:bg-green-800 text-white"
+        >
+          Try Again
+        </Button>
       </div>
     );
   }

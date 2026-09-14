@@ -1190,6 +1190,14 @@ export const trackTerminalShipment = terminal.trackTerminalShipment;
 export const getTerminalCarriers = terminal.getTerminalCarriers;
 export const terminalWebhook = terminal.terminalWebhook;
 
+// Export Google Maps proxy functions
+import * as googleMaps from './googleMaps';
+export const searchPlaces = googleMaps.searchPlaces;
+export const getPlaceDetails = googleMaps.getPlaceDetails;
+export const geocodeAddress = googleMaps.geocodeAddress;
+export const getDistanceMatrix = googleMaps.getDistanceMatrix;
+export const getAutocompleteSuggestions = googleMaps.getAutocompleteSuggestions;
+
 // Export Referral Admin Functions
 import * as referrals from './referrals';
 export const approveReferralCommission = referrals.approveReferralCommission;

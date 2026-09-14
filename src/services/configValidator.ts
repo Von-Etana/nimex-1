@@ -13,12 +13,12 @@ class ConfigValidator {
     'VITE_FIREBASE_STORAGE_BUCKET',
     'VITE_FIREBASE_MESSAGING_SENDER_ID',
     'VITE_FIREBASE_APP_ID',
-    'VITE_GOOGLE_MAPS_API_KEY',
   ];
 
   /** Recommended vars — missing ones produce a warning but don't block startup. */
   private recommendedEnvVars = [
     'VITE_APP_URL',
+    'VITE_SENTRY_DSN',
   ];
 
   validate(): ConfigValidationResult {

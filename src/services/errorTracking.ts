@@ -1,6 +1,10 @@
 /**
  * Error tracking and monitoring service for NIMEX application
- * Provides centralized error handling, logging, and performance monitoring
+ * Provides centralized error handling, logging, and performance monitoring.
+ *
+ * In production, errors and performance metrics are forwarded to Sentry when
+ * VITE_SENTRY_DSN is configured. Otherwise they are logged to the console and
+ * retained in memory for debugging.
  */
 
 import React from 'react';
@@ -20,13 +24,97 @@ interface PerformanceMetric {
   context?: Record<string, any>;
 }
 
+interface SentryLike {
+  captureException(error: Error, context?: any): string;
+  captureMessage(message: string, context?: any): string;
+  setUser(user: { id?: string; role?: string } | null): void;
+  addBreadcrumb(breadcrumb: { message: string; category?: string; level?: string; data?: any }): void;
+}
+
+let Sentry: SentryLike | null = null;
+let sentryLoadPromise: Promise<SentryLike | null> | null = null;
+
+function loadSentryFromCDN(): Promise<SentryLike | null> {
+  const dsn = import.meta.env.VITE_SENTRY_DSN;
+  if (!dsn || typeof window === 'undefined') return Promise.resolve(null);
+
+  if ((window as any).Sentry) {
+    return Promise.resolve((window as any).Sentry as SentryLike);
+  }
+
+  return new Promise((resolve) => {
+    const script = document.createElement('script');
+    script.src = 'https://browser.sentry-cdn.com/8.0.0/bundle.min.js';
+    script.crossOrigin = 'anonymous';
+    script.async = true;
+
+    script.onload = () => {
+      const sentry = (window as any).Sentry as SentryLike | undefined;
+      if (!sentry) {
+        console.warn('Sentry script loaded but global not found');
+        resolve(null);
+        return;
+      }
+      sentry.init({
+        dsn,
+        environment: import.meta.env.VITE_SENTRY_ENVIRONMENT || 'production',
+        release: import.meta.env.VITE_APP_VERSION || undefined,
+        tracesSampleRate: 0.1,
+        beforeSend(event: any) {
+          // Scrub potentially sensitive query params / tokens
+          if (event.request?.url) {
+            try {
+              const url = new URL(event.request.url);
+              ['token', 'password', 'secret', 'api_key'].forEach((key) => url.searchParams.delete(key));
+              event.request.url = url.toString();
+            } catch {
+              // ignore malformed URLs
+            }
+          }
+          return event;
+        },
+      });
+      Sentry = sentry;
+      resolve(sentry);
+    };
+
+    script.onerror = () => {
+      console.warn('Failed to load Sentry from CDN');
+      resolve(null);
+    };
+
+    document.head.appendChild(script);
+  });
+}
+
+async function loadSentry(): Promise<SentryLike | null> {
+  if (Sentry) return Sentry;
+  if (!sentryLoadPromise) {
+    sentryLoadPromise = loadSentryFromCDN();
+  }
+  return sentryLoadPromise;
+}
+
 class ErrorTrackingService {
   private isEnabled: boolean;
   private errors: Array<{ error: Error; context: ErrorContext; timestamp: number }> = [];
   private performanceMetrics: PerformanceMetric[] = [];
+  private sentryReady: Promise<SentryLike | null>;
 
   constructor() {
-    this.isEnabled = import.meta.env.PROD; // Only enable in production
+    this.isEnabled = import.meta.env.PROD; // Only enable external reporting in production
+    this.sentryReady = loadSentry();
+  }
+
+  /**
+   * Set the current user for error context. Call with null on sign-out.
+   */
+  setUser(user: { id?: string; role?: string } | null): void {
+    this.sentryReady.then((sentry) => {
+      if (sentry) {
+        sentry.setUser(user ? { id: user.id, role: user.role } : null);
+      }
+    });
   }
 
   /**
@@ -52,9 +140,22 @@ class ErrorTrackingService {
       });
     }
 
-    // In production, you would send to error tracking service
+    // In production, forward to Sentry when configured
     if (this.isEnabled) {
-      this.sendToErrorTrackingService(errorEntry);
+      this.sentryReady.then((sentry) => {
+        if (sentry) {
+          sentry.captureException(error, {
+            contexts: {
+              app: {
+                component: context.component,
+                action: context.action,
+                ...context.metadata,
+              }
+            },
+            user: context.userId ? { id: context.userId, role: context.userRole } : undefined,
+          });
+        }
+      });
     }
 
     // Keep only last 100 errors to prevent memory leaks
@@ -139,32 +240,6 @@ class ErrorTrackingService {
   clear(): void {
     this.errors = [];
     this.performanceMetrics = [];
-  }
-
-  /**
-   * Sends error to external error tracking service
-   * @param errorEntry - Error entry to send
-   * @private
-   */
-  private sendToErrorTrackingService(errorEntry: any): void {
-    // In a real implementation, you would send to services like:
-    // - Sentry
-    // - LogRocket
-    // - Bugsnag
-    // - Rollbar
-    // - DataDog
-
-    // Example implementation:
-    /*
-    fetch('/api/errors', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(errorEntry)
-    }).catch(err => console.error('Failed to send error to tracking service:', err));
-    */
-
-    // For now, just log that we would send it
-    console.log('Would send error to tracking service:', errorEntry);
   }
 }
 

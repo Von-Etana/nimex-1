@@ -133,8 +133,8 @@ export const CustomersScreen: React.FC = () => {
   };
 
   const handleStartChat = (customerId: string) => {
-    // Navigate to chat - in a real app you'd create or find existing conversation
-    navigate('/chat');
+    if (!user?.uid) return;
+    navigate(`/chat/${customerId}?vendorId=${user.uid}&buyerId=${customerId}`);
   };
 
   const filteredCustomers = customers.filter((customer) => {
@@ -173,6 +173,22 @@ export const CustomersScreen: React.FC = () => {
     return (
       <div className="w-full min-h-screen bg-neutral-50 flex items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin text-green-700" />
+      </div>
+    );
+  }
+
+  if (!user?.uid) {
+    return (
+      <div className="w-full min-h-screen bg-neutral-50 flex items-center justify-center px-4">
+        <div className="text-center">
+          <Users className="w-16 h-16 text-neutral-300 mx-auto mb-4" />
+          <h3 className="font-heading font-semibold text-lg text-neutral-900 mb-2">
+            Sign in to view customers
+          </h3>
+          <Button onClick={() => navigate('/login')} className="bg-green-700 hover:bg-green-800 text-white">
+            Sign In
+          </Button>
+        </div>
       </div>
     );
   }

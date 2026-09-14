@@ -364,7 +364,7 @@ export const VendorProfileSettingsScreen: React.FC = () => {
                 <div className="space-y-3">
                   <LocationPicker
                     variant="default"
-                    placeholder="Seach for your business address"
+                    placeholder="Search for your business address"
                     initialLocation={
                       formData.businessLat && formData.businessLng
                         ? {

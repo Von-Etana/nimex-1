@@ -6,6 +6,7 @@ import { FirebaseAuthService } from '../services/firebaseAuth.service';
 import { FirestoreService } from '../services/firestore.service';
 import { COLLECTIONS } from '../lib/collections';
 import { logger } from '../lib/logger';
+import { errorTracking } from '../services/errorTracking';
 import { signUpSchema, signInSchema, updateProfileSchema, type SignUpInput, type SignInInput, type UpdateProfileInput } from '../lib/validation';
 import { ROUTES, STORAGE_KEYS } from '../services/constants';
 import type { UserRole, Database } from '../types/database';
@@ -109,6 +110,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     return () => unsubscribe();
   }, []);
+
+  // Keep Sentry user context in sync with auth state
+  useEffect(() => {
+    if (state.user) {
+      errorTracking.setUser({ id: state.user.uid, role: state.profile?.role });
+    } else {
+      errorTracking.setUser(null);
+    }
+  }, [state.user?.uid, state.profile?.role]);
 
   // Poll for email verification status change
   // Firebase onAuthStateChanged does NOT re-fire when email is verified,

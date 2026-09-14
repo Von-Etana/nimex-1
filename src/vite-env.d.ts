@@ -7,7 +7,7 @@ interface ImportMetaEnv {
   readonly VITE_TWILIO_API_KEY: string;
   readonly VITE_TWILIO_API_SECRET: string;
   readonly VITE_TWILIO_PHONE_NUMBER: string;
-  readonly VITE_GOOGLE_MAPS_API_KEY: string;
+  readonly VITE_GOOGLE_MAPS_API_KEY?: string;
   readonly VITE_PAYSTACK_PUBLIC_KEY: string;
   readonly VITE_PAYSTACK_TEST_MODE: string;
   readonly VITE_TERMINAL_PUBLIC_KEY: string;
@@ -16,6 +16,8 @@ interface ImportMetaEnv {
   readonly VITE_FLUTTERWAVE_API_URL: string;
   readonly VITE_FLUTTERWAVE_TEST_MODE: string;
   readonly VITE_APP_URL: string;
+  readonly VITE_SENTRY_DSN?: string;
+  readonly VITE_SENTRY_ENVIRONMENT?: string;
 }
 
 interface ImportMeta {

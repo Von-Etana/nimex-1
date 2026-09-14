@@ -11,14 +11,17 @@ import {
   Clock,
   CheckCircle,
   XCircle,
+  UserPlus,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
+import { useNavigate } from 'react-router-dom';
 import { referralService, type ReferralStats, type VendorReferral } from '../../services/referralService';
 import { FirestoreService } from '../../services/firestore.service';
 import { COLLECTIONS } from '../../lib/collections';
 
 export const ReferralsScreen: React.FC = () => {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState<ReferralStats>({
     totalReferrals: 0,
@@ -49,7 +52,7 @@ export const ReferralsScreen: React.FC = () => {
       if (vendors.length > 0) {
         const vendor = vendors[0];
         setVendorId(vendor.id);
-        setReferralCode(vendor.referral_code);
+        setReferralCode(vendor.referral_code || '');
 
         const [statsData, referralsData] = await Promise.all([
           referralService.getVendorReferralStats(vendor.id),
@@ -58,6 +61,9 @@ export const ReferralsScreen: React.FC = () => {
 
         setStats(statsData);
         setReferrals(referralsData);
+      } else {
+        setVendorId(null);
+        setReferralCode('');
       }
     } catch (error) {
       console.error('Error loading referral data:', error);
@@ -123,6 +129,22 @@ export const ReferralsScreen: React.FC = () => {
         <div className="text-center">
           <div className="w-16 h-16 border-4 border-primary-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
           <p className="text-neutral-600">Loading referral data...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!user?.uid) {
+    return (
+      <div className="w-full min-h-screen bg-neutral-50 flex items-center justify-center px-4">
+        <div className="text-center">
+          <UserPlus className="w-16 h-16 text-neutral-300 mx-auto mb-4" />
+          <h3 className="font-heading font-semibold text-lg text-neutral-900 mb-2">
+            Sign in to view referrals
+          </h3>
+          <Button onClick={() => navigate('/login')} className="bg-green-700 hover:bg-green-800 text-white">
+            Sign In
+          </Button>
         </div>
       </div>
     );
@@ -195,60 +217,80 @@ export const ReferralsScreen: React.FC = () => {
           </Card>
         </div>
 
-        <Card className="border border-neutral-200 shadow-sm mb-6">
-          <CardContent className="p-6">
-            <h2 className="font-heading font-bold text-xl text-neutral-900 mb-4">
-              Your Referral Link
-            </h2>
-            <div className="bg-neutral-50 rounded-lg p-4 mb-4">
-              <div className="flex items-center gap-2 mb-3">
-                <span className="font-sans text-sm text-neutral-600">Referral Code:</span>
-                <code className="font-mono text-lg font-bold text-primary-600">
-                  {referralCode}
-                </code>
+        {vendorId ? (
+          <Card className="border border-neutral-200 shadow-sm mb-6">
+            <CardContent className="p-6">
+              <h2 className="font-heading font-bold text-xl text-neutral-900 mb-4">
+                Your Referral Link
+              </h2>
+              <div className="bg-neutral-50 rounded-lg p-4 mb-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="font-sans text-sm text-neutral-600">Referral Code:</span>
+                  <code className="font-mono text-lg font-bold text-primary-600">
+                    {referralCode}
+                  </code>
+                </div>
+                <div className="flex items-center gap-2 p-3 bg-white border border-neutral-200 rounded-lg">
+                  <input
+                    type="text"
+                    value={referralService.generateReferralLink(referralCode)}
+                    readOnly
+                    className="flex-1 font-sans text-sm text-neutral-700 bg-transparent outline-none"
+                  />
+                  <Button
+                    onClick={handleCopyLink}
+                    size="sm"
+                    variant="outline"
+                    className="flex items-center gap-2"
+                  >
+                    {copied ? (
+                      <>
+                        <Check className="w-4 h-4" />
+                        Copied
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-4 h-4" />
+                        Copy
+                      </>
+                    )}
+                  </Button>
+                </div>
               </div>
-              <div className="flex items-center gap-2 p-3 bg-white border border-neutral-200 rounded-lg">
-                <input
-                  type="text"
-                  value={referralService.generateReferralLink(referralCode)}
-                  readOnly
-                  className="flex-1 font-sans text-sm text-neutral-700 bg-transparent outline-none"
-                />
-                <Button
-                  onClick={handleCopyLink}
-                  size="sm"
-                  variant="outline"
-                  className="flex items-center gap-2"
-                >
-                  {copied ? (
-                    <>
-                      <Check className="w-4 h-4" />
-                      Copied
-                    </>
-                  ) : (
-                    <>
-                      <Copy className="w-4 h-4" />
-                      Copy
-                    </>
-                  )}
-                </Button>
+              <Button
+                onClick={handleShareLink}
+                className="w-full md:w-auto bg-primary-500 hover:bg-primary-600 text-white flex items-center gap-2"
+              >
+                <Share2 className="w-4 h-4" />
+                Share Referral Link
+              </Button>
+              <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <p className="font-sans text-sm text-blue-900">
+                  <strong>How it works:</strong> Share your referral link with other vendors. When they
+                  sign up using your link and complete their registration, you'll earn a commission!
+                </p>
               </div>
-            </div>
-            <Button
-              onClick={handleShareLink}
-              className="w-full md:w-auto bg-primary-500 hover:bg-primary-600 text-white flex items-center gap-2"
-            >
-              <Share2 className="w-4 h-4" />
-              Share Referral Link
-            </Button>
-            <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-              <p className="font-sans text-sm text-blue-900">
-                <strong>How it works:</strong> Share your referral link with other vendors. When they
-                sign up using your link and complete their registration, you'll earn a commission!
+            </CardContent>
+          </Card>
+        ) : (
+          <Card className="border border-neutral-200 shadow-sm mb-6">
+            <CardContent className="p-8 text-center">
+              <UserPlus className="w-16 h-16 text-neutral-300 mx-auto mb-4" />
+              <h2 className="font-heading font-bold text-xl text-neutral-900 mb-2">
+                Become a vendor to refer others
+              </h2>
+              <p className="font-sans text-sm text-neutral-600 mb-6 max-w-md mx-auto">
+                Complete the vendor onboarding to unlock your unique referral link and start earning commissions.
               </p>
-            </div>
-          </CardContent>
-        </Card>
+              <Button
+                onClick={() => navigate('/vendor/onboarding')}
+                className="bg-green-700 hover:bg-green-800 text-white"
+              >
+                Start Onboarding
+              </Button>
+            </CardContent>
+          </Card>
+        )}
 
         <Card className="border border-neutral-200 shadow-sm">
           <CardContent className="p-6">

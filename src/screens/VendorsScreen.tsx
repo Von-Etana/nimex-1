@@ -15,6 +15,7 @@ import { where, orderBy, limit, QueryConstraint } from 'firebase/firestore';
 import { logger } from '../lib/logger';
 import { TABLES, COLUMNS } from '../services/constants';
 import { COLLECTIONS } from '../lib/collections';
+import { DEFAULT_LOCATION_LABEL } from '../lib/locationDefaults';
 import type { Database } from '../types/database';
 
 type VendorWithProfile = Database['public']['Tables']['vendors']['Row'] & {
@@ -110,7 +111,7 @@ export const VendorsScreen: React.FC = () => {
   };
 
   const handleDetectLocation = () => {
-    setLocation('Lagos, Nigeria');
+    setLocation(DEFAULT_LOCATION_LABEL);
   };
 
   const handleSearchVendors = async () => {

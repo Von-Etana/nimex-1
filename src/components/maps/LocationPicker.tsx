@@ -38,7 +38,7 @@ export const LocationPicker: React.FC<LocationPickerProps> = ({
   const hasGoogleMapsKey = googleMapsService.hasApiKey();
 
   const mapRef = useRef<HTMLDivElement>(null);
-  const searchTimeoutRef = useRef<NodeJS.Timeout>();
+  const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>();
 
   useEffect(() => {
     // Sync initial location if changed externally
@@ -76,7 +76,7 @@ export const LocationPicker: React.FC<LocationPickerProps> = ({
   const initializeMap = () => {
     if (!mapRef.current) return;
 
-    const initialCenter = selectedLocation || { lat: 6.5244, lng: 3.3792 };
+    const initialCenter = selectedLocation || { lat: 9.0820, lng: 8.6753 }; // Nigeria center default
 
     const newMap = new google.maps.Map(mapRef.current, {
       center: initialCenter,

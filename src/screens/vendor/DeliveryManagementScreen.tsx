@@ -7,6 +7,7 @@ import { FirestoreService } from '../../services/firestore.service';
 import { COLLECTIONS } from '../../lib/collections';
 import { deliveryService } from '../../services/deliveryService';
 import { getVendorPickupLocation } from '../../services/vendorLocationService';
+import { DEFAULT_CITY, DEFAULT_STATE } from '../../lib/locationDefaults';
 
 interface Order {
   id: string;
@@ -167,8 +168,8 @@ export const DeliveryManagementScreen: React.FC = () => {
           email: vendorData.email || 'vendor@nimex.ng',
           phone: vendorLocation?.phone || vendorData.business_phone || '08000000000',
           addressLine1: vendorLocation?.address || vendorData.business_address || 'Vendor Store',
-          city: vendorLocation?.city || 'Lagos',
-          state: vendorLocation?.state || 'Lagos',
+          city: vendorLocation?.city || DEFAULT_CITY,
+          state: vendorLocation?.state || DEFAULT_STATE,
         },
         deliveryAddress: {
           fullName: order.delivery_address?.fullName || order.delivery_address?.recipientName || 'Buyer',
@@ -176,8 +177,8 @@ export const DeliveryManagementScreen: React.FC = () => {
           phone: order.delivery_address?.phone || '08000000000',
           addressLine1: order.delivery_address?.addressLine1 || order.delivery_address?.streetAddress || 'Buyer Address',
           addressLine2: order.delivery_address?.addressLine2 || '',
-          city: order.delivery_address?.city || 'Lagos',
-          state: order.delivery_address?.state || 'Lagos',
+          city: order.delivery_address?.city || DEFAULT_CITY,
+          state: order.delivery_address?.state || DEFAULT_STATE,
         },
         packageDetails: {
           weight: 1,

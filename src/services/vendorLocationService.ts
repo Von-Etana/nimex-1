@@ -1,5 +1,9 @@
 import { FirestoreService } from './firestore.service';
 import { COLLECTIONS } from '../lib/collections';
+import {
+  DEFAULT_CITY,
+  DEFAULT_STATE,
+} from '../lib/locationDefaults';
 
 export interface VendorLocation {
   city: string;
@@ -29,8 +33,8 @@ export async function getVendorPickupLocation(vendorId: string): Promise<VendorL
     if (vendor.business_lat && vendor.business_lng) {
       const parsed = parseCityState(address);
       return {
-        city: parsed.city || 'Ikeja',
-        state: parsed.state || 'Lagos',
+        city: parsed.city || DEFAULT_CITY,
+        state: parsed.state || DEFAULT_STATE,
         address,
         lat: vendor.business_lat,
         lng: vendor.business_lng,
@@ -44,8 +48,8 @@ export async function getVendorPickupLocation(vendorId: string): Promise<VendorL
       const market = await FirestoreService.getDocument<any>(COLLECTIONS.MARKETS, vendor.market_id);
       if (market) {
         return {
-          city: market.city || 'Ikeja',
-          state: market.state || 'Lagos',
+          city: market.city || DEFAULT_CITY,
+          state: market.state || DEFAULT_STATE,
           address: address || `${market.name}, ${market.city}, ${market.state}`,
           lat: market.lat || null,
           lng: market.lng || null,
@@ -58,8 +62,8 @@ export async function getVendorPickupLocation(vendorId: string): Promise<VendorL
     // Last resort: parse free-text address
     const parsed = parseCityState(address);
     return {
-      city: parsed.city || 'Ikeja',
-      state: parsed.state || 'Lagos',
+      city: parsed.city || DEFAULT_CITY,
+      state: parsed.state || DEFAULT_STATE,
       address,
       lat: null,
       lng: null,

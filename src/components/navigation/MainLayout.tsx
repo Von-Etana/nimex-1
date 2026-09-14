@@ -3,6 +3,7 @@ import { DesktopHeader } from './DesktopHeader';
 import { MobileBottomNav } from './MobileBottomNav';
 import { MobileHeader } from './MobileHeader';
 import { EmailVerificationBanner } from '../EmailVerificationBanner';
+import { SkipToContent } from '../SkipToContent';
 import { useAuth } from '../../contexts/AuthContext';
 import { FirestoreService } from '../../services/firestore.service';
 import { COLLECTIONS } from '../../lib/collections';
@@ -42,11 +43,12 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children, showBottomNav 
 
   return (
     <div className="min-h-screen bg-white flex flex-col">
+      <SkipToContent targetId="main-content" />
       <EmailVerificationBanner />
       <DesktopHeader />
       <MobileHeader />
 
-      <main className="flex-1 w-full pb-16 lg:pb-0">
+      <main id="main-content" tabIndex={-1} className="flex-1 w-full pb-16 lg:pb-0 outline-none">
         {children}
       </main>
 

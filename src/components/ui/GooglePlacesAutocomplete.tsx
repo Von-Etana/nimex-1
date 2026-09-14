@@ -1,173 +1,129 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
-import { useJsApiLoader, StandaloneSearchBox } from '@react-google-maps/api';
 import { MapPin, Loader2 } from 'lucide-react';
-
-// Libraries to load for Google Maps
-const libraries: ("places")[] = ['places'];
+import { googleMapsService } from '../../services/googleMapsService';
+import { DEFAULT_COUNTRY } from '../../lib/locationDefaults';
 
 interface GooglePlacesAutocompleteProps {
     value: string;
     onChange: (value: string, placeDetails?: google.maps.places.PlaceResult) => void;
     placeholder?: string;
     className?: string;
-    types?: string[]; // e.g., ['address'], ['establishment'], ['(regions)']
+    types?: string[];
     error?: string;
     disabled?: boolean;
     componentRestrictions?: { country: string | string[] };
 }
-
-// Singleton to track if API is loaded globally
-let isApiLoaded = false;
 
 export const GooglePlacesAutocomplete: React.FC<GooglePlacesAutocompleteProps> = ({
     value,
     onChange,
     placeholder = 'Search for a location...',
     className = '',
-    types,
     error,
     disabled = false,
-    componentRestrictions = { country: 'ng' } // Default to Nigeria
 }) => {
     const inputRef = useRef<HTMLInputElement>(null);
-    const searchBoxRef = useRef<google.maps.places.SearchBox | null>(null);
     const [inputValue, setInputValue] = useState(value);
+    const [suggestions, setSuggestions] = useState<string[]>([]);
+    const [showSuggestions, setShowSuggestions] = useState(false);
+    const [isLoading, setIsLoading] = useState(false);
+    const wrapperRef = useRef<HTMLDivElement>(null);
 
-    // Get API key from environment
-    const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
-
-    // Load the Google Maps JavaScript API
-    const { isLoaded, loadError } = useJsApiLoader({
-        googleMapsApiKey: apiKey,
-        libraries,
-        // Prevent duplicate loading
-        id: 'google-maps-script',
-    });
-
-    // Update local state when external value changes
     useEffect(() => {
         setInputValue(value);
     }, [value]);
 
-    // Handle place selection
-    const handlePlacesChanged = useCallback(() => {
-        if (searchBoxRef.current) {
-            const places = searchBoxRef.current.getPlaces();
-            if (places && places.length > 0) {
-                const place = places[0];
-                const formattedAddress = place.formatted_address || place.name || '';
-                setInputValue(formattedAddress);
-                onChange(formattedAddress, place);
+    useEffect(() => {
+        const handleClickOutside = (e: MouseEvent) => {
+            if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
+                setShowSuggestions(false);
             }
-        }
-    }, [onChange]);
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
 
-    // Handle manual input changes
+    const fetchSuggestions = useCallback(async (query: string) => {
+        if (query.length < 3) {
+            setSuggestions([]);
+            setShowSuggestions(false);
+            return;
+        }
+        setIsLoading(true);
+        try {
+            const results = await googleMapsService.getAutocompleteSuggestions(query);
+            setSuggestions(results.slice(0, 5));
+            setShowSuggestions(results.length > 0);
+        } catch (err) {
+            console.error('Autocomplete error:', err);
+            setSuggestions([]);
+            setShowSuggestions(false);
+        } finally {
+            setIsLoading(false);
+        }
+    }, []);
+
+    const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const newValue = e.target.value;
         setInputValue(newValue);
-        // Only update parent if user is typing, not selecting from dropdown
         onChange(newValue);
+
+        if (debounceRef.current) clearTimeout(debounceRef.current);
+        debounceRef.current = setTimeout(() => fetchSuggestions(newValue), 300);
     };
 
-    // Handle search box load
-    const handleSearchBoxLoad = (ref: google.maps.places.SearchBox) => {
-        searchBoxRef.current = ref;
+    const handleSelect = async (suggestion: string) => {
+        setInputValue(suggestion);
+        setShowSuggestions(false);
+
+        // Try to enrich with place details for callers that need lat/lng
+        try {
+            const places = await googleMapsService.geocodeAddress(suggestion);
+            if (places.length > 0) {
+                onChange(suggestion, places[0] as unknown as google.maps.places.PlaceResult);
+                return;
+            }
+        } catch (err) {
+            console.warn('Could not geocode selected suggestion:', err);
+        }
+        onChange(suggestion);
     };
 
-    // If no API key is configured, render a simple input
-    if (!apiKey) {
-        return (
+    return (
+        <div ref={wrapperRef} className="relative">
             <div className="relative">
-                <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400" />
+                <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400 z-10" />
                 <input
+                    ref={inputRef}
                     type="text"
                     value={inputValue}
-                    onChange={(e) => {
-                        setInputValue(e.target.value);
-                        onChange(e.target.value);
-                    }}
+                    onChange={handleInputChange}
                     placeholder={placeholder}
                     disabled={disabled}
                     className={`w-full h-10 pl-10 pr-3 rounded-lg border font-sans text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 ${error ? 'border-red-500' : 'border-neutral-200'
                         } ${disabled ? 'bg-neutral-50 cursor-not-allowed' : ''} ${className}`}
                 />
-                {error && (
-                    <p className="text-red-500 text-xs mt-1" role="alert">
-                        {error}
-                    </p>
+                {isLoading && (
+                    <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400 animate-spin" aria-hidden="true" />
                 )}
             </div>
-        );
-    }
 
-    // Loading state
-    if (!isLoaded) {
-        return (
-            <div className="relative">
-                <Loader2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400 animate-spin" />
-                <input
-                    type="text"
-                    value={inputValue}
-                    onChange={handleInputChange}
-                    placeholder="Loading Google Maps..."
-                    disabled
-                    className={`w-full h-10 pl-10 pr-3 rounded-lg border border-neutral-200 font-sans text-sm bg-neutral-50 cursor-not-allowed ${className}`}
-                />
-            </div>
-        );
-    }
+            {showSuggestions && (
+                <ul className="absolute z-20 w-full bg-white border border-neutral-200 rounded-lg shadow-lg mt-1 max-h-60 overflow-auto">
+                    {suggestions.map((suggestion, index) => (
+                        <li
+                            key={index}
+                            onClick={() => handleSelect(suggestion)}
+                            className="px-4 py-2 hover:bg-neutral-50 cursor-pointer font-sans text-sm text-neutral-700"
+                        >
+                            {suggestion}
+                        </li>
+                    ))}
+                </ul>
+            )}
 
-    // Error loading Google Maps
-    if (loadError) {
-        console.error('Google Maps load error:', loadError);
-        return (
-            <div className="relative">
-                <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400" />
-                <input
-                    type="text"
-                    value={inputValue}
-                    onChange={(e) => {
-                        setInputValue(e.target.value);
-                        onChange(e.target.value);
-                    }}
-                    placeholder={placeholder}
-                    disabled={disabled}
-                    className={`w-full h-10 pl-10 pr-3 rounded-lg border font-sans text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 ${error ? 'border-red-500' : 'border-neutral-200'
-                        } ${className}`}
-                />
-                <p className="text-amber-600 text-xs mt-1">
-                    Google Maps unavailable. Enter address manually.
-                </p>
-                {error && (
-                    <p className="text-red-500 text-xs mt-1" role="alert">
-                        {error}
-                    </p>
-                )}
-            </div>
-        );
-    }
-
-    return (
-        <div className="relative">
-            <StandaloneSearchBox
-                onLoad={handleSearchBoxLoad}
-                onPlacesChanged={handlePlacesChanged}
-            >
-                <div className="relative">
-                    <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400 z-10" />
-                    <input
-                        ref={inputRef}
-                        type="text"
-                        value={inputValue}
-                        onChange={handleInputChange}
-                        placeholder={placeholder}
-                        disabled={disabled}
-                        className={`w-full h-10 pl-10 pr-3 rounded-lg border font-sans text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 ${error ? 'border-red-500' : 'border-neutral-200'
-                            } ${disabled ? 'bg-neutral-50 cursor-not-allowed' : ''} ${className}`}
-                    />
-                </div>
-            </StandaloneSearchBox>
             {error && (
                 <p className="text-red-500 text-xs mt-1" role="alert">
                     {error}

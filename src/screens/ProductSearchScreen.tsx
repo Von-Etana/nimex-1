@@ -12,6 +12,7 @@ import { recommendationService } from '../services/recommendationService';
 import { useAuth } from '../contexts/AuthContext';
 import { CATEGORIES } from '../lib/categories';
 import { LocationPicker } from '../components/maps/LocationPicker';
+import { DEFAULT_COORDINATES } from '../lib/locationDefaults';
 
 interface Product {
   id: string;
@@ -65,7 +66,15 @@ export const ProductSearchScreen: React.FC = () => {
   const sortBy = searchParams.get('sortBy') || 'relevance';
 
   // Initialize Map and Geolocation
+  // Note: the Google Maps JS SDK is still loaded client-side for the interactive map
+  // renderer, but all Places / Geocoding / Distance Matrix calls are proxied through
+  // Cloud Functions so the API key is not exposed in application logic.
   useEffect(() => {
+    // The Google Maps JS SDK is still loaded client-side for the interactive map
+    // renderer, but all Places / Geocoding / Distance Matrix calls are proxied
+    // through Cloud Functions so the API key is not exposed in application logic.
+    // Maps API key is intentionally not exposed here; load it from environment if
+    // provided, otherwise the map simply won't render.
     const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
     if (!apiKey) return;
 
@@ -94,7 +103,7 @@ export const ProductSearchScreen: React.FC = () => {
 
   const initializeMap = () => {
     if (mapRef.current && !map) {
-      const defaultCenter = { lat: 6.5244, lng: 3.3792 }; // Lagos
+      const defaultCenter = DEFAULT_COORDINATES;
       const newMap = new google.maps.Map(mapRef.current, {
         center: defaultCenter,
         zoom: 13,
@@ -391,9 +400,10 @@ export const ProductSearchScreen: React.FC = () => {
                 variant="ghost"
                 size="icon"
                 className="text-primary-600 hover:text-primary-700 hover:bg-primary-50"
+                aria-label="Use my location"
                 title="Use my location"
               >
-                {isLocating ? <Loader2 className="w-5 h-5 animate-spin" /> : <Navigation className="w-5 h-5" />}
+                {isLocating ? <Loader2 className="w-5 h-5 animate-spin" aria-hidden="true" /> : <Navigation className="w-5 h-5" aria-hidden="true" />}
               </Button>
             </CardContent>
           </Card>

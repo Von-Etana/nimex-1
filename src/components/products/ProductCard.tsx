@@ -213,13 +213,15 @@ export const ProductCard: React.FC<ProductCardProps> = ({
                                 ? 'bg-red-500 text-white'
                                 : 'bg-white hover:bg-red-50 text-neutral-600 hover:text-red-500'
                             }`}
-                        title="Add to Wishlist"
+                        aria-label={isWishlisted ? 'Remove from wishlist' : 'Add to wishlist'}
+                        title={isWishlisted ? 'Remove from wishlist' : 'Add to wishlist'}
                     >
                         <Heart className={`w-4 h-4 ${isWishlisted ? 'fill-current' : ''}`} />
                     </button>
                     <button
                         onClick={(e) => { e.stopPropagation(); /* Quick view logic */ }}
                         className="w-8 h-8 bg-white rounded-full flex items-center justify-center shadow-md hover:bg-primary-50 text-neutral-600 hover:text-primary-500 transition-all duration-200"
+                        aria-label="Quick view product"
                         title="Quick View"
                     >
                         <Eye className="w-4 h-4" />

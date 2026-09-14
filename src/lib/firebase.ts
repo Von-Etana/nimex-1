@@ -92,3 +92,4 @@ try {
 }
 
 export { app, auth, db, storage, functions, analytics, GoogleAuthProvider };
+export { httpsCallable } from 'firebase/functions';

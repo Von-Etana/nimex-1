@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Save, Eye, EyeOff } from 'lucide-react';
+import { IconButton } from '../../components/ui/icon-button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
@@ -58,9 +59,9 @@ export const AdminSettingsDetailScreen: React.FC = () => {
         <div className="p-6 max-w-4xl mx-auto">
             <div className="mb-6 flex items-center justify-between">
                 <div className="flex items-center gap-4">
-                    <Button variant="ghost" size="icon" onClick={() => navigate('/admin/settings')}>
+                    <IconButton aria-label="Back to settings" onClick={() => navigate('/admin/settings')}>
                         <ArrowLeft className="w-5 h-5" />
-                    </Button>
+                    </IconButton>
                     <div>
                         <h1 className="font-heading font-bold text-2xl text-neutral-900">{getTitle()}</h1>
                         <p className="font-sans text-neutral-600 text-sm">Manage your platform parameters</p>
@@ -193,13 +194,15 @@ const ApiKeysSettings = () => {
                                 type={showKey['paystack_pk'] ? "text" : "password"}
                                 defaultValue="pk_test_xxxxxxxxxxxxxxxx"
                             />
-                            <button
+                            <IconButton
                                 type="button"
-                                className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500"
+                                aria-label={showKey['paystack_pk'] ? 'Hide Paystack public key' : 'Show Paystack public key'}
+                                size="sm"
+                                className="absolute right-1 top-1/2 -translate-y-1/2 rounded-full"
                                 onClick={() => toggleKey('paystack_pk')}
                             >
                                 {showKey['paystack_pk'] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                            </button>
+                            </IconButton>
                         </div>
                     </div>
                     <div className="grid gap-2">
@@ -209,13 +212,15 @@ const ApiKeysSettings = () => {
                                 type={showKey['paystack_sk'] ? "text" : "password"}
                                 defaultValue="sk_test_xxxxxxxxxxxxxxxx"
                             />
-                            <button
+                            <IconButton
                                 type="button"
-                                className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500"
+                                aria-label={showKey['paystack_sk'] ? 'Hide Paystack secret key' : 'Show Paystack secret key'}
+                                size="sm"
+                                className="absolute right-1 top-1/2 -translate-y-1/2 rounded-full"
                                 onClick={() => toggleKey('paystack_sk')}
                             >
                                 {showKey['paystack_sk'] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                            </button>
+                            </IconButton>
                         </div>
                     </div>
                 </CardContent>

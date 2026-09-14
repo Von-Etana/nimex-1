@@ -21,6 +21,7 @@ import { COLLECTIONS } from '../../lib/collections';
 import { where, orderBy, limit } from 'firebase/firestore';
 import { deliveryService } from '../../services/deliveryService';
 import { getVendorPickupLocation } from '../../services/vendorLocationService';
+import { DEFAULT_CITY, DEFAULT_STATE } from '../../lib/locationDefaults';
 
 interface Order {
     id: string;
@@ -160,9 +161,9 @@ export const VendorOrderDetailsScreen: React.FC = () => {
                 pickupAddress: {
                     fullName: vendorLocation?.businessName || user?.displayName || 'Vendor',
                     phone: vendorLocation?.phone || user?.phoneNumber || '08000000000',
-                    addressLine1: vendorLocation?.address || 'Vendor Shop, Lagos',
-                    city: vendorLocation?.city || 'Ikeja',
-                    state: vendorLocation?.state || 'Lagos'
+                    addressLine1: vendorLocation?.address || 'Vendor Shop',
+                    city: vendorLocation?.city || DEFAULT_CITY,
+                    state: vendorLocation?.state || DEFAULT_STATE
                 },
                 deliveryAddress: {
                     fullName: address.full_name,

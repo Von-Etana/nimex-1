@@ -62,7 +62,7 @@ export const ChatScreen: React.FC = () => {
   const [otherUserPresence, setOtherUserPresence] = useState<{ isOnline: boolean; lastSeen?: string | null }>({ isOnline: false });
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Real-time subscription for conversations list
   useEffect(() => {
@@ -767,6 +767,7 @@ export const ChatScreen: React.FC = () => {
                       onClick={() => fileInputRef.current?.click()}
                       disabled={uploadingImage || sending}
                       className="flex-shrink-0 border-neutral-200 hover:bg-neutral-50"
+                      aria-label="Send image"
                       title="Send image"
                     >
                       {uploadingImage ? (
