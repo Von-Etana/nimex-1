@@ -125,9 +125,11 @@ export const DesktopHeader: React.FC = () => {
           to="/"
           className="flex items-center gap-2.5 flex-shrink-0 group"
         >
-          <div className="w-10 h-10 bg-gradient-primary rounded-xl flex items-center justify-center shadow-md group-hover:shadow-glow transition-all duration-300">
-            <PackageIcon className="w-5 h-5 text-white" />
-          </div>
+          <img
+            src="/logo.jpeg"
+            alt="NIMEX"
+            className="w-10 h-10 rounded-xl object-cover shadow-md group-hover:shadow-glow transition-all duration-300"
+          />
           <span className="font-heading font-bold text-gradient-primary text-2xl tracking-tight">
             NIMEX
           </span>

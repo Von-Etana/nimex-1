@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { PackageIcon, MessageCircle, Bell, UserIcon, ShoppingBag } from 'lucide-react';
+import { MessageCircle, Bell, UserIcon, ShoppingBag } from 'lucide-react';
 import { Button } from '../ui/button';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -25,9 +25,11 @@ export const VendorDesktopHeader: React.FC = () => {
     <header className="hidden md:block w-full h-16 bg-white shadow-sm border-b border-neutral-100 sticky top-0 z-40">
       <div className="max-w-7xl mx-auto h-full px-6 flex items-center justify-between">
         <Link to="/vendor/dashboard" className="flex items-center gap-2">
-          <div className="w-10 h-10 bg-primary-500 rounded-md flex items-center justify-center">
-            <PackageIcon className="w-6 h-6 text-white" />
-          </div>
+          <img
+            src="/logo.jpeg"
+            alt="NIMEX"
+            className="w-10 h-10 rounded-md object-cover"
+          />
           <span className="font-heading font-bold text-primary-500 text-2xl">
             NIMEX
           </span>

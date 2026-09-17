@@ -37,6 +37,17 @@ interface Address {
   is_default: boolean;
 }
 
+const getFallbackDeliveryCost = (type: 'standard' | 'express' | 'same_day') => {
+  switch (type) {
+    case 'express':
+      return 4000;
+    case 'same_day':
+      return 6000;
+    default:
+      return 2500;
+  }
+};
+
 export const CheckoutScreen: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -147,17 +158,6 @@ export const CheckoutScreen: React.FC = () => {
       setDeliveryCost(getFallbackDeliveryCost(deliveryType));
     } finally {
       setIsCalculatingCost(false);
-    }
-  };
-
-  const getFallbackDeliveryCost = (type: 'standard' | 'express' | 'same_day') => {
-    switch (type) {
-      case 'express':
-        return 4000;
-      case 'same_day':
-        return 6000;
-      default:
-        return 2500;
     }
   };
 

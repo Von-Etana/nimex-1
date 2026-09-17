@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { PackageIcon, Bell, User, X, MessageCircle, BarChart3, Users, Truck, Wallet, Shield, UserPlus, Settings, Megaphone } from 'lucide-react';
+import { Bell, User, X, MessageCircle, BarChart3, Users, Truck, Wallet, Shield, UserPlus, Settings, Megaphone } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 
 export const VendorMobileHeader: React.FC = () => {
@@ -19,9 +19,11 @@ export const VendorMobileHeader: React.FC = () => {
       <header className="lg:hidden fixed top-0 left-0 right-0 bg-white shadow-sm border-b border-neutral-100 z-50">
         <div className="flex items-center justify-between h-14 px-4">
           <Link to="/vendor/dashboard" className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-primary-500 rounded-md flex items-center justify-center">
-              <PackageIcon className="w-5 h-5 text-white" />
-            </div>
+            <img
+              src="/logo.jpeg"
+              alt="NIMEX"
+              className="w-8 h-8 rounded-md object-cover"
+            />
             <span className="font-heading font-bold text-primary-500 text-xl">
               NIMEX
             </span>
@@ -210,7 +212,7 @@ export const VendorMobileHeader: React.FC = () => {
                   }}
                   className="w-full flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-neutral-50 transition-colors text-left"
                 >
-                  <PackageIcon className="w-5 h-5 text-neutral-600" />
+                  <img src="/logo.jpeg" alt="NIMEX" className="w-5 h-5 rounded object-cover" />
                   <span className="font-sans text-sm text-neutral-900">View Marketplace</span>
                 </button>
               </div>
