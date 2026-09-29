@@ -215,152 +215,109 @@ export const HeroSection = (): JSX.Element => {
 
   return (
     <section className="flex flex-col w-full bg-neutral-50">
-      {/* Hero Banner (Split Layout) */}
-      <div className="relative w-full bg-white overflow-hidden">
-        <div className="max-w-7xl mx-auto px-4 md:px-6 py-12 md:py-20 lg:py-24 grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
+      {/* Hero Banner (Full Screen Background Layout) */}
+      <div className="relative w-full min-h-[85vh] flex items-center justify-center overflow-hidden">
+        {/* Background Image with Overlay */}
+        <div className="absolute inset-0 z-0">
+          <img 
+            src="/hero_shopping.jpg" 
+            alt="Vibrant Nigerian Marketplace" 
+            className="w-full h-full object-cover"
+          />
+          <div className="absolute inset-0 bg-neutral-900/60 backdrop-brightness-75"></div>
+        </div>
+
+        <div className="relative z-10 max-w-5xl mx-auto px-4 md:px-6 py-20 text-center flex flex-col items-center justify-center w-full">
           
-          {/* Left Column - Text & Search */}
-          <div className="relative z-10">
-            {/* Badge */}
-            <div className="inline-flex items-center gap-2 bg-primary-50 rounded-full px-4 py-2 mb-6 shadow-sm border border-primary-100">
-              <Sparkles className="w-4 h-4 text-primary-500" />
-              <span className="font-sans text-sm font-medium text-primary-700">Nigeria's #1 Marketplace</span>
-            </div>
+          {/* Badge */}
+          <div className="inline-flex items-center gap-2 bg-white/10 backdrop-blur-md rounded-full px-5 py-2 mb-8 border border-white/20">
+            <Sparkles className="w-4 h-4 text-primary-400" />
+            <span className="font-sans text-sm font-medium text-white">Nigeria's #1 Marketplace</span>
+          </div>
 
-            {/* Headline */}
-            <h1 className="font-heading font-bold text-4xl md:text-5xl lg:text-6xl text-neutral-900 leading-tight mb-6 animate-slide-up-fade">
-              Discover & Shop from <br className="hidden lg:block"/> <span className="text-gradient-primary">Local Vendors</span>
-            </h1>
+          {/* Headline */}
+          <h1 className="font-heading font-bold text-4xl md:text-5xl lg:text-7xl text-white leading-tight mb-6 animate-slide-up-fade drop-shadow-lg">
+            Discover & Shop from <br className="hidden md:block"/> <span className="text-primary-400">Local Vendors</span>
+          </h1>
 
-            {/* Subheadline */}
-            <p className="font-sans text-lg md:text-xl text-neutral-600 mb-8 animate-slide-up-fade stagger-2">
-              Connect with trusted vendors, find authentic Nigerian products, and enjoy seamless shopping with secure payments.
-            </p>
+          {/* Subheadline */}
+          <p className="font-sans text-lg md:text-xl text-white/90 mb-10 max-w-2xl mx-auto animate-slide-up-fade stagger-2 drop-shadow-md">
+            Connect with trusted vendors, find authentic Nigerian products, and enjoy seamless shopping with secure payments.
+          </p>
 
-            {/* Become a Vendor CTA (Integrated) */}
-            <div className="mb-10 flex items-center gap-4 animate-slide-up-fade stagger-3">
-              <span className="font-sans text-neutral-600 font-medium">Want to sell your products?</span>
-              <Button onClick={() => navigate('/vendor/register')} className="bg-primary-600 hover:bg-primary-700 text-white rounded-full px-6 py-2 shadow-md hover:shadow-lg transition-all">
-                Become a Vendor
+          {/* Search Bar */}
+          <form onSubmit={handleSearch} className="animate-slide-up-fade stagger-3 w-full max-w-4xl">
+            <div className="bg-white rounded-2xl md:rounded-full shadow-2xl p-2 flex flex-col md:flex-row items-stretch gap-2">
+              {/* Search Input */}
+              <div className="flex items-center gap-3 flex-1 px-4 py-3 border-b md:border-b-0 md:border-r border-neutral-100">
+                <SearchIcon className="w-5 h-5 text-neutral-400 flex-shrink-0" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search products..."
+                  className="w-full font-sans text-sm md:text-base text-neutral-900 placeholder-neutral-400 outline-none bg-transparent"
+                />
+              </div>
+
+              {/* Location Input */}
+              <div className="flex items-center gap-3 flex-1 px-4 py-3 border-b md:border-b-0 md:border-r border-neutral-100">
+                <LocationPicker
+                  variant="search"
+                  placeholder="Detecting location..."
+                  initialLocation={location ? { address: location, lat: 0, lng: 0 } : undefined}
+                  onLocationSelect={(loc) => {
+                    setLocation(loc.address);
+                    if (loc.lat && loc.lng) {
+                      setUserLocationCoords({ lat: loc.lat, lng: loc.lng });
+                    }
+                  }}
+                  className="w-full"
+                />
+              </div>
+
+              {/* Category Dropdown */}
+              <div className="flex items-center gap-3 flex-1 px-4 py-3">
+                <PackageIcon className="w-5 h-5 text-neutral-400 flex-shrink-0" />
+                <select
+                  value={selectedCategory}
+                  onChange={(e) => setSelectedCategory(e.target.value)}
+                  className="w-full font-sans text-sm md:text-base text-neutral-900 outline-none bg-transparent cursor-pointer"
+                >
+                  <option value="All Categories">All Categories</option>
+                  {categories.map((cat) => (
+                    <option key={cat.id} value={cat.id}>{cat.title}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Search Button */}
+              <Button type="submit" className="h-12 md:h-auto px-8 bg-gradient-primary text-white font-bold rounded-xl md:rounded-full text-base shadow-lg hover:shadow-glow transition-all duration-300">
+                Search
               </Button>
             </div>
+          </form>
 
-            {/* Search Bar */}
-            <form onSubmit={handleSearch} className="animate-slide-up-fade stagger-4 relative z-20">
-              <div className="bg-white rounded-2xl shadow-premium border border-neutral-100 p-2 flex flex-col md:flex-row items-stretch gap-2">
-                {/* Search Input */}
-                <div className="flex items-center gap-3 flex-1 px-4 py-3 border-b md:border-b-0 md:border-r border-neutral-100">
-                  <SearchIcon className="w-5 h-5 text-neutral-400 flex-shrink-0" />
-                  <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Search products..."
-                    className="w-full font-sans text-sm md:text-base text-neutral-900 placeholder-neutral-400 outline-none bg-transparent"
-                  />
-                </div>
-
-                {/* Location Input */}
-                <div className="flex items-center gap-3 flex-1 px-4 py-3 border-b md:border-b-0 md:border-r border-neutral-100">
-                  <LocationPicker
-                    variant="search"
-                    placeholder="Detecting location..."
-                    initialLocation={location ? { address: location, lat: 0, lng: 0 } : undefined}
-                    onLocationSelect={(loc) => {
-                      setLocation(loc.address);
-                      if (loc.lat && loc.lng) {
-                        setUserLocationCoords({ lat: loc.lat, lng: loc.lng });
-                      }
-                    }}
-                    className="w-full"
-                  />
-                </div>
-
-                {/* Category Dropdown */}
-                <div className="flex items-center gap-3 flex-1 px-4 py-3">
-                  <PackageIcon className="w-5 h-5 text-neutral-400 flex-shrink-0" />
-                  <select
-                    value={selectedCategory}
-                    onChange={(e) => setSelectedCategory(e.target.value)}
-                    className="w-full font-sans text-sm md:text-base text-neutral-900 outline-none bg-transparent cursor-pointer"
-                  >
-                    <option value="All Categories">All Categories</option>
-                    {categories.map((cat) => (
-                      <option key={cat.id} value={cat.id}>{cat.title}</option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Search Button */}
-                <Button type="submit" className="h-12 md:h-auto px-8 bg-gradient-primary text-white font-bold rounded-xl md:rounded-r-xl md:rounded-l-none text-base hover:shadow-glow transition-all duration-300">
-                  Search
-                </Button>
-              </div>
-            </form>
-
-            {/* Quick Links */}
-            <div className="flex flex-wrap items-center gap-3 mt-6 animate-slide-up-fade stagger-5">
-              <span className="font-sans text-sm text-neutral-500">Popular:</span>
-              {['electronics', 'fashion', 'food-beverages', 'home-office'].map((id) => (
-                <button
-                  key={id}
-                  onClick={() => navigate(`/products?category=${id}`)}
-                  className="px-4 py-1.5 bg-neutral-50 border border-neutral-200 rounded-full font-sans text-xs font-medium text-neutral-600 hover:bg-primary-50 hover:text-primary-700 hover:border-primary-200 transition-colors"
-                >
-                  {categories.find(c => c.id === id)?.title || id}
-                </button>
-              ))}
-            </div>
-            
-            {/* Stats */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-12 pt-8 border-t border-neutral-100 animate-slide-up-fade stagger-6">
-              {stats.map((stat, index) => (
-                <div key={index} className="text-left">
-                  <p className="font-heading font-bold text-2xl text-neutral-900">{stat.value}</p>
-                  <p className="font-sans text-xs text-neutral-500">{stat.label}</p>
-                </div>
-              ))}
-            </div>
-
-          </div>
-
-          {/* Right Column - Image */}
-          <div className="relative hidden lg:block animate-fade-in h-[600px] w-full">
-            {/* Decorative background shape */}
-            <div className="absolute inset-0 bg-primary-100/50 rounded-[40px] transform translate-x-6 translate-y-6"></div>
-            
-            <img 
-              src="/hero_shopping.jpg" 
-              alt="Vibrant Nigerian Marketplace" 
-              className="relative z-10 w-full h-full object-cover rounded-[40px] shadow-2xl"
-            />
-            
-            {/* Floating UI Elements */}
-            <div className="absolute top-12 -left-8 z-20 bg-white p-4 rounded-xl shadow-xl animate-float">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
-                  <TrendingUp className="w-5 h-5 text-green-600" />
-                </div>
-                <div>
-                  <p className="text-xs text-neutral-500 font-medium">Fastest Delivery</p>
-                  <p className="font-bold text-neutral-900">Same Day</p>
-                </div>
-              </div>
-            </div>
-            
-            <div className="absolute bottom-20 -right-8 z-20 bg-white p-4 rounded-xl shadow-xl animate-float" style={{ animationDelay: '1.5s' }}>
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-primary-100 rounded-full flex items-center justify-center">
-                  <MapPin className="w-5 h-5 text-primary-600" />
-                </div>
-                <div>
-                  <p className="text-xs text-neutral-500 font-medium">Local Vendors</p>
-                  <p className="font-bold text-neutral-900">10,000+ Near You</p>
-                </div>
-              </div>
-            </div>
+          {/* Quick Links */}
+          <div className="flex flex-wrap items-center justify-center gap-3 mt-8 animate-slide-up-fade stagger-4">
+            <span className="font-sans text-sm text-white/80">Popular:</span>
+            {['electronics', 'fashion', 'food-beverages', 'home-office'].map((id) => (
+              <button
+                key={id}
+                onClick={() => navigate(`/products?category=${id}`)}
+                className="px-4 py-1.5 bg-white/10 backdrop-blur-sm border border-white/20 rounded-full font-sans text-xs font-medium text-white hover:bg-white/20 transition-colors"
+              >
+                {categories.find(c => c.id === id)?.title || id}
+              </button>
+            ))}
           </div>
           
+          {/* Become a Vendor CTA */}
+          <div className="mt-12 animate-slide-up-fade stagger-5">
+            <Button onClick={() => navigate('/vendor/register')} variant="outline" className="bg-transparent border-white/30 text-white hover:bg-white hover:text-neutral-900 rounded-full px-8 py-6 text-lg font-medium backdrop-blur-sm transition-all">
+              Want to sell your products? Become a Vendor
+            </Button>
+          </div>
         </div>
       </div>
 

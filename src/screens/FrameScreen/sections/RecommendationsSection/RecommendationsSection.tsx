@@ -41,7 +41,7 @@ const footerLinks = [
   {
     title: "Company",
     links: [
-      { label: "About Us", path: "/about" },
+      
       { label: "Terms & Conditions", path: "/terms" },
       { label: "Contact Us", path: "/contact" },
       { label: "Privacy Policy", path: "/privacy" },
