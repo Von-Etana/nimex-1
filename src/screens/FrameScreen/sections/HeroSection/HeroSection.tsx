@@ -404,13 +404,13 @@ export const HeroSection = (): JSX.Element => {
           <div className="flex justify-center py-12"><Loader2 className="w-8 h-8 animate-spin text-primary-500" /></div>
         ) : (
           <div className="space-y-16">
-            {nearbyVendors.length > 0 && <ProductGrid title="Vendors Near You" items={nearbyVendors} type="vendor" />}
-            {freshRecommendations.length > 0 && <ProductGrid title="Fresh Recommendations" items={freshRecommendations} type="product" />}
-            {topVendorsList.length > 0 && <ProductGrid title="Top Local Vendors" items={topVendorsList} type="vendor" />}
-            {electronics.length > 0 && <ProductGrid title="Electronics & Gadgets" items={electronics} type="product" />}
-            {fashion.length > 0 && <ProductGrid title="Fashion & Apparel" items={fashion} type="product" />}
-            {homeOffice.length > 0 && <ProductGrid title="Home & Office" items={homeOffice} type="product" />}
-            {groceries.length > 0 && <ProductGrid title="Groceries & Food" items={groceries} type="product" />}
+            {nearbyVendors.length > 0 && <ProductGrid title="Vendors Near You" products={nearbyVendors} />}
+            {freshRecommendations.length > 0 && <ProductGrid title="Fresh Recommendations" products={freshRecommendations} />}
+            {topVendorsList.length > 0 && <ProductGrid title="Top Local Vendors" products={topVendorsList} />}
+            {electronics.length > 0 && <ProductGrid title="Electronics & Gadgets" products={electronics} />}
+            {fashion.length > 0 && <ProductGrid title="Fashion & Apparel" products={fashion} />}
+            {homeOffice.length > 0 && <ProductGrid title="Home & Office" products={homeOffice} />}
+            {groceries.length > 0 && <ProductGrid title="Groceries & Food" products={groceries} />}
           </div>
         )}
       </div>
