@@ -27,10 +27,9 @@ jobs:
           npm ci
           npm run build
 
-      - name: Deploy to Firebase
+      - name: Deploy Hosting to Firebase
         uses: w9jds/firebase-action@master
         with:
-          args: deploy --force
+          args: deploy --only hosting
         env:
-          # We use FIREBASE_TOKEN for authentication
           FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
