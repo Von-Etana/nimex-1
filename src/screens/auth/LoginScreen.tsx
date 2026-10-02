@@ -191,40 +191,49 @@ export const LoginScreen: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-white flex flex-col md:flex-row">
-      <div className="md:w-1/2 bg-gradient-to-br from-primary-500 to-primary-700 p-8 md:p-12 flex flex-col justify-center items-center text-white">
-        <div className="max-w-md w-full">
+      <div className="relative md:w-1/2 bg-neutral-900 p-8 md:p-12 flex flex-col justify-center items-center text-white overflow-hidden min-h-[320px] md:min-h-full">
+        <img
+          src="/welcome-bg.jpg"
+          alt="NIMEX Welcome Background"
+          className="absolute inset-0 w-full h-full object-cover object-center"
+        />
+        <div className="absolute inset-0 bg-neutral-950/80 backdrop-blur-[2px]" />
+
+        <div className="relative z-10 max-w-md w-full">
           <div className="flex items-center gap-3 mb-8">
-            <div className="w-16 h-16 bg-white/20 rounded-2xl flex items-center justify-center backdrop-blur">
-              <PackageIcon className="w-10 h-10 text-white" />
-            </div>
-            <span className="font-heading font-bold text-4xl">NIMEX</span>
+            <img
+              src="/logo.jpeg"
+              alt="NIMEX Logo"
+              className="w-14 h-14 rounded-2xl object-cover shadow-lg border border-white/20"
+            />
+            <span className="font-heading font-bold text-4xl text-white tracking-wide">NIMEX</span>
           </div>
 
-          <h1 className="font-heading font-bold text-3xl md:text-4xl mb-4">
+          <h1 className="font-heading font-bold text-3xl md:text-4xl mb-4 text-white">
             Welcome Back to Nigeria's Trusted Marketplace
           </h1>
 
-          <p className="font-sans text-lg opacity-90 leading-body">
+          <p className="font-sans text-lg text-neutral-200 leading-body">
             Connect with verified vendors, discover authentic Nigerian products, and shop with confidence.
           </p>
 
           <div className="mt-12 space-y-4">
             <div className="flex items-center gap-4">
-              <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center backdrop-blur">
+              <div className="w-12 h-12 bg-white/10 rounded-full flex items-center justify-center backdrop-blur-md border border-white/15">
                 <span className="text-2xl">🛡️</span>
               </div>
               <div>
-                <h3 className="font-heading font-semibold text-lg">Secure Escrow</h3>
-                <p className="font-sans text-sm opacity-80">Your money is protected until delivery</p>
+                <h3 className="font-heading font-semibold text-lg text-white">Secure Escrow</h3>
+                <p className="font-sans text-sm text-neutral-300">Your money is protected until delivery</p>
               </div>
             </div>
             <div className="flex items-center gap-4">
-              <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center backdrop-blur">
+              <div className="w-12 h-12 bg-white/10 rounded-full flex items-center justify-center backdrop-blur-md border border-white/15">
                 <span className="text-2xl">✓</span>
               </div>
               <div>
-                <h3 className="font-heading font-semibold text-lg">Verified Sellers</h3>
-                <p className="font-sans text-sm opacity-80">All vendors undergo KYC verification</p>
+                <h3 className="font-heading font-semibold text-lg text-white">Verified Sellers</h3>
+                <p className="font-sans text-sm text-neutral-300">All vendors undergo KYC verification</p>
               </div>
             </div>
           </div>

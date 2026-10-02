@@ -119,10 +119,8 @@ export const MarketerRegistrationScreen: React.FC = () => {
   return (
     <div className="min-h-screen bg-neutral-50">
       <div className="p-6 md:p-8 bg-white border-b border-neutral-200">
-        <Link to="/" className="inline-flex items-center gap-2">
-          <div className="w-10 h-10 bg-primary-500 rounded-md flex items-center justify-center">
-            <PackageIcon className="w-6 h-6 text-white" />
-          </div>
+        <Link to="/" className="inline-flex items-center gap-3">
+          <img src="/logo.jpeg" alt="NIMEX Logo" className="w-10 h-10 rounded-md object-cover shadow-sm" />
           <span className="font-heading font-bold text-primary-500 text-2xl">NIMEX</span>
         </Link>
       </div>

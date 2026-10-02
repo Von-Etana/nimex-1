@@ -148,10 +148,8 @@ export const SignupScreen: React.FC = () => {
     return (
       <div className="min-h-screen bg-white flex flex-col">
         <div className="p-6 md:p-8">
-          <Link to="/" className="inline-flex items-center gap-2">
-            <div className="w-10 h-10 bg-primary-500 rounded-md flex items-center justify-center">
-              <PackageIcon className="w-6 h-6 text-white" />
-            </div>
+          <Link to="/" className="inline-flex items-center gap-3">
+            <img src="/logo.jpeg" alt="NIMEX Logo" className="w-10 h-10 rounded-md object-cover shadow-sm" />
             <span className="font-heading font-bold text-primary-500 text-2xl">NIMEX</span>
           </Link>
         </div>
@@ -170,7 +168,7 @@ export const SignupScreen: React.FC = () => {
             <div className="grid md:grid-cols-2 gap-6 mb-8">
               <button
                 onClick={() => handleRoleSelect('buyer')}
-                className="group p-8 bg-white rounded-2xl border-2 border-neutral-200 hover:border-primary-500 hover:shadow-lg transition-all"
+                className="group p-8 bg-white rounded-2xl border-2 border-neutral-200 hover:border-primary-500 hover:shadow-lg transition-all text-left"
               >
                 <div className="w-16 h-16 bg-primary-100 rounded-xl flex items-center justify-center mb-6 group-hover:bg-primary-500 transition-colors">
                   <ShoppingBag className="w-8 h-8 text-primary-500 group-hover:text-white transition-colors" />
@@ -199,10 +197,10 @@ export const SignupScreen: React.FC = () => {
 
               <button
                 onClick={() => handleRoleSelect('vendor')}
-                className="group p-8 bg-white rounded-2xl border-2 border-neutral-200 hover:border-primary-500 hover:shadow-lg transition-all"
+                className="group p-8 bg-white rounded-2xl border-2 border-neutral-200 hover:border-primary-500 hover:shadow-lg transition-all text-left"
               >
-                <div className="w-16 h-16 bg-accent-yellow/20 rounded-xl flex items-center justify-center mb-6 group-hover:bg-accent-yellow transition-colors">
-                  <UserIcon className="w-8 h-8 text-accent-yellow group-hover:text-accent-foreground transition-colors" />
+                <div className="w-16 h-16 bg-primary-100 rounded-xl flex items-center justify-center mb-6 group-hover:bg-primary-500 transition-colors">
+                  <UserIcon className="w-8 h-8 text-primary-500 group-hover:text-white transition-colors" />
                 </div>
                 <h2 className="font-heading font-bold text-2xl text-neutral-900 mb-3">
                   I Want to Sell
@@ -241,27 +239,37 @@ export const SignupScreen: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-white flex flex-col md:flex-row">
-      <div className="md:w-1/2 bg-gradient-to-br from-primary-500 to-primary-700 p-8 md:p-12 flex flex-col justify-center items-center text-white">
-        <div className="max-w-md w-full">
+      <div className="relative md:w-1/2 bg-neutral-900 p-8 md:p-12 flex flex-col justify-center items-center text-white overflow-hidden min-h-[320px] md:min-h-full">
+        {/* Mobile App Splash Screen Background Image with Overlay */}
+        <img
+          src="/splash-bg.jpg"
+          alt="NIMEX Splash Background"
+          className="absolute inset-0 w-full h-full object-cover object-center"
+        />
+        <div className="absolute inset-0 bg-neutral-950/80 backdrop-blur-[2px]" />
+
+        <div className="relative z-10 max-w-md w-full">
           <div className="flex items-center gap-3 mb-8">
-            <div className="w-16 h-16 bg-white/20 rounded-2xl flex items-center justify-center backdrop-blur">
-              <PackageIcon className="w-10 h-10 text-white" />
-            </div>
-            <span className="font-heading font-bold text-4xl">NIMEX</span>
+            <img
+              src="/logo.jpeg"
+              alt="NIMEX Logo"
+              className="w-14 h-14 rounded-2xl object-cover shadow-lg border border-white/20"
+            />
+            <span className="font-heading font-bold text-4xl text-white tracking-wide">NIMEX</span>
           </div>
 
-          <h1 className="font-heading font-bold text-3xl md:text-4xl mb-4">
+          <h1 className="font-heading font-bold text-3xl md:text-4xl mb-4 text-white">
             {selectedRole === 'buyer' ? 'Start Shopping Today' : 'Grow Your Business with NIMEX'}
           </h1>
 
-          <p className="font-sans text-lg opacity-90 leading-body">
+          <p className="font-sans text-lg text-neutral-200 leading-body">
             {selectedRole === 'buyer'
               ? 'Join thousands of happy customers shopping from verified Nigerian vendors.'
               : 'Join hundreds of successful vendors reaching customers across Nigeria.'}
           </p>
 
-          <div className="mt-8 p-4 bg-white/10 rounded-lg backdrop-blur">
-            <p className="font-sans text-sm">
+          <div className="mt-8 p-4 bg-white/10 rounded-xl backdrop-blur-md border border-white/15">
+            <p className="font-sans text-sm text-white">
               <strong>Selected:</strong>{' '}
               {selectedRole === 'buyer' ? 'Buyer Account' : 'Vendor Account'}
             </p>
@@ -270,7 +278,7 @@ export const SignupScreen: React.FC = () => {
                 setStep('role');
                 setSelectedRole(null);
               }}
-              className="font-sans text-sm underline mt-2 hover:text-white/80"
+              className="font-sans text-sm text-neutral-300 hover:text-white underline mt-2 transition-colors"
             >
               Change selection
             </button>

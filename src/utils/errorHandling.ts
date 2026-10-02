@@ -47,16 +47,24 @@ export const getFriendlyErrorMessage = (error: any): string => {
         return 'For security, please sign in again to continue.';
     }
 
+    if (code === 'auth/unauthorized-domain' || message.includes('unauthorized-domain')) {
+        return 'This domain is not authorized for Google Sign-In in Firebase Console. Please add your domain under Firebase Console > Auth > Settings > Authorized Domains.';
+    }
+
     if (code === 'auth/popup-closed-by-user' || message.includes('popup-closed-by-user')) {
-        return 'Sign-in popup was closed. Please try again.';
+        return 'Sign-in popup was closed before completing. Please try again.';
     }
 
     if (code === 'auth/popup-blocked' || message.includes('popup-blocked')) {
-        return 'Sign-in popup was blocked by your browser. Please allow popups and try again.';
+        return 'Sign-in popup was blocked by your browser. Please allow popups or try again.';
+    }
+
+    if (code === 'auth/cancelled-popup-request' || message.includes('cancelled-popup-request')) {
+        return 'Sign-in request was cancelled. Please try again.';
     }
 
     if (code === 'auth/operation-not-allowed' || message.includes('operation-not-allowed')) {
-        return 'This sign-in method is not enabled. Please contact support.';
+        return 'Google Sign-In is not enabled in Firebase Console. Please enable it under Auth > Sign-in method.';
     }
 
     if (code === 'auth/account-exists-with-different-credential' || message.includes('account-exists-with-different-credential')) {
@@ -72,9 +80,9 @@ export const getFriendlyErrorMessage = (error: any): string => {
         return 'Passwords do not match. Please try again.';
     }
 
-    // Fallback for unhandled technical errors
-    if (import.meta.env.DEV) {
-        return message; // Show tech error in dev
+    // Return exact message if present, or generic fallback
+    if (message && message !== '[object Object]') {
+        return message;
     }
 
     return 'An unexpected error occurred. Please try again.';

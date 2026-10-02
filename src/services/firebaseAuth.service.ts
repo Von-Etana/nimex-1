@@ -380,8 +380,16 @@ export class FirebaseAuthService {
             const provider = new GoogleAuthProvider();
             provider.addScope('email');
             provider.addScope('profile');
+            provider.setCustomParameters({ prompt: 'select_account' });
 
-            const userCredential: UserCredential = await signInWithPopup(auth, provider);
+            let userCredential: UserCredential;
+            try {
+                userCredential = await signInWithPopup(auth, provider);
+            } catch (popupErr: any) {
+                logger.warn('signInWithPopup failed, checking error:', popupErr);
+                throw popupErr;
+            }
+
             const user = userCredential.user;
 
             // Check if this is a new user by looking for existing profile
@@ -396,7 +404,7 @@ export class FirebaseAuthService {
                 // Create profile for new user
                 await FirestoreService.setDocument(COLLECTIONS.PROFILES, user.uid, {
                     email: user.email,
-                    full_name: user.displayName,
+                    full_name: user.displayName || user.email?.split('@')[0] || 'User',
                     role: role,
                     phone: user.phoneNumber || null,
                     avatar_url: user.photoURL || null,

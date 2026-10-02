@@ -620,7 +620,8 @@ export const VendorOnboardingScreen: React.FC = () => {
     <>
       <div className="min-h-screen bg-neutral-50 py-8">
         <div className="max-w-6xl mx-auto px-4">
-          <div className="text-center mb-8">
+          <div className="text-center mb-8 flex flex-col items-center">
+            <img src="/logo.jpeg" alt="NIMEX Logo" className="w-16 h-16 rounded-2xl object-cover shadow-md mb-4 border border-neutral-200" />
             <h1 className="text-3xl font-heading font-bold text-neutral-900 mb-2">
               Complete Your Vendor Profile
             </h1>
