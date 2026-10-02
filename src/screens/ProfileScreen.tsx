@@ -4,13 +4,17 @@ import { User, Mail, Phone, MapPin, Edit2, Save, Loader2 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Card, CardContent } from '../components/ui/card';
 import { useAuth } from '../contexts/AuthContext';
+import { useToast } from '../contexts/ToastContext';
 import { LocationPicker } from '../components/maps/LocationPicker';
+import { AccountDeletionModal } from '../components/AccountDeletionModal';
 
 export const ProfileScreen: React.FC = () => {
   const { user, profile, updateProfile, loading } = useAuth();
+  const { error: showErrorToast, success: showSuccessToast } = useToast();
   const navigate = useNavigate();
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [formData, setFormData] = useState({
     full_name: '',
     phone: '',
@@ -33,8 +37,9 @@ export const ProfileScreen: React.FC = () => {
     setSaving(true);
     const { error } = await updateProfile(formData);
     if (error) {
-      alert('Failed to update profile: ' + error.message);
+      showErrorToast('Failed to update profile: ' + error.message);
     } else {
+      showSuccessToast('Profile updated successfully');
       setEditing(false);
     }
     setSaving(false);
@@ -250,8 +255,35 @@ export const ProfileScreen: React.FC = () => {
               </div>
             </CardContent>
           </Card>
+
+          <Card className="border-red-200 bg-red-50/40">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="font-heading font-semibold text-lg text-red-700">
+                    Delete Account
+                  </h2>
+                  <p className="font-sans text-sm text-neutral-600 mt-1">
+                    Permanently delete your account and associated active data.
+                  </p>
+                </div>
+                <Button
+                  variant="outline"
+                  onClick={() => setShowDeleteModal(true)}
+                  className="border-red-300 text-red-600 hover:bg-red-50 hover:text-red-700"
+                >
+                  Delete Account
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
         </div>
       </div>
+
+      <AccountDeletionModal
+        isOpen={showDeleteModal}
+        onClose={() => setShowDeleteModal(false)}
+      />
     </div>
   );
 };

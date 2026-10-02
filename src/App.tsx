@@ -11,8 +11,15 @@ import { FrameScreen } from './screens/FrameScreen';
 import { LoginScreen, SignupScreen, ForgotPasswordScreen, ResetPasswordScreen } from './screens/auth';
 import { configValidator } from './services/configValidator';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { OfflineBanner } from './components/OfflineBanner';
+import { useSessionMonitor } from './hooks/useSessionMonitor';
 import { logger } from './lib/logger';
 import { Loader2 } from 'lucide-react';
+
+const SessionWatcher: React.FC = () => {
+  useSessionMonitor();
+  return null;
+};
 
 // Lazy load screens
 const AdminDashboardScreen = React.lazy(() => import('./screens/admin').then(module => ({ default: module.AdminDashboardScreen })));
@@ -66,6 +73,7 @@ const EscrowDashboardScreen = React.lazy(() => import('./screens/vendor/EscrowDa
 
 const CheckoutScreen = React.lazy(() => import('./screens/CheckoutScreen').then(module => ({ default: module.CheckoutScreen })));
 const OrderTrackingScreen = React.lazy(() => import('./screens/OrderTrackingScreen').then(module => ({ default: module.OrderTrackingScreen })));
+const DisputeOrderScreen = React.lazy(() => import('./screens/buyer/DisputeOrderScreen').then(module => ({ default: module.DisputeOrderScreen })));
 const ProfileScreen = React.lazy(() => import('./screens/ProfileScreen').then(module => ({ default: module.ProfileScreen })));
 const OrdersScreen = React.lazy(() => import('./screens/OrdersScreen').then(module => ({ default: module.OrdersScreen })));
 const NotificationsScreen = React.lazy(() => import('./screens/NotificationsScreen').then(module => ({ default: module.NotificationsScreen })));
@@ -107,8 +115,10 @@ const App: React.FC = () => {
   return (
     <ErrorBoundary>
       <BrowserRouter>
+        <OfflineBanner />
         <AuthProvider>
           <ToastProvider>
+            <SessionWatcher />
             <Suspense fallback={<PageLoader />}>
               <Routes>
                 <Route path="/login" element={<LoginScreen />} />
@@ -207,6 +217,17 @@ const App: React.FC = () => {
                     <ProtectedRoute>
                       <MainLayout>
                         <OrderTrackingScreen />
+                      </MainLayout>
+                    </ProtectedRoute>
+                  }
+                />
+
+                <Route
+                  path="/orders/:orderId/dispute"
+                  element={
+                    <ProtectedRoute>
+                      <MainLayout>
+                        <DisputeOrderScreen />
                       </MainLayout>
                     </ProtectedRoute>
                   }

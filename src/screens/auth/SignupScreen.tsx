@@ -6,6 +6,7 @@ import { referralService } from '../../services/referralService';
 import { Button } from '../../components/ui/button';
 import type { UserRole } from '../../types/database';
 import { getFriendlyErrorMessage } from '../../utils/errorHandling';
+import { analyticsService } from '../../services/analyticsService';
 
 export const SignupScreen: React.FC = () => {
   const navigate = useNavigate();
@@ -105,6 +106,7 @@ export const SignupScreen: React.FC = () => {
       setError(getFriendlyErrorMessage(signUpError));
       setLoading(false);
     } else {
+      analyticsService.trackSignUp('email', selectedRole);
       setLoading(false);
       if (selectedRole === 'vendor') {
         const params = formData.referralCode ? `?ref=${formData.referralCode}` : '';

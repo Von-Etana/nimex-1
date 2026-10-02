@@ -99,6 +99,84 @@ export const VendorOnboardingScreen: React.FC = () => {
     avatar: null as File | null
   });
 
+  const [draftInitialized, setDraftInitialized] = useState(false);
+  const [draftBanner, setDraftBanner] = useState<{ visible: boolean; savedAt?: string }>({ visible: false });
+
+  const DRAFT_STORAGE_KEY = user ? `nimex_vendor_draft_${user.uid}` : 'nimex_vendor_draft_guest';
+
+  // Load draft on mount
+  useEffect(() => {
+    try {
+      const savedDraft = localStorage.getItem(DRAFT_STORAGE_KEY);
+      if (savedDraft) {
+        const parsed = JSON.parse(savedDraft);
+        if (parsed && parsed.profileData) {
+          setProfileData(prev => ({
+            ...prev,
+            ...parsed.profileData
+          }));
+          if (parsed.currentStep && parsed.currentStep >= 1 && parsed.currentStep <= 4) {
+            setCurrentStep(parsed.currentStep);
+          }
+          if (parsed.selectedSubscription) {
+            setSelectedSubscription(parsed.selectedSubscription);
+          }
+          setDraftBanner({
+            visible: true,
+            savedAt: parsed.savedAt ? new Date(parsed.savedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', month: 'short', day: 'numeric' }) : undefined
+          });
+        }
+      }
+    } catch (err) {
+      console.error('Error loading vendor onboarding draft:', err);
+    } finally {
+      setDraftInitialized(true);
+    }
+  }, [DRAFT_STORAGE_KEY]);
+
+  // Auto-save draft on data changes once initialized
+  useEffect(() => {
+    if (!draftInitialized) return;
+    const timeoutId = setTimeout(() => {
+      try {
+        const hasContent = profileData.businessName || profileData.businessAddress || profileData.businessPhone || currentStep > 1;
+        if (hasContent) {
+          const draftPayload = {
+            profileData,
+            currentStep,
+            selectedSubscription,
+            savedAt: new Date().toISOString()
+          };
+          localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draftPayload));
+        }
+      } catch (err) {
+        console.error('Error saving vendor onboarding draft:', err);
+      }
+    }, 600);
+
+    return () => clearTimeout(timeoutId);
+  }, [profileData, currentStep, selectedSubscription, draftInitialized, DRAFT_STORAGE_KEY]);
+
+  const handleClearDraft = useCallback(() => {
+    try {
+      localStorage.removeItem(DRAFT_STORAGE_KEY);
+      setProfileData({
+        businessName: '',
+        businessDescription: '',
+        businessAddress: '',
+        businessPhone: '',
+        marketLocation: '',
+        subCategoryTags: []
+      });
+      setCurrentStep(1);
+      setSelectedSubscription('monthly');
+      setDraftBanner({ visible: false });
+      showNotification('info', 'Saved draft cleared.');
+    } catch (err) {
+      console.error('Error clearing draft:', err);
+    }
+  }, [DRAFT_STORAGE_KEY, showNotification]);
+
   // Filter available tags based on selected business category
   useEffect(() => {
     const category = profileData.businessCategory;
@@ -476,6 +554,9 @@ export const VendorOnboardingScreen: React.FC = () => {
               }
 
               // Always navigate to dashboard after successful Paystack callback
+              try {
+                localStorage.removeItem(DRAFT_STORAGE_KEY);
+              } catch (_) {}
               setTimeout(() => {
                 setLoading(false);
                 navigate('/vendor/dashboard');
@@ -483,6 +564,9 @@ export const VendorOnboardingScreen: React.FC = () => {
             } catch (error) {
               console.error('Error during payment verification:', error);
               // Still redirect - payment was successful
+              try {
+                localStorage.removeItem(DRAFT_STORAGE_KEY);
+              } catch (_) {}
               showNotification('info', 'Payment received! Redirecting to dashboard...');
               setTimeout(() => {
                 setLoading(false);
@@ -546,6 +630,38 @@ export const VendorOnboardingScreen: React.FC = () => {
           </div>
 
           {renderStepIndicator()}
+
+          {/* Draft Restoration Banner */}
+          {draftBanner.visible && (
+            <div className="mb-6 p-4 bg-primary-50 border border-primary-200 rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm">
+              <div className="flex items-center gap-3">
+                <div className="w-2.5 h-2.5 rounded-full bg-primary-600 animate-pulse flex-shrink-0" />
+                <p className="font-sans text-sm text-primary-900">
+                  <span className="font-semibold">Draft restored:</span> We found your saved application progress{draftBanner.savedAt ? ` from ${draftBanner.savedAt}` : ''}.
+                </p>
+              </div>
+              <div className="flex items-center gap-2 self-end sm:self-auto">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleClearDraft}
+                  className="text-xs text-neutral-600 hover:text-red-600 border-neutral-300 hover:border-red-300"
+                >
+                  Start Over (Clear Draft)
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setDraftBanner({ visible: false })}
+                  className="text-xs text-primary-700"
+                >
+                  Dismiss
+                </Button>
+              </div>
+            </div>
+          )}
 
           {currentStep === 1 && (
             <BusinessInfoStep

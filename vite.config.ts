@@ -26,6 +26,9 @@ export default defineConfig(({ mode }) => ({
       plugins: [tailwind()],
     },
   },
+  esbuild: {
+    drop: mode === 'production' ? ['console', 'debugger'] : [],
+  },
   build: {
     rollupOptions: {
       output: {

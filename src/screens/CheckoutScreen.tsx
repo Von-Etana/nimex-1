@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
-import { ShoppingBag, MapPin, CreditCard, Truck, AlertCircle, CheckCircle, Mail, RefreshCw } from 'lucide-react';
+import { ShoppingBag, MapPin, CreditCard, Truck, AlertCircle, CheckCircle, Mail, RefreshCw, ShieldCheck, Lock, Shield, ArrowRight } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Card, CardContent } from '../components/ui/card';
 import { useAuth } from '../contexts/AuthContext';
@@ -13,6 +13,7 @@ import { emailNotificationService } from '../services/emailNotificationService';
 import { deliveryService } from '../services/deliveryService';
 import { getVendorPickupLocation } from '../services/vendorLocationService';
 import { auth } from '../lib/firebase.config';
+import { analyticsService } from '../services/analyticsService';
 
 interface CartItem {
   id: string;
@@ -52,7 +53,23 @@ export const CheckoutScreen: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, emailVerified, resendVerificationEmail } = useAuth();
-  const [cartItems] = useState<CartItem[]>(location.state?.cartItems || []);
+  const [cartItems] = useState<CartItem[]>(() => {
+    const fromState = location.state?.cartItems;
+    if (fromState && Array.isArray(fromState) && fromState.length > 0) {
+      try {
+        sessionStorage.setItem('nimex_checkout_items', JSON.stringify(fromState));
+      } catch (e) {
+        // ignore storage errors
+      }
+      return fromState;
+    }
+    try {
+      const cached = sessionStorage.getItem('nimex_checkout_items');
+      return cached ? JSON.parse(cached) : [];
+    } catch (e) {
+      return [];
+    }
+  });
   const [addresses, setAddresses] = useState<Address[]>([]);
   const [selectedAddressId, setSelectedAddressId] = useState<string>('');
   const [deliveryType, setDeliveryType] = useState<'standard' | 'express' | 'same_day'>('standard');
@@ -87,6 +104,9 @@ export const CheckoutScreen: React.FC = () => {
       navigate('/cart');
       return;
     }
+
+    const subtotal = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
+    analyticsService.trackBeginCheckout(subtotal, cartItems.length);
 
     loadAddresses();
   }, [user, cartItems]);
@@ -280,8 +300,17 @@ export const CheckoutScreen: React.FC = () => {
           }
 
           localStorage.removeItem('nimex_cart');
+          try {
+            sessionStorage.removeItem('nimex_checkout_items');
+          } catch (e) {
+            // ignore
+          }
+
+          analyticsService.trackPurchase(orderIds[0], totalAmount, cartItems.length);
+
           navigate('/orders/' + orderIds[0], {
             state: { paymentSuccess: true },
+            replace: true,
           });
         } else {
           setPaymentError({
@@ -571,6 +600,100 @@ export const CheckoutScreen: React.FC = () => {
             </CardContent>
           </Card>
         )}
+        {/* Visual Checkout Stepper */}
+        <div className="bg-white border border-neutral-200/90 rounded-2xl p-4 md:p-6 mb-8 shadow-sm">
+          <div className="flex items-center justify-between max-w-2xl mx-auto">
+            <div className="flex items-center gap-2 md:gap-3">
+              <div className={`w-8 h-8 md:w-9 md:h-9 rounded-full flex items-center justify-center font-bold text-xs md:text-sm ${
+                selectedAddressId ? 'bg-emerald-600 text-white' : 'bg-primary-600 text-white'
+              }`}>
+                {selectedAddressId ? <CheckCircle className="w-5 h-5" /> : '1'}
+              </div>
+              <div>
+                <p className="font-heading font-bold text-xs md:text-sm text-neutral-900">Delivery Address</p>
+                <p className="text-[11px] text-neutral-500 hidden sm:block">Where should we deliver?</p>
+              </div>
+            </div>
+
+            <div className="w-8 md:w-16 h-0.5 bg-neutral-200" />
+
+            <div className="flex items-center gap-2 md:gap-3">
+              <div className={`w-8 h-8 md:w-9 md:h-9 rounded-full flex items-center justify-center font-bold text-xs md:text-sm ${
+                deliveryType ? 'bg-primary-600 text-white' : 'bg-neutral-200 text-neutral-600'
+              }`}>
+                2
+              </div>
+              <div>
+                <p className="font-heading font-bold text-xs md:text-sm text-neutral-900">Delivery Speed</p>
+                <p className="text-[11px] text-neutral-500 hidden sm:block">Standard or Express</p>
+              </div>
+            </div>
+
+            <div className="w-8 md:w-16 h-0.5 bg-neutral-200" />
+
+            <div className="flex items-center gap-2 md:gap-3">
+              <div className="w-8 h-8 md:w-9 md:h-9 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold text-xs md:text-sm">
+                <ShieldCheck className="w-4 h-4 md:w-5 md:h-5 text-emerald-700" />
+              </div>
+              <div>
+                <p className="font-heading font-bold text-xs md:text-sm text-neutral-900">Escrow Payment</p>
+                <p className="text-[11px] text-neutral-500 hidden sm:block">100% Protected</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* 3-Phase Escrow Guarantee Visual Card */}
+        <div className="bg-emerald-950 text-white rounded-2xl p-5 md:p-6 mb-8 border border-emerald-900 shadow-sm">
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border-b border-white/10 pb-4 mb-4">
+            <div className="flex items-center gap-2.5">
+              <ShieldCheck className="w-6 h-6 text-emerald-400 flex-shrink-0" />
+              <div>
+                <h3 className="font-heading font-bold text-base md:text-lg text-white">
+                  NIMEX 100% Escrow Protection
+                </h3>
+                <p className="text-xs text-emerald-200">
+                  Your money is never sent directly to sellers until you confirm satisfaction.
+                </p>
+              </div>
+            </div>
+            <span className="text-[11px] font-bold uppercase tracking-wider bg-white/15 px-3 py-1 rounded-full text-emerald-200 border border-white/20">
+              Buyer Safeguard Active
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs md:text-sm">
+            <div className="flex items-start gap-3 bg-white/5 p-3 rounded-xl border border-white/10">
+              <div className="w-6 h-6 rounded-full bg-emerald-500/20 text-emerald-300 font-bold flex items-center justify-center text-xs flex-shrink-0">
+                1
+              </div>
+              <div>
+                <strong className="block text-white font-semibold mb-0.5">Payment Locked</strong>
+                <span className="text-emerald-100/80 text-xs">Funds held in escrow; seller cannot withdraw.</span>
+              </div>
+            </div>
+
+            <div className="flex items-start gap-3 bg-white/5 p-3 rounded-xl border border-white/10">
+              <div className="w-6 h-6 rounded-full bg-emerald-500/20 text-emerald-300 font-bold flex items-center justify-center text-xs flex-shrink-0">
+                2
+              </div>
+              <div>
+                <strong className="block text-white font-semibold mb-0.5">Fast Dispatch</strong>
+                <span className="text-emerald-100/80 text-xs">Merchant ships item with real-time tracking code.</span>
+              </div>
+            </div>
+
+            <div className="flex items-start gap-3 bg-white/5 p-3 rounded-xl border border-white/10">
+              <div className="w-6 h-6 rounded-full bg-emerald-500/20 text-emerald-300 font-bold flex items-center justify-center text-xs flex-shrink-0">
+                3
+              </div>
+              <div>
+                <strong className="block text-white font-semibold mb-0.5">Inspect & Release</strong>
+                <span className="text-emerald-100/80 text-xs">Verify your item upon arrival or open a 1-click dispute.</span>
+              </div>
+            </div>
+          </div>
+        </div>
 
         <div className="grid lg:grid-cols-3 gap-8">
           <div className="lg:col-span-2 space-y-6">
@@ -839,6 +962,15 @@ export const CheckoutScreen: React.FC = () => {
                       <span>₦{deliveryCost.toLocaleString()}</span>
                     )}
                   </div>
+                  <div className="flex justify-between items-center font-sans text-neutral-700">
+                    <span className="flex items-center gap-1.5 text-xs text-neutral-600">
+                      <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                      NIMEX Escrow Protection
+                    </span>
+                    <span className="text-emerald-700 font-bold text-[11px] uppercase px-2 py-0.5 bg-emerald-50 rounded border border-emerald-200">
+                      Free Guarantee
+                    </span>
+                  </div>
                   <div className="pt-3 border-t border-neutral-200 flex justify-between font-heading font-bold text-lg text-neutral-900">
                     <span>Total</span>
                     <span className="text-primary-600">₦{total.toLocaleString()}</span>
@@ -848,7 +980,7 @@ export const CheckoutScreen: React.FC = () => {
                 <Button
                   onClick={handleCheckout}
                   disabled={!selectedAddressId || isProcessing || isCalculatingCost || !emailVerified}
-                  className="w-full h-12 bg-primary-500 hover:bg-primary-600 disabled:opacity-50"
+                  className="w-full h-12 bg-primary-600 hover:bg-primary-700 text-white font-bold rounded-xl shadow-md disabled:opacity-50"
                 >
                   {isProcessing
                     ? 'Processing...'
@@ -856,16 +988,12 @@ export const CheckoutScreen: React.FC = () => {
                     ? 'Verify Email to Checkout'
                     : pendingOrderIds
                     ? 'Retry Payment'
-                    : 'Proceed to Payment'}
+                    : 'Proceed to Secure Payment'}
                 </Button>
 
-                <div className="mt-6 pt-6 border-t border-neutral-100">
-                  <p className="font-sans text-xs text-neutral-600 text-center mb-2">
-                    Your payment is protected by NIMEX Escrow
-                  </p>
-                  <p className="font-sans text-xs text-neutral-500 text-center">
-                    Funds are held securely until delivery confirmation
-                  </p>
+                <div className="mt-5 pt-5 border-t border-neutral-100 flex items-center justify-center gap-2 text-neutral-500 text-xs text-center">
+                  <Lock className="w-3.5 h-3.5 text-neutral-400 flex-shrink-0" />
+                  <span>Bank-Grade 256-Bit Encrypted Escrow Payment</span>
                 </div>
               </CardContent>
             </Card>

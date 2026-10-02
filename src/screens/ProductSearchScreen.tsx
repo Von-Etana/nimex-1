@@ -13,6 +13,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { CATEGORIES } from '../lib/categories';
 import { LocationPicker } from '../components/maps/LocationPicker';
 import { DEFAULT_COORDINATES } from '../lib/locationDefaults';
+import { analyticsService } from '../services/analyticsService';
 
 interface Product {
   id: string;
@@ -96,8 +97,11 @@ export const ProductSearchScreen: React.FC = () => {
   }, [query, category, minPrice, maxPrice, locationFilter, sortBy, userLocation?.city]); // trigger on userLocation city change too
 
   useEffect(() => {
-    if (query && user?.id) {
-      recommendationService.trackUserSearch(user.id, query, category, locationFilter);
+    if (query) {
+      analyticsService.trackSearch(query);
+      if (user?.id) {
+        recommendationService.trackUserSearch(user.id, query, category, locationFilter);
+      }
     }
   }, [query, category, locationFilter, user?.id]);
 

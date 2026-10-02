@@ -31,6 +31,11 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
+  // User is authenticated but profile failed to load or does not exist
+  if (!profile) {
+    return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+
   if (allowedRoles && profile && !allowedRoles.includes(profile.role)) {
     return <Navigate to="/" replace />;
   }

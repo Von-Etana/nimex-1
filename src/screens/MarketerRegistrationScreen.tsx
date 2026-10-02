@@ -7,6 +7,7 @@ import { referralService } from '../services/referralService';
 import { termiiService } from '../services/termiiService';
 import { useAuth } from '../contexts/AuthContext';
 import { getFriendlyErrorMessage } from '../utils/errorHandling';
+import { analyticsService } from '../services/analyticsService';
 
 import { auth } from '../lib/firebase.config';
 
@@ -92,6 +93,8 @@ export const MarketerRegistrationScreen: React.FC = () => {
       });
 
       if (result.success) {
+        analyticsService.trackSignUp('email', 'marketer');
+
         // Send Welcome SMS
         if (formData.phone) {
           termiiService.sendWelcomeSMS(formData.phone, formData.fullName)

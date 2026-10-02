@@ -6,6 +6,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { getFriendlyErrorMessage } from '../../utils/errorHandling';
 import { auth } from '../../lib/firebase';
 import { setPersistence, browserLocalPersistence, browserSessionPersistence } from 'firebase/auth';
+import { analyticsService } from '../../services/analyticsService';
 
 export const LoginScreen: React.FC = () => {
   const navigate = useNavigate();
@@ -29,6 +30,7 @@ export const LoginScreen: React.FC = () => {
   // Handle automatic redirection when logged in
   useEffect(() => {
     if (user && profile) {
+      analyticsService.trackLogin('session');
       // Clear loading states on successful login
       setLoading(false);
       setGoogleLoading(false);
@@ -125,7 +127,7 @@ export const LoginScreen: React.FC = () => {
 
     // Set a timeout to prevent infinite loading state
     signInTimeout.current = setTimeout(() => {
-      if (loading) {
+      if (signInAttempted.current) {
         setLoading(false);
         setError('Sign in is taking longer than expected. Please try again.');
         signInAttempted.current = false;
@@ -165,7 +167,7 @@ export const LoginScreen: React.FC = () => {
 
     // Set a timeout to prevent infinite loading state
     signInTimeout.current = setTimeout(() => {
-      if (googleLoading) {
+      if (signInAttempted.current) {
         setGoogleLoading(false);
         setError('Sign in is taking longer than expected. Please try again.');
         signInAttempted.current = false;

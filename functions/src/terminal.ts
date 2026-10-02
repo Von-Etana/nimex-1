@@ -582,11 +582,20 @@ export const terminalWebhook = functions.https.onRequest(async (req, res) => {
                         updated_at: admin.firestore.FieldValue.serverTimestamp(),
                     };
 
-                    // Promote the overall order status on final states
-                    if (newStatus === "delivered") {
+                    const normalizedStatus = newStatus.toLowerCase().replace('-', '_');
+
+                    // Promote the overall order status
+                    if (normalizedStatus === "delivered") {
                         orderUpdates.status = "delivered";
                         orderUpdates.delivered_at = admin.firestore.FieldValue.serverTimestamp();
-                    } else if (newStatus === "returned") {
+                    } else if (normalizedStatus === "in_transit" || normalizedStatus === "shipped" || normalizedStatus === "out_for_delivery") {
+                        const orderSnap = await db.collection("orders").doc(orderId).get();
+                        const currentOrderStatus = orderSnap.data()?.status;
+                        if (currentOrderStatus === "pending" || currentOrderStatus === "confirmed" || currentOrderStatus === "processing") {
+                            orderUpdates.status = "shipped";
+                            orderUpdates.shipped_at = admin.firestore.FieldValue.serverTimestamp();
+                        }
+                    } else if (normalizedStatus === "returned") {
                         orderUpdates.status = "returned";
                     }
 

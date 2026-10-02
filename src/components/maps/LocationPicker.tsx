@@ -236,7 +236,7 @@ export const LocationPicker: React.FC<LocationPickerProps> = ({
 
   const handleUseCurrentLocation = () => {
     if (!navigator.geolocation) {
-      alert('Geolocation is not supported by your browser');
+      console.warn('Geolocation is not supported by your browser');
       return;
     }
 
@@ -248,29 +248,58 @@ export const LocationPicker: React.FC<LocationPickerProps> = ({
         const lng = position.coords.longitude;
 
         try {
-          const geocoder = new google.maps.Geocoder();
-          const result = await geocoder.geocode({ location: { lat, lng } });
+          if (window.google?.maps?.Geocoder) {
+            const geocoder = new google.maps.Geocoder();
+            const result = await geocoder.geocode({ location: { lat, lng } });
 
-          if (result.results[0]) {
-            processLocationResult(result.results[0], lat, lng);
+            if (result.results && result.results[0]) {
+              processLocationResult(result.results[0], lat, lng);
 
-            if (showMap && map && marker) {
-              map.setCenter({ lat, lng });
-              marker.setPosition({ lat, lng });
-              marker.setMap(map);
+              if (showMap && map && marker) {
+                map.setCenter({ lat, lng });
+                marker.setPosition({ lat, lng });
+                marker.setMap(map);
+              }
+              return;
             }
           }
+
+          // Fallback reverse geocoding via Google Maps HTTP API
+          const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
+          if (apiKey) {
+            const res = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${apiKey}`);
+            const data = await res.json();
+            if (data.results && data.results[0]) {
+              processLocationResult(data.results[0], lat, lng);
+              return;
+            }
+          }
+
+          const fallbackAddress = `Nearby Location (${lat.toFixed(2)}, ${lng.toFixed(2)})`;
+          setSearchQuery(fallbackAddress);
+          setSelectedLocation({ lat, lng, address: fallbackAddress });
+          onLocationSelect({ lat, lng, address: fallbackAddress, city: 'Lagos', state: 'Lagos' });
         } catch (error) {
           console.error('Error getting current location:', error);
+          const fallbackAddress = 'Lagos, Nigeria';
+          setSearchQuery(fallbackAddress);
+          setSelectedLocation({ lat: 6.5244, lng: 3.3792, address: fallbackAddress });
+          onLocationSelect({ lat: 6.5244, lng: 3.3792, address: fallbackAddress, city: 'Lagos', state: 'Lagos' });
         } finally {
           setIsSearching(false);
         }
       },
       (error) => {
-        console.error('Geolocation error:', error);
+        console.warn('Geolocation unavailable or dismissed:', error.message);
         setIsSearching(false);
-        alert('Unable to retrieve your location. Please check your browser permissions.');
-      }
+        if (autoDetect && !selectedLocation) {
+          const defaultAddress = 'Lagos, Nigeria';
+          setSearchQuery(defaultAddress);
+          setSelectedLocation({ lat: 6.5244, lng: 3.3792, address: defaultAddress });
+          onLocationSelect({ lat: 6.5244, lng: 3.3792, address: defaultAddress, city: 'Lagos', state: 'Lagos' });
+        }
+      },
+      { timeout: 6000, enableHighAccuracy: false }
     );
   };
 
@@ -299,12 +328,22 @@ export const LocationPicker: React.FC<LocationPickerProps> = ({
               <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-primary-500 animate-spin" />
             ) : searchQuery ? (
               <button
+                type="button"
                 onClick={() => handleSearchChange('')}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-600"
               >
                 <X className="w-4 h-4" />
               </button>
-            ) : null}
+            ) : (
+              <button
+                type="button"
+                onClick={handleUseCurrentLocation}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-primary-700 hover:text-primary-900 transition-colors p-1"
+                title="Detect my location"
+              >
+                <Navigation className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
 
           {/* Autocomplete Suggestions */}

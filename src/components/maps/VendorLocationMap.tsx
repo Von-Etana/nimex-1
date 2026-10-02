@@ -16,11 +16,17 @@ export const VendorLocationMap: React.FC<VendorLocationMapProps> = ({
   const mapRef = useRef<HTMLDivElement>(null);
   const [map, setMap] = useState<google.maps.Map | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [hasAuthError, setHasAuthError] = useState(false);
 
   useEffect(() => {
+    (window as any).gm_authFailure = () => {
+      console.warn('Google Maps auth error in VendorLocationMap, falling back to OSM');
+      setHasAuthError(true);
+    };
+
     const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
     if (!apiKey) {
-      console.error('Google Maps API key not found');
+      setHasAuthError(true);
       return;
     }
 
@@ -29,13 +35,29 @@ export const VendorLocationMap: React.FC<VendorLocationMapProps> = ({
       return;
     }
 
+    const timeout = setTimeout(() => {
+      if (!window.google?.maps) {
+        setHasAuthError(true);
+      }
+    }, 4000);
+
     const script = document.createElement('script');
     script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places`;
     script.async = true;
     script.defer = true;
-    script.onload = () => setIsLoaded(true);
-    script.onerror = () => console.error('Failed to load Google Maps script');
+    script.onload = () => {
+      clearTimeout(timeout);
+      setIsLoaded(true);
+    };
+    script.onerror = () => {
+      clearTimeout(timeout);
+      setHasAuthError(true);
+    };
     document.head.appendChild(script);
+
+    return () => {
+      clearTimeout(timeout);
+    };
   }, []);
 
   useEffect(() => {
@@ -77,6 +99,51 @@ export const VendorLocationMap: React.FC<VendorLocationMapProps> = ({
     const url = `https://www.google.com/maps/dir/?api=1&destination=${location.lat},${location.lng}`;
     window.open(url, '_blank');
   };
+
+  if (hasAuthError) {
+    const lat = location.lat || 6.5244;
+    const lng = location.lng || 3.3792;
+    const bbox = `${lng - 0.01}%2C${lat - 0.01}%2C${lng + 0.01}%2C${lat + 0.01}`;
+    return (
+      <div className="space-y-3">
+        <div className={`relative overflow-hidden rounded-lg border border-neutral-200 bg-neutral-100 ${className}`} style={{ minHeight: '300px' }}>
+          <iframe
+            title={`${businessName} Location Map`}
+            width="100%"
+            height="100%"
+            style={{ minHeight: '300px', border: 0 }}
+            loading="lazy"
+            src={`https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&layer=mapnik&marker=${lat}%2C${lng}`}
+          />
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={handleGetDirections} className="flex-1">
+            <Navigation className="w-4 h-4 mr-2" />
+            Get Directions
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() =>
+              window.open(
+                `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`,
+                '_blank'
+              )
+            }
+            className="flex-1"
+          >
+            <ExternalLink className="w-4 h-4 mr-2" />
+            View on Google Maps
+          </Button>
+        </div>
+        <div className="p-3 bg-neutral-50 rounded-lg border border-neutral-200">
+          <p className="font-sans text-sm text-neutral-700 flex items-start gap-2">
+            <MapPin className="w-4 h-4 text-primary-700 flex-shrink-0 mt-0.5" />
+            <span>{location.address}</span>
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   if (!isLoaded) {
     return (

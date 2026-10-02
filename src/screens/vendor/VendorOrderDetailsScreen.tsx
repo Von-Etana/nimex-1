@@ -62,6 +62,7 @@ export const VendorOrderDetailsScreen: React.FC = () => {
     const [order, setOrder] = useState<Order | null>(null);
     const [address, setAddress] = useState<Address | null>(null);
     const [delivery, setDelivery] = useState<Delivery | null>(null);
+    const [dispute, setDispute] = useState<any | null>(null);
     const [loading, setLoading] = useState(true);
     const [processingShipment, setProcessingShipment] = useState(false);
     const [shippingQuote, setShippingQuote] = useState<number | null>(null);
@@ -105,6 +106,17 @@ export const VendorOrderDetailsScreen: React.FC = () => {
                 // If no delivery exists yet, try to get a quote to show "Estimated Cost"
                 // (This is distinct from creating shipment, just a preview)
                 getShippingQuote(orderData, items, deliveries[0]); // Pass undefined if no delivery
+            }
+
+            // 5. Fetch Dispute if order is disputed
+            if (orderData.status === 'disputed') {
+                const disputes = await FirestoreService.getDocuments<any>(COLLECTIONS.DISPUTES, {
+                    filters: [{ field: 'order_id', operator: '==', value: orderId! }],
+                    limitCount: 1
+                });
+                if (disputes.length > 0) {
+                    setDispute(disputes[0]);
+                }
             }
 
         } catch (error) {
@@ -223,11 +235,46 @@ export const VendorOrderDetailsScreen: React.FC = () => {
                 </div>
                 <div className={`px-4 py-2 rounded-full text-sm font-semibold capitalize
             ${order.status === 'completed' ? 'bg-green-100 text-green-700' :
-                        order.status === 'cancelled' ? 'bg-red-100 text-red-700' :
-                            'bg-blue-100 text-blue-700'}`}>
+                order.status === 'cancelled' ? 'bg-red-100 text-red-700' :
+                order.status === 'disputed' ? 'bg-red-100 text-red-700 ring-1 ring-red-400' :
+                'bg-blue-100 text-blue-700'}`}>
                     {order.status}
                 </div>
             </div>
+
+            {order.status === 'disputed' && (
+                <div className="mb-6 p-5 bg-red-50 border border-red-200 rounded-lg shadow-sm">
+                    <div className="flex items-start gap-3">
+                        <AlertCircle className="w-6 h-6 text-red-600 flex-shrink-0 mt-0.5" />
+                        <div className="flex-1">
+                            <h3 className="font-heading font-bold text-red-900 text-base">
+                                Order Under Dispute / Escrow Payout Paused
+                            </h3>
+                            <p className="font-sans text-sm text-red-700 mt-1">
+                                The buyer has filed a dispute regarding this order. Automatic escrow release has been paused while NIMEX administrators review the case.
+                            </p>
+                            {dispute && (
+                                <div className="mt-3 p-3 bg-white/90 rounded border border-red-200 text-xs font-sans space-y-1.5">
+                                    <p><span className="font-semibold text-neutral-800">Issue Type:</span> <span className="capitalize text-neutral-700">{dispute.dispute_type?.replace(/_/g, ' ')}</span></p>
+                                    <p><span className="font-semibold text-neutral-800">Buyer Notes:</span> <span className="text-neutral-700">{dispute.description}</span></p>
+                                    {dispute.evidence_urls && dispute.evidence_urls.length > 0 && (
+                                        <div className="pt-1">
+                                            <p className="font-semibold text-neutral-800 mb-1">Attached Evidence ({dispute.evidence_urls.length} files):</p>
+                                            <div className="flex flex-wrap gap-2">
+                                                {dispute.evidence_urls.map((url: string, i: number) => (
+                                                    <a key={i} href={url} target="_blank" rel="noreferrer" className="text-primary-600 underline font-medium">
+                                                        View Evidence #{i + 1} &rarr;
+                                                    </a>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
 
             <div className="grid lg:grid-cols-3 gap-6">
                 {/* Left Column - Order Info */}

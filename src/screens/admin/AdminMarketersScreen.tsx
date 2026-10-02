@@ -3,6 +3,7 @@ import { Card, CardContent } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { FirestoreService } from '../../services/firestore.service';
 import { Users, Check, X, Eye, DollarSign } from 'lucide-react';
+import { useToast } from '../../contexts/ToastContext';
 
 interface Marketer {
   id: string;
@@ -18,6 +19,7 @@ interface Marketer {
 }
 
 export const AdminMarketersScreen: React.FC = () => {
+  const { success: showSuccessToast, error: showErrorToast } = useToast();
   const [marketers, setMarketers] = useState<Marketer[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'pending' | 'active' | 'suspended'>('all');
@@ -52,27 +54,33 @@ export const AdminMarketersScreen: React.FC = () => {
         status: 'active',
         approved_at: new Date().toISOString(),
       });
+      showSuccessToast('Marketer approved successfully');
       loadMarketers();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error approving marketer:', error);
+      showErrorToast(error?.message || 'Error approving marketer');
     }
   };
 
   const handleRejectMarketer = async (marketerId: string) => {
     try {
       await FirestoreService.updateDocument('marketers', marketerId, { status: 'inactive' });
+      showSuccessToast('Marketer set to inactive');
       loadMarketers();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error rejecting marketer:', error);
+      showErrorToast(error?.message || 'Error updating marketer status');
     }
   };
 
   const handleSuspendMarketer = async (marketerId: string) => {
     try {
       await FirestoreService.updateDocument('marketers', marketerId, { status: 'suspended' });
+      showSuccessToast('Marketer suspended');
       loadMarketers();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error suspending marketer:', error);
+      showErrorToast(error?.message || 'Error suspending marketer');
     }
   };
 

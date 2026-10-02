@@ -197,13 +197,15 @@ export const flutterwaveWebhook = functions.https.onRequest(async (req, res) => 
         const event = payload.event;
         const data = payload.data;
 
-        console.log(`Received Flutterwave webhook: ${event}`, { id: data?.id, reference: data?.reference });
+        console.log(`Received Flutterwave webhook: ${event}`, { id: data?.id, reference: data?.reference, tx_ref: data?.tx_ref });
 
-        // Event names: "transfer.completed" or "transfer.failed"
+        // Event names: "transfer.completed", "transfer.failed", "charge.completed"
         if (event === "transfer.completed") {
             await handleTransferSuccess({ reference: data.reference });
         } else if (event === "transfer.failed") {
             await handleTransferFailed({ reference: data.reference, reason: data.complete_message || "Transfer failed" });
+        } else if (event === "charge.completed") {
+            await handleFlutterwaveChargeSuccess(data);
         } else {
             console.log(`Unhandled Flutterwave event: ${event}`);
         }
@@ -214,6 +216,50 @@ export const flutterwaveWebhook = functions.https.onRequest(async (req, res) => 
         res.status(200).json({ received: true, error: error.message });
     }
 });
+
+/**
+ * Handle successful Flutterwave charge (payment)
+ */
+async function handleFlutterwaveChargeSuccess(data: any) {
+    if (data.status !== "successful") {
+        console.log(`Flutterwave charge status is '${data.status}', not successful. Skipping.`);
+        return;
+    }
+
+    const reference = data.tx_ref || data.reference;
+    if (!reference) {
+        console.warn("No tx_ref or reference in Flutterwave webhook data");
+        return;
+    }
+
+    const amount = Number(data.amount); // Flutterwave amounts are already in Naira
+    const metadata = data.meta || data.metadata || {};
+
+    console.log(`Processing successful Flutterwave charge: ${reference}, amount: ${amount}`);
+
+    // Check if this is a subscription payment
+    if (reference.includes("NIMEX-SUB-") || metadata.type === "subscription") {
+        await handleSubscriptionPayment(reference, amount, {
+            ...data,
+            metadata: { ...metadata, payment_gateway: "flutterwave" },
+            customer: data.customer
+        });
+    }
+    // Check if this is an order payment
+    else if (reference.includes("NIMEX-") || metadata.order_id) {
+        await handleOrderPayment(reference, amount, {
+            ...data,
+            metadata: { ...metadata, payment_gateway: "flutterwave" },
+            customer: data.customer
+        });
+    }
+
+    // Log the successful payment idempotently
+    await logPaymentEvent(reference, "success", {
+        ...data,
+        gateway: "flutterwave"
+    });
+}
 
 /**
  * Handle successful charge (payment)
@@ -243,6 +289,16 @@ async function handleChargeSuccess(data: any) {
  */
 async function handleSubscriptionPayment(reference: string, amount: number, data: any) {
     try {
+        // Idempotency check: skip if already recorded
+        const existingTx = await db.collection("payment_transactions")
+            .where("payment_reference", "==", reference)
+            .where("type", "==", "subscription")
+            .limit(1)
+            .get();
+        if (!existingTx.empty) {
+            console.log(`Subscription payment already processed for reference: ${reference}, skipping.`);
+            return;
+        }
         const metadata = data.metadata || {};
         
         // Extract vendor ID and plan from metadata (fallback to reference for legacy compatibility)
@@ -415,6 +471,7 @@ async function handleOrderPayment(reference: string, amount: number, data: any) 
 
                                 transaction.update(productRef, {
                                     stock_quantity: newStock,
+                                    stockQuantity: newStock,
                                     updated_at: admin.firestore.FieldValue.serverTimestamp(),
                                 });
                             }
@@ -742,7 +799,8 @@ export const releaseEscrow = functions.https.onRequest(async (req, res) => {
             const escrowDoc = escrowSnapshot.docs[0];
             const escrowData = escrowDoc.data();
 
-            if (escrowData.status !== "held") {
+            const allowedStatuses = isAdmin || releaseType === "dispute_resolution" ? ["held", "disputed"] : ["held"];
+            if (!allowedStatuses.includes(escrowData.status)) {
                 throw new Error(`Escrow status is '${escrowData.status}', cannot release.`);
             }
 
@@ -826,6 +884,19 @@ export const releaseEscrow = functions.https.onRequest(async (req, res) => {
                 release_requested_by: callerUid,
                 created_at: admin.firestore.FieldValue.serverTimestamp()
             });
+
+            // 9. If a dispute was open for this order, resolve it
+            const disputeRef = db.collection("disputes").where("order_id", "==", orderId).limit(1);
+            const disputeSnap = await transaction.get(disputeRef);
+            if (!disputeSnap.empty) {
+                transaction.update(disputeSnap.docs[0].ref, {
+                    status: "resolved",
+                    resolution: notes || "Escrow released to vendor by dispute resolution",
+                    resolution_outcome: "release_vendor",
+                    resolved_by: callerUid,
+                    resolved_at: admin.firestore.FieldValue.serverTimestamp()
+                });
+            }
         });
 
         // Post-transaction SMS (Safe to do here)
@@ -898,7 +969,8 @@ export const refundEscrow = functions.https.onRequest(async (req, res) => {
             const escrowDoc = escrowSnapshot.docs[0];
             const escrowData = escrowDoc.data();
 
-            if (escrowData.status !== "held") {
+            const allowedStatuses = isAdmin ? ["held", "disputed"] : ["held"];
+            if (!allowedStatuses.includes(escrowData.status)) {
                 throw new Error(`Escrow status is '${escrowData.status}', cannot refund.`);
             }
 
@@ -918,6 +990,19 @@ export const refundEscrow = functions.https.onRequest(async (req, res) => {
                 escrow_status: "refunded",
                 updated_at: admin.firestore.FieldValue.serverTimestamp()
             });
+
+            // Resolve dispute if open
+            const disputeRef = db.collection("disputes").where("order_id", "==", orderId).limit(1);
+            const disputeSnap = await transaction.get(disputeRef);
+            if (!disputeSnap.empty) {
+                transaction.update(disputeSnap.docs[0].ref, {
+                    status: "resolved",
+                    resolution: reason || "Refunded to buyer by dispute resolution",
+                    resolution_outcome: "refund_buyer",
+                    resolved_by: performedByUserId,
+                    resolved_at: admin.firestore.FieldValue.serverTimestamp()
+                });
+            }
 
             // Note: If you need to trigger Paystack Refund API, do it here.
         });
@@ -1203,3 +1288,7 @@ import * as referrals from './referrals';
 export const approveReferralCommission = referrals.approveReferralCommission;
 export const rejectReferralCommission = referrals.rejectReferralCommission;
 export const markReferralCommissionPaid = referrals.markReferralCommissionPaid;
+
+// Export Account Deletion Functions
+import * as accountDeletion from './accountDeletion';
+export const deleteUserAccount = accountDeletion.deleteUserAccount;

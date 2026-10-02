@@ -16,6 +16,7 @@ import {
 import { FirestoreService } from '../../services/firestore.service';
 import { COLLECTIONS } from '../../lib/collections';
 import { useAuth } from '../../contexts/AuthContext';
+import { useToast } from '../../contexts/ToastContext';
 import { referralService } from '../../services/referralService';
 import { logger } from '../../lib/logger';
 
@@ -53,6 +54,7 @@ interface MarketerInfo {
 
 export const MarketerDashboardScreen: React.FC = () => {
     const { user } = useAuth();
+    const { success: showSuccessToast } = useToast();
     const [marketerInfo, setMarketerInfo] = useState<MarketerInfo | null>(null);
     const [stats, setStats] = useState<MarketerStats>({
         totalReferrals: 0,
@@ -170,6 +172,7 @@ export const MarketerDashboardScreen: React.FC = () => {
         try {
             await navigator.clipboard.writeText(link);
             setCopiedLink(true);
+            showSuccessToast('Referral link copied to clipboard!');
             setTimeout(() => setCopiedLink(false), 2000);
         } catch (error) {
             logger.error('Error copying link:', error);

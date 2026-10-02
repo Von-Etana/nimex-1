@@ -15,6 +15,7 @@ import {
     ChevronUp
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
+import { useToast } from '../../contexts/ToastContext';
 import { FirestoreService } from '../../services/firestore.service';
 import { COLLECTIONS } from '../../lib/collections';
 import { updatePassword } from 'firebase/auth';
@@ -35,6 +36,7 @@ interface MarketerProfile {
 
 export const MarketerSettingsScreen: React.FC = () => {
     const { user } = useAuth();
+    const { success: showSuccessToast, error: showErrorToast } = useToast();
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [profile, setProfile] = useState<MarketerProfile | null>(null);
@@ -110,9 +112,9 @@ export const MarketerSettingsScreen: React.FC = () => {
                 phone: phone,
                 business_name: businessName
             });
-            alert('Personal information updated successfully!');
+            showSuccessToast('Personal information updated successfully!');
         } catch (error: any) {
-            alert('Error updating profile: ' + error.message);
+            showErrorToast('Error updating profile: ' + error.message);
         } finally {
             setSaving(false);
         }
@@ -130,9 +132,9 @@ export const MarketerSettingsScreen: React.FC = () => {
                     account_name: accountName
                 }
             });
-            alert('Bank details updated successfully!');
+            showSuccessToast('Bank details updated successfully!');
         } catch (error: any) {
-            alert('Error updating bank details: ' + error.message);
+            showErrorToast('Error updating bank details: ' + error.message);
         } finally {
             setSaving(false);
         }
@@ -140,12 +142,12 @@ export const MarketerSettingsScreen: React.FC = () => {
 
     const handleChangePassword = async () => {
         if (newPassword !== confirmPassword) {
-            alert('Passwords do not match!');
+            showErrorToast('Passwords do not match!');
             return;
         }
 
         if (newPassword.length < 6) {
-            alert('Password must be at least 6 characters');
+            showErrorToast('Password must be at least 6 characters');
             return;
         }
 
@@ -156,9 +158,9 @@ export const MarketerSettingsScreen: React.FC = () => {
             await updatePassword(auth.currentUser, newPassword);
             setNewPassword('');
             setConfirmPassword('');
-            alert('Password changed successfully!');
+            showSuccessToast('Password changed successfully!');
         } catch (error: any) {
-            alert('Error changing password: ' + error.message);
+            showErrorToast('Error changing password: ' + error.message);
         } finally {
             setSaving(false);
         }

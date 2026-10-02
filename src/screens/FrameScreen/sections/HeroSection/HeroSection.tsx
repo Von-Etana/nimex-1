@@ -265,7 +265,8 @@ export const HeroSection = (): JSX.Element => {
                 <LocationPicker
                   variant="search"
                   placeholder="Detecting location..."
-                  initialLocation={location ? { address: location, lat: 0, lng: 0 } : undefined}
+                  autoDetect={true}
+                  initialLocation={location ? { address: location, lat: userLocationCoords?.lat || 0, lng: userLocationCoords?.lng || 0 } : undefined}
                   onLocationSelect={(loc) => {
                     setLocation(loc.address);
                     if (loc.lat && loc.lng) {
@@ -291,8 +292,8 @@ export const HeroSection = (): JSX.Element => {
                 </select>
               </div>
 
-              {/* Search Button */}
-              <Button type="submit" className="h-12 md:h-auto px-8 bg-gradient-primary text-white font-bold rounded-xl md:rounded-full text-base shadow-lg hover:shadow-glow transition-all duration-300">
+              {/* Search Button (Zero Gradients) */}
+              <Button type="submit" className="h-12 md:h-auto px-8 bg-primary-900 hover:bg-black text-white font-bold rounded-xl md:rounded-full text-base shadow-md transition-colors duration-200">
                 Search
               </Button>
             </div>

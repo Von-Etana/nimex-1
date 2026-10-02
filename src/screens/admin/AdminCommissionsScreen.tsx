@@ -5,6 +5,7 @@ import { FirestoreService } from '../../services/firestore.service';
 import { DollarSign, Settings, Check, Loader2, X } from 'lucide-react';
 import { Modal } from '../../components/ui/modal';
 import { referralAdminService } from '../../services/referralAdminService';
+import { useToast } from '../../contexts/ToastContext';
 
 interface CommissionSetting {
   type: string;
@@ -22,6 +23,7 @@ interface PendingCommission {
 }
 
 export const AdminCommissionsScreen: React.FC = () => {
+  const { success: showSuccessToast, error: showErrorToast } = useToast();
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
   const [settings, setSettings] = useState<CommissionSetting[]>([]);
@@ -35,6 +37,11 @@ export const AdminCommissionsScreen: React.FC = () => {
   const [paymentMethod, setPaymentMethod] = useState('');
   const [referenceNumber, setReferenceNumber] = useState('');
   const [paymentNotes, setPaymentNotes] = useState('');
+
+  // Rejection Modal State
+  const [isRejectModalOpen, setIsRejectModalOpen] = useState(false);
+  const [commissionToReject, setCommissionToReject] = useState<PendingCommission | null>(null);
+  const [rejectReason, setRejectReason] = useState('Rejected by administrator');
 
   useEffect(() => {
     loadData();
@@ -190,31 +197,38 @@ export const AdminCommissionsScreen: React.FC = () => {
         referralId: commission.id,
       });
       await loadData();
-      alert('Referral approved successfully');
+      showSuccessToast('Referral approved successfully');
     } catch (error: any) {
       console.error('Error approving referral:', error);
-      alert('Failed to approve referral: ' + (error.message || 'Unknown error'));
+      showErrorToast('Failed to approve referral: ' + (error.message || 'Unknown error'));
     } finally {
       setProcessing(false);
     }
   };
 
-  const handleRejectReferral = async (commission: PendingCommission) => {
-    const reason = window.prompt('Reason for rejecting this referral?', 'Rejected by administrator');
-    if (reason === null) return;
+  const openRejectModal = (commission: PendingCommission) => {
+    setCommissionToReject(commission);
+    setRejectReason('Rejected by administrator');
+    setIsRejectModalOpen(true);
+  };
+
+  const handleConfirmReject = async () => {
+    if (!commissionToReject) return;
 
     setProcessing(true);
     try {
       await referralAdminService.rejectReferral({
-        referralType: commission.referrer_type,
-        referralId: commission.id,
-        reason,
+        referralType: commissionToReject.referrer_type,
+        referralId: commissionToReject.id,
+        reason: rejectReason.trim() || 'Rejected by administrator',
       });
+      setIsRejectModalOpen(false);
+      setCommissionToReject(null);
       await loadData();
-      alert('Referral rejected successfully');
+      showSuccessToast('Referral rejected successfully');
     } catch (error: any) {
       console.error('Error rejecting referral:', error);
-      alert('Failed to reject referral: ' + (error.message || 'Unknown error'));
+      showErrorToast('Failed to reject referral: ' + (error.message || 'Unknown error'));
     } finally {
       setProcessing(false);
     }
@@ -222,7 +236,7 @@ export const AdminCommissionsScreen: React.FC = () => {
 
   const handleConfirmPayment = async () => {
     if (!selectedCommission || !paymentMethod) {
-      alert('Please select a payment method');
+      showErrorToast('Please select a payment method');
       return;
     }
 
@@ -238,10 +252,10 @@ export const AdminCommissionsScreen: React.FC = () => {
 
       setIsPaymentModalOpen(false);
       await loadData();
-      alert('Commission marked as paid successfully');
+      showSuccessToast('Commission marked as paid successfully');
     } catch (error: any) {
       console.error('Error processing payment:', error);
-      alert('Failed to process payment: ' + error.message);
+      showErrorToast('Failed to process payment: ' + error.message);
     } finally {
       setProcessing(false);
     }
@@ -430,7 +444,7 @@ export const AdminCommissionsScreen: React.FC = () => {
                                 Approve
                               </Button>
                               <Button
-                                onClick={() => handleRejectReferral(commission)}
+                                onClick={() => openRejectModal(commission)}
                                 disabled={processing}
                                 size="sm"
                                 className="bg-white hover:bg-neutral-50 text-neutral-900 border border-neutral-200 flex items-center gap-2"
@@ -545,6 +559,68 @@ export const AdminCommissionsScreen: React.FC = () => {
                 </>
               ) : (
                 'Confirm Payment'
+              )}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Reject Referral Modal */}
+      <Modal
+        isOpen={isRejectModalOpen}
+        onClose={() => {
+          if (!processing) {
+            setIsRejectModalOpen(false);
+            setCommissionToReject(null);
+          }
+        }}
+        title="Reject Referral Commission"
+      >
+        <div className="space-y-4">
+          <p className="font-sans text-sm text-neutral-600">
+            Provide a reason for rejecting this commission (
+            <span className="font-semibold text-neutral-800">
+              {commissionToReject?.referrer_name}
+            </span>
+            ).
+          </p>
+
+          <div>
+            <label className="block font-sans font-medium text-sm text-neutral-700 mb-1">
+              Rejection Reason *
+            </label>
+            <textarea
+              value={rejectReason}
+              onChange={(e) => setRejectReason(e.target.value)}
+              placeholder="Explain why this referral was rejected..."
+              rows={3}
+              className="w-full px-3 py-2 rounded-lg border border-neutral-200 font-sans text-sm text-neutral-900 focus:outline-none focus:ring-2 focus:ring-red-500 resize-none"
+            />
+          </div>
+
+          <div className="flex gap-3 pt-2">
+            <Button
+              onClick={() => {
+                setIsRejectModalOpen(false);
+                setCommissionToReject(null);
+              }}
+              disabled={processing}
+              className="flex-1 bg-white hover:bg-neutral-50 text-neutral-900 border border-neutral-200"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleConfirmReject}
+              disabled={processing || !rejectReason.trim()}
+              className="flex-1 bg-red-600 hover:bg-red-700 text-white"
+            >
+              {processing ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                  Rejecting...
+                </>
+              ) : (
+                'Confirm Rejection'
               )}
             </Button>
           </div>

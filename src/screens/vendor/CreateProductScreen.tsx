@@ -2,13 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Card, CardContent } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
-import { ArrowLeft, Save, Loader2, X, Video, AlertCircle } from 'lucide-react';
+import { ArrowLeft, Save, Loader2, X, Video, AlertCircle, Eye, CheckCircle2, ShoppingBag, ShieldCheck, Tag } from 'lucide-react';
 import { FirestoreService } from '../../services/firestore.service';
 import { FirebaseStorageService } from '../../services/firebaseStorage.service';
 import { COLLECTIONS, STORAGE_PATHS } from '../../lib/collections';
 import { useAuth } from '../../contexts/AuthContext';
 import { ProductTagsInput } from '../../components/vendor/ProductTagsInput';
 import { ProductImageUpload } from '../../components/vendor/ProductImageUpload';
+import { useUnsavedChangesGuard } from '../../hooks/useUnsavedChangesGuard';
 
 interface Category {
   id: string;
@@ -54,6 +55,18 @@ export const CreateProductScreen: React.FC = () => {
 
   const [vendorId, setVendorId] = useState<string>('');
   const [tempProductId, setTempProductId] = useState<string>('');
+
+  const isFormDirty = Boolean(
+    !success && (
+      formData.name.trim() !== '' ||
+      formData.description.trim() !== '' ||
+      formData.price !== '' ||
+      formData.stock_quantity !== '' ||
+      formData.images.length > 0
+    )
+  );
+
+  const { confirmNavigation } = useUnsavedChangesGuard(isFormDirty);
 
   useEffect(() => {
     loadCategories();
@@ -329,17 +342,22 @@ export const CreateProductScreen: React.FC = () => {
     }
   };
 
-  const discountPercentage = formData.price && formData.compare_at_price
-    ? Math.round(((parseFloat(formData.compare_at_price) - parseFloat(formData.price)) / parseFloat(formData.compare_at_price)) * 100)
+  const sellingPrice = parseFloat(formData.price) || 0;
+  const originalPrice = parseFloat(formData.compare_at_price) || 0;
+  const savings = originalPrice > sellingPrice ? originalPrice - sellingPrice : 0;
+  const discountPercentage = originalPrice > sellingPrice
+    ? Math.round((savings / originalPrice) * 100)
     : 0;
+  const stockQty = parseInt(formData.stock_quantity, 10) || 0;
+  const selectedCategoryObj = categories.find(c => c.id === formData.category_id);
 
   return (
     <div className="w-full min-h-screen bg-neutral-50">
-      <div className="max-w-4xl mx-auto px-3 md:px-6 py-4 md:py-8">
+      <div className="max-w-7xl mx-auto px-3 md:px-6 py-4 md:py-8">
         <div className="flex flex-col gap-4 md:gap-6">
           <div className="flex items-center gap-3">
             <button
-              onClick={() => navigate('/vendor/products')}
+              onClick={() => confirmNavigation(() => navigate('/vendor/products'))}
               className="p-2 hover:bg-neutral-100 rounded-lg transition-colors"
             >
               <ArrowLeft className="w-5 h-5 text-neutral-700" />
@@ -349,7 +367,7 @@ export const CreateProductScreen: React.FC = () => {
                 {isEditing ? 'Edit Product' : 'Create New Product'}
               </h1>
               <p className="font-sans text-xs md:text-sm text-neutral-600 mt-0.5 md:mt-1">
-                Add a new product to your store
+                Add a new product to your store with real-time buyer preview
               </p>
             </div>
           </div>
@@ -366,8 +384,9 @@ export const CreateProductScreen: React.FC = () => {
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-4 md:space-y-6">
-            <Card>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 md:gap-8 items-start">
+            <form onSubmit={handleSubmit} className="lg:col-span-2 space-y-4 md:space-y-6">
+              <Card>
               <CardContent className="p-4 md:p-6 space-y-4 md:space-y-6">
                 <div className="flex items-center gap-2 md:gap-3 pb-3 md:pb-4 border-b border-neutral-100">
                   <h2 className="font-heading font-semibold text-sm md:text-xl text-neutral-900">
@@ -457,9 +476,10 @@ export const CreateProductScreen: React.FC = () => {
                       <p role="alert" className="font-sans text-xs text-red-600 mt-1">{fieldErrors.compare_at_price}</p>
                     )}
                     {discountPercentage > 0 && !fieldErrors.compare_at_price && (
-                      <p className="text-xs text-green-600 mt-1">
-                        {discountPercentage}% off
-                      </p>
+                      <div className="flex items-center gap-1.5 mt-2 px-2.5 py-1 bg-emerald-50 border border-emerald-200 rounded-lg text-emerald-800 text-xs font-semibold">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0" />
+                        <span>Save ₦{savings.toLocaleString()} ({discountPercentage}% OFF)</span>
+                      </div>
                     )}
                   </div>
                 </div>
@@ -486,6 +506,22 @@ export const CreateProductScreen: React.FC = () => {
                     {fieldErrors.stock_quantity && (
                       <p role="alert" className="font-sans text-xs text-red-600 mt-1">{fieldErrors.stock_quantity}</p>
                     )}
+                    <div className="flex items-center gap-1.5 mt-2">
+                      <span className="text-xs text-neutral-500 font-medium">Quick Set:</span>
+                      {[5, 10, 25, 50, 100].map((qty) => (
+                        <button
+                          key={qty}
+                          type="button"
+                          onClick={() => {
+                            setFormData({ ...formData, stock_quantity: qty.toString() });
+                            if (fieldErrors.stock_quantity) setFieldErrors({ ...fieldErrors, stock_quantity: '' });
+                          }}
+                          className="px-2 py-0.5 text-xs font-semibold rounded bg-neutral-100 hover:bg-neutral-200 text-neutral-700 transition-colors"
+                        >
+                          +{qty}
+                        </button>
+                      ))}
+                    </div>
                   </div>
 
                   <div>
@@ -651,8 +687,83 @@ export const CreateProductScreen: React.FC = () => {
                   </>
                 )}
               </Button>
+              </div>
+            </form>
+
+            {/* Live Marketplace Preview Column */}
+            <div className="lg:col-span-1 sticky top-6 space-y-4">
+              <div className="flex items-center gap-2 text-neutral-800 font-bold text-sm">
+                <Eye className="w-4 h-4 text-emerald-600" />
+                <span>Live Buyer Preview</span>
+              </div>
+
+              <div className="bg-white border border-neutral-200/90 rounded-2xl overflow-hidden shadow-sm">
+                <div className="relative aspect-square w-full bg-neutral-100 flex items-center justify-center overflow-hidden">
+                  {formData.images.length > 0 ? (
+                    <img
+                      src={formData.images[0]}
+                      alt="Preview"
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="flex flex-col items-center justify-center text-neutral-400 p-6 text-center">
+                      <ShoppingBag className="w-12 h-12 mb-2 text-neutral-300" />
+                      <span className="text-xs font-medium">Upload photos to preview listing</span>
+                    </div>
+                  )}
+
+                  {discountPercentage > 0 && (
+                    <div className="absolute top-3 left-3 bg-red-600 text-white text-[11px] font-bold px-2 py-0.5 rounded-full shadow-sm">
+                      -{discountPercentage}%
+                    </div>
+                  )}
+
+                  {stockQty <= 0 && formData.stock_quantity !== '' && (
+                    <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
+                      <span className="bg-neutral-900/90 text-white font-bold text-xs px-3 py-1 rounded-md">
+                        Out of Stock
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="p-4 space-y-3">
+                  <div>
+                    <span className="text-[11px] font-semibold tracking-wider text-neutral-400 uppercase">
+                      {selectedCategoryObj?.name || 'Category'}
+                    </span>
+                    <h4 className="font-heading font-bold text-neutral-900 text-base line-clamp-2 mt-0.5">
+                      {formData.name.trim() || 'Your Product Title'}
+                    </h4>
+                  </div>
+
+                  <div className="flex items-baseline gap-2">
+                    <span className="font-heading font-extrabold text-lg text-neutral-900">
+                      ₦{sellingPrice > 0 ? sellingPrice.toLocaleString() : '0.00'}
+                    </span>
+                    {discountPercentage > 0 && originalPrice > 0 && (
+                      <span className="text-xs text-neutral-400 line-through">
+                        ₦{originalPrice.toLocaleString()}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="pt-2 border-t border-neutral-100 flex items-center justify-between text-xs text-neutral-500">
+                    <span className={stockQty > 0 ? 'text-emerald-700 font-semibold' : 'text-red-600 font-semibold'}>
+                      {stockQty > 0 ? `● ${stockQty} in stock` : '● Out of stock'}
+                    </span>
+                    <span className="flex items-center gap-1 text-emerald-700 font-medium">
+                      <ShieldCheck className="w-3.5 h-3.5" /> Escrow Protected
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-3.5 bg-emerald-50/70 border border-emerald-200/70 rounded-xl text-xs text-emerald-900 leading-relaxed">
+                <strong>Seller Pro-Tip:</strong> Listings with clear pricing discounts and at least 3 photos receive up to 4.5x more clicks and completed escrow checkouts.
+              </div>
             </div>
-          </form>
+          </div>
         </div>
       </div>
     </div>

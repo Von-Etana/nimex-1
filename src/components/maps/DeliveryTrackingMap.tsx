@@ -19,13 +19,19 @@ export const DeliveryTrackingMap: React.FC<DeliveryTrackingMapProps> = ({
   const mapRef = useRef<HTMLDivElement>(null);
   const [map, setMap] = useState<google.maps.Map | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [hasAuthError, setHasAuthError] = useState(false);
   const markersRef = useRef<google.maps.Marker[]>([]);
   const pathRef = useRef<google.maps.Polyline | null>(null);
 
   useEffect(() => {
+    (window as any).gm_authFailure = () => {
+      console.warn('Google Maps auth error in DeliveryTrackingMap, falling back to OSM');
+      setHasAuthError(true);
+    };
+
     const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
     if (!apiKey) {
-      console.error('Google Maps API key not found');
+      setHasAuthError(true);
       return;
     }
 
@@ -34,13 +40,29 @@ export const DeliveryTrackingMap: React.FC<DeliveryTrackingMapProps> = ({
       return;
     }
 
+    const timeout = setTimeout(() => {
+      if (!window.google?.maps) {
+        setHasAuthError(true);
+      }
+    }, 4000);
+
     const script = document.createElement('script');
     script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places`;
     script.async = true;
     script.defer = true;
-    script.onload = () => setIsLoaded(true);
-    script.onerror = () => console.error('Failed to load Google Maps script');
+    script.onload = () => {
+      clearTimeout(timeout);
+      setIsLoaded(true);
+    };
+    script.onerror = () => {
+      clearTimeout(timeout);
+      setHasAuthError(true);
+    };
     document.head.appendChild(script);
+
+    return () => {
+      clearTimeout(timeout);
+    };
   }, []);
 
   useEffect(() => {
@@ -166,6 +188,67 @@ export const DeliveryTrackingMap: React.FC<DeliveryTrackingMapProps> = ({
     map.fitBounds(bounds);
   }, [map, pickupLocation, deliveryLocation, currentLocation, deliveryStatus]);
 
+  if (hasAuthError) {
+    const pLat = pickupLocation.lat || 6.5244;
+    const pLng = pickupLocation.lng || 3.3792;
+    const dLat = deliveryLocation.lat || 6.5244;
+    const dLng = deliveryLocation.lng || 3.3792;
+
+    const minLat = Math.min(pLat, dLat) - 0.02;
+    const maxLat = Math.max(pLat, dLat) + 0.02;
+    const minLng = Math.min(pLng, dLng) - 0.02;
+    const maxLng = Math.max(pLng, dLng) + 0.02;
+
+    return (
+      <div className="relative space-y-3">
+        <div className={`relative overflow-hidden rounded-lg border border-neutral-200 bg-neutral-100 ${className}`} style={{ minHeight: '380px' }}>
+          <iframe
+            title="Delivery Route Map"
+            width="100%"
+            height="100%"
+            style={{ minHeight: '380px', border: 0 }}
+            loading="lazy"
+            src={`https://www.openstreetmap.org/export/embed.html?bbox=${minLng}%2C${minLat}%2C${maxLng}%2C${maxLat}&layer=mapnik&marker=${dLat}%2C${dLng}`}
+          />
+        </div>
+        <div className="bg-white rounded-lg border border-neutral-200 shadow-sm p-4 space-y-3">
+          <div className="flex items-center justify-between pb-2 border-b border-neutral-100">
+            <span className="text-xs font-semibold uppercase tracking-wider text-neutral-500">Live Logistics Route</span>
+            <span className="text-xs px-2.5 py-0.5 rounded-full bg-primary-100 text-primary-800 font-bold capitalize">
+              {deliveryStatus.replace('_', ' ')}
+            </span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+            <div className="flex items-start gap-2">
+              <div className="w-2.5 h-2.5 rounded-full bg-green-700 mt-1 flex-shrink-0" />
+              <div>
+                <p className="font-bold text-neutral-800">Origin / Stall</p>
+                <p className="text-neutral-600 line-clamp-1">{pickupLocation.address}</p>
+              </div>
+            </div>
+            <div className="flex items-start gap-2">
+              <div className="w-2.5 h-2.5 rounded-full bg-red-600 mt-1 flex-shrink-0" />
+              <div>
+                <p className="font-bold text-neutral-800">Destination</p>
+                <p className="text-neutral-600 line-clamp-1">{deliveryLocation.address}</p>
+              </div>
+            </div>
+          </div>
+          <div className="flex gap-2 pt-1">
+            <a
+              href={`https://www.google.com/maps/dir/?api=1&origin=${pLat},${pLng}&destination=${dLat},${dLng}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex-1 text-center py-2 px-3 bg-primary-900 text-white rounded text-xs font-semibold hover:bg-black transition-colors"
+            >
+              Track Route on Google Maps
+            </a>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (!isLoaded) {
     return (
       <div
@@ -174,7 +257,7 @@ export const DeliveryTrackingMap: React.FC<DeliveryTrackingMapProps> = ({
       >
         <div className="text-center">
           <Package className="w-12 h-12 text-primary-600 mx-auto mb-2 animate-pulse" />
-          <p className="font-sans text-sm text-neutral-600">Loading tracking map...</p>
+          <p className="font-sans text-sm text-neutral-600">Connecting tracking map...</p>
         </div>
       </div>
     );

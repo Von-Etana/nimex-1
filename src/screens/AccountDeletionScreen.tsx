@@ -1,8 +1,24 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Card, CardContent } from '../components/ui/card';
+import { Button } from '../components/ui/button';
 import { ShieldAlert, Mail, UserMinus } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
+import { useNavigate } from 'react-router-dom';
+import { AccountDeletionModal } from '../components/AccountDeletionModal';
 
 export const AccountDeletionScreen: React.FC = () => {
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const [showModal, setShowModal] = useState(false);
+
+  const handleStartDeletion = () => {
+    if (user) {
+      setShowModal(true);
+    } else {
+      navigate('/login', { state: { from: { pathname: '/delete-account' } } });
+    }
+  };
+
   return (
     <div className="flex flex-col w-full min-h-screen bg-neutral-50">
       <div className="w-full bg-gradient-to-r from-red-600 to-red-700 py-16">
@@ -28,23 +44,25 @@ export const AccountDeletionScreen: React.FC = () => {
         </Card>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-          <Card className="border border-neutral-200 shadow-sm">
+          <Card className="border border-neutral-200 shadow-sm flex flex-col justify-between">
             <CardContent className="p-6">
               <div className="flex items-start gap-4 mb-4">
                 <div className="w-12 h-12 bg-neutral-100 rounded-lg flex items-center justify-center flex-shrink-0">
                   <UserMinus className="w-6 h-6 text-neutral-700" />
                 </div>
                 <h2 className="font-heading font-bold text-neutral-900 text-xl mt-2">
-                  Option 1: Inside the App
+                  Option 1: In This Browser / App
                 </h2>
               </div>
-              <ol className="list-decimal pl-5 space-y-2 font-sans text-neutral-700 text-sm leading-relaxed">
-                <li>Open the NIMEX mobile app</li>
-                <li>Go to the <strong>Profile</strong> tab</li>
-                <li>Scroll down and select <strong>Settings</strong></li>
-                <li>Tap on <strong>Delete Account</strong></li>
-                <li>Confirm your decision</li>
-              </ol>
+              <p className="font-sans text-neutral-700 text-sm leading-relaxed mb-4">
+                You can self-serve account deletion instantly from your account. All active products, pending orders, and personal details will be cleared.
+              </p>
+              <Button
+                onClick={handleStartDeletion}
+                className="w-full bg-red-600 hover:bg-red-700 text-white font-medium"
+              >
+                {user ? 'Delete My Account Now' : 'Sign in to Delete Account'}
+              </Button>
             </CardContent>
           </Card>
 
@@ -88,6 +106,11 @@ export const AccountDeletionScreen: React.FC = () => {
           </CardContent>
         </Card>
       </div>
+
+      <AccountDeletionModal
+        isOpen={showModal}
+        onClose={() => setShowModal(false)}
+      />
     </div>
   );
 };

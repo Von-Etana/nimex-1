@@ -13,6 +13,7 @@ import {
     Loader2
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
+import { useToast } from '../../contexts/ToastContext';
 import { FirestoreService } from '../../services/firestore.service';
 import { COLLECTIONS } from '../../lib/collections';
 import { referralService } from '../../services/referralService';
@@ -29,6 +30,7 @@ interface Referral {
 
 export const MarketerReferralsScreen: React.FC = () => {
     const { user } = useAuth();
+    const { success: showSuccessToast } = useToast();
     const [referrals, setReferrals] = useState<Referral[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
@@ -105,6 +107,7 @@ export const MarketerReferralsScreen: React.FC = () => {
         try {
             await navigator.clipboard.writeText(link);
             setCopied(true);
+            showSuccessToast('Referral link copied to clipboard!');
             setTimeout(() => setCopied(false), 2000);
         } catch (err) {
             console.error('Failed to copy:', err);
