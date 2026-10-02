@@ -89,10 +89,18 @@ export const HeroSection = (): JSX.Element => {
         .sort((a, b) => a._distance - b._distance)
         .slice(0, 6);
 
-      setNearbyVendors(mapVendors(nearby).map((v, i) => ({
-        ...v,
-        badge: { text: formatDistance(nearby[i]._distance), variant: "blue" as const } // Overwrite badge with distance
-      })));
+      if (nearby.length > 0) {
+        setNearbyVendors(mapVendors(nearby).map((v, i) => ({
+          ...v,
+          badge: { text: formatDistance(nearby[i]._distance), variant: "blue" as const } // Overwrite badge with distance
+        })));
+      } else {
+        // Fallback: Ensure vendors are ALWAYS displayed in vendors section even if > 50km
+        setNearbyVendors(mapVendors(rawVendors.slice(0, 6)));
+      }
+    } else if (rawVendors.length > 0) {
+      // Fallback: Always display available vendors when GPS coords are unpopulated
+      setNearbyVendors(mapVendors(rawVendors.slice(0, 6)));
     } else {
       setNearbyVendors([]);
     }
@@ -242,7 +250,7 @@ export const HeroSection = (): JSX.Element => {
 
           {/* Subheadline */}
           <p className="font-sans text-lg md:text-xl text-white/90 mb-10 max-w-2xl mx-auto animate-slide-up-fade stagger-2 drop-shadow-md">
-            Connect with trusted vendors, find authentic Nigerian products, and enjoy seamless shopping with secure payments.
+            Connect with trusted vendors, find authentic products, and enjoy seamless shopping with secure payments.
           </p>
 
           {/* Search Bar */}
@@ -313,9 +321,9 @@ export const HeroSection = (): JSX.Element => {
             ))}
           </div>
           
-          {/* Become a Vendor CTA */}
+          {/* Become a Vendor CTA (Green Theme Button) */}
           <div className="mt-12 animate-slide-up-fade stagger-5">
-            <Button onClick={() => navigate('/vendor/register')} variant="outline" className="bg-transparent border-white/30 text-white hover:bg-white hover:text-neutral-900 rounded-full px-8 py-6 text-lg font-medium backdrop-blur-sm transition-all">
+            <Button onClick={() => navigate('/vendor/register')} className="bg-primary-500 hover:bg-primary-600 text-white font-bold rounded-full px-8 py-6 text-lg shadow-xl border border-primary-400 transition-all cursor-pointer">
               Want to sell your products? Become a Vendor
             </Button>
           </div>

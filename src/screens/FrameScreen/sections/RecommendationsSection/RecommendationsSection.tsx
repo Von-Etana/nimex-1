@@ -165,31 +165,6 @@ export const RecommendationsSection = (): JSX.Element => {
   return (
     <section className="flex flex-col items-center gap-10 w-full py-10 bg-neutral-50">
 
-      {/* Fresh Recommendations */}
-      <div className="w-full max-w-7xl mx-auto px-4 md:px-6">
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h2 className="font-heading font-bold text-2xl md:text-3xl text-neutral-900">
-              Fresh Recommendations
-            </h2>
-            <p className="text-neutral-600 mt-1">New arrivals just for you</p>
-          </div>
-          <Button variant="outline" onClick={() => navigate('/products?sort=newest')}>
-            View All
-          </Button>
-        </div>
-
-        {loading ? (
-          <div className="flex justify-center py-10"><Loader2 className="animate-spin" /></div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {freshRecommendations.map((product) => (
-              <ProductCard key={product.id} product={product} />
-            ))}
-          </div>
-        )}
-      </div>
-
       {/* Trending Products */}
       <div className="w-full max-w-7xl mx-auto px-4 md:px-6">
         <div className="flex items-center justify-between mb-6">

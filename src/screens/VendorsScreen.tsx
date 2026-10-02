@@ -129,12 +129,17 @@ export const VendorsScreen: React.FC = () => {
       ]);
 
       const searchTerm = location.toLowerCase();
-      const searchResults = allVendors.filter(vendor => {
+      let searchResults = allVendors.filter(vendor => {
         const marketMatch = vendor.market_location?.toLowerCase().includes(searchTerm);
         const addressMatch = vendor.business_address?.toLowerCase().includes(searchTerm);
         const nameMatch = vendor.business_name?.toLowerCase().includes(searchTerm);
         return marketMatch || addressMatch || nameMatch;
       }).slice(0, 20);
+
+      // Fallback: If no vendors match the exact search term, display available vendors so vendors are always shown
+      if (searchResults.length === 0 && allVendors.length > 0) {
+        searchResults = allVendors.slice(0, 20);
+      }
 
       // Get profiles and review counts for search results
       const vendorsWithReviews = await Promise.all(

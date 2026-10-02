@@ -25,7 +25,6 @@ const allowedOrigins = [
     "https://nimex.ng",
     "https://www.nimex.ng",
     "https://nimex-ecommerce.web.app",
-    "https://nimex-ecommerce.firebaseapp.com",
     ...(process.env.NODE_ENV !== "production" ? ["http://localhost:5173", "http://localhost:3000"] : []),
 ];
 const corsHandler = cors({ origin: allowedOrigins });
