@@ -199,7 +199,12 @@ export const ProductDetailScreen: React.FC = () => {
       navigate('/login');
       return;
     }
-    navigate(`/chat/${vendor?.id}`);
+    const vendorUserId = vendor?.user_id || vendor?.id || product?.vendor_id;
+    if (!vendorUserId || vendorUserId === 'undefined') {
+      error('Vendor details are not available at this moment.');
+      return;
+    }
+    navigate(`/chat/${vendorUserId}`);
   };
 
   const handleAddToCart = () => {

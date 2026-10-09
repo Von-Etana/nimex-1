@@ -102,9 +102,7 @@ const extractAxiosErrorMessage = (error: unknown): string => {
  * Falls back to mock data when TERMINAL_SECRET_KEY is not configured.
  */
 export const getTerminalRates = functions.https.onCall(async (request: any) => {
-    if (!request.app) {
-        throw new functions.https.HttpsError('failed-precondition', 'The function must be called from an App Check verified app.');
-    }
+
 
     const data = request.data || request;
     const { pickup_address, delivery_address, parcels, weight } = data;
@@ -206,9 +204,7 @@ export const getTerminalRates = functions.https.onCall(async (request: any) => {
  * Finalise a shipment by booking it with the chosen rate.
  */
 export const createTerminalShipment = functions.https.onCall(async (request: any) => {
-    if (!request.app) {
-        throw new functions.https.HttpsError('failed-precondition', 'The function must be called from an App Check verified app.');
-    }
+
 
     const data = request.data || request;
     const { shipmentId, rateId } = data;
@@ -273,9 +269,7 @@ export const createTerminalShipment = functions.https.onCall(async (request: any
  * Validates required fields before forwarding to Terminal Africa.
  */
 export const quickTerminalShipment = functions.https.onCall(async (request: any) => {
-    if (!request.app) {
-        throw new functions.https.HttpsError('failed-precondition', 'The function must be called from an App Check verified app.');
-    }
+
 
     const data = request.data || request;
 
@@ -335,9 +329,7 @@ export const quickTerminalShipment = functions.https.onCall(async (request: any)
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const trackTerminalShipment = functions.https.onCall(async (request: any) => {
-    if (!request.app) {
-        throw new functions.https.HttpsError('failed-precondition', 'The function must be called from an App Check verified app.');
-    }
+
 
     const data = request.data || request;
     const { shipmentId } = data;

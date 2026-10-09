@@ -26,7 +26,7 @@ interface FlutterwaveTransferResponse {
 }
 
 class FlutterwaveService {
-  private functions = getFunctions(app);
+  private functions = getFunctions(app, 'us-central1');
   private config: { publicKey: string; testMode: boolean };
 
   constructor() {

@@ -166,54 +166,101 @@ export const ChatScreen: React.FC = () => {
   // Handle URL vendorId parameter - create or find conversation
   useEffect(() => {
     const handleVendorIdParam = async () => {
-      if (!urlVendorId || !user?.uid || conversations.length === 0) return;
+      if (!urlVendorId || urlVendorId === 'undefined' || !user?.uid) return;
 
-      // Check if conversation with this vendor already exists
-      const existingConvo = conversations.find(c => c.vendor_id === urlVendorId);
+      const searchParams = new URLSearchParams(window.location.search);
+      const queryVendorId = searchParams.get('vendorId');
+      const queryBuyerId = searchParams.get('buyerId');
+
+      let targetVendorId = urlVendorId;
+      let targetBuyerId = user.uid;
+
+      if (profile?.role === 'vendor') {
+        targetVendorId = queryVendorId || user.uid;
+        targetBuyerId = queryBuyerId || urlVendorId;
+      }
+
+      if (targetVendorId === 'undefined' || targetBuyerId === 'undefined') return;
+
+      // Check if conversation with this vendor/buyer already exists in state
+      const existingConvo = conversations.find(
+        c => c.vendor_id === targetVendorId && c.buyer_id === targetBuyerId
+      ) || conversations.find(
+        c => (c.vendor_id === targetVendorId && profile?.role !== 'vendor') || (c.buyer_id === targetBuyerId && profile?.role === 'vendor')
+      );
 
       if (existingConvo) {
         setSelectedConversation(existingConvo);
-      } else {
-        // Create new conversation with this vendor
-        setCreatingConversation(true);
-        try {
-          const conversationId = `conv_${user.uid}_${urlVendorId}_${Date.now()}`;
+        return;
+      }
 
-          // Get vendor info
-          const vendor = await FirestoreService.getDocument<any>(COLLECTIONS.VENDORS, urlVendorId);
+      // Check Firestore for existing conversation before creating a new one
+      setCreatingConversation(true);
+      try {
+        const existingDocs = await FirestoreService.getDocuments<any>(COLLECTIONS.CHAT_CONVERSATIONS, [
+          where('buyer_id', '==', targetBuyerId),
+          where('vendor_id', '==', targetVendorId),
+          limit(1)
+        ]);
 
-          const newConvo: Conversation = {
-            id: conversationId,
-            buyer_id: user.uid,
-            vendor_id: urlVendorId,
-            last_message_at: new Date().toISOString(),
-            unread_buyer: 0,
-            unread_vendor: 0,
-            vendor: { business_name: vendor?.business_name || 'Vendor' },
-            buyer: { full_name: profile?.full_name || 'Buyer' }
+        if (existingDocs && existingDocs.length > 0) {
+          const convoDoc = existingDocs[0];
+          const [buyer, vendor, product] = await Promise.all([
+            FirestoreService.getDocument<any>(COLLECTIONS.PROFILES, convoDoc.buyer_id),
+            FirestoreService.getDocument<any>(COLLECTIONS.VENDORS, convoDoc.vendor_id),
+            convoDoc.product_id ? FirestoreService.getDocument<any>(COLLECTIONS.PRODUCTS, convoDoc.product_id) : null
+          ]);
+          const enrichedConvo: Conversation = {
+            ...convoDoc,
+            buyer: buyer ? { full_name: buyer.full_name } : { full_name: 'Buyer' },
+            vendor: vendor ? { business_name: vendor.business_name } : { business_name: 'Vendor' },
+            product: product ? { title: product.title } : undefined
           };
 
-          await FirestoreService.setDocument(COLLECTIONS.CHAT_CONVERSATIONS, conversationId, {
-            buyer_id: user.uid,
-            vendor_id: urlVendorId,
-            last_message_at: new Date().toISOString(),
-            unread_buyer: 0,
-            unread_vendor: 0,
-            created_at: new Date().toISOString()
+          setConversations(prev => {
+            if (prev.some(c => c.id === enrichedConvo.id)) return prev;
+            return [enrichedConvo, ...prev];
           });
-
-          setConversations(prev => [newConvo, ...prev]);
-          setSelectedConversation(newConvo);
-        } catch (error) {
-          logger.error('Error creating conversation', error);
-        } finally {
-          setCreatingConversation(false);
+          setSelectedConversation(enrichedConvo);
+          return;
         }
+
+        // Create new conversation
+        const conversationId = `conv_${targetBuyerId}_${targetVendorId}_${Date.now()}`;
+        const [vendorDoc, buyerDoc] = await Promise.all([
+          FirestoreService.getDocument<any>(COLLECTIONS.VENDORS, targetVendorId),
+          FirestoreService.getDocument<any>(COLLECTIONS.PROFILES, targetBuyerId)
+        ]);
+
+        const newConvoData = {
+          buyer_id: targetBuyerId,
+          vendor_id: targetVendorId,
+          last_message_at: new Date().toISOString(),
+          unread_buyer: 0,
+          unread_vendor: 0,
+          created_at: new Date().toISOString()
+        };
+
+        await FirestoreService.setDocument(COLLECTIONS.CHAT_CONVERSATIONS, conversationId, newConvoData);
+
+        const newConvo: Conversation = {
+          id: conversationId,
+          ...newConvoData,
+          vendor: { business_name: vendorDoc?.business_name || 'Vendor' },
+          buyer: { full_name: buyerDoc?.full_name || profile?.full_name || 'Buyer' }
+        };
+
+        setConversations(prev => [newConvo, ...prev]);
+        setSelectedConversation(newConvo);
+      } catch (error) {
+        logger.error('Error creating conversation', error);
+      } finally {
+        setCreatingConversation(false);
       }
     };
 
     handleVendorIdParam();
-  }, [urlVendorId, user?.uid, conversations.length]);
+  }, [urlVendorId, user?.uid, profile?.role]);
 
   // Real-time subscription for messages in selected conversation
   useEffect(() => {

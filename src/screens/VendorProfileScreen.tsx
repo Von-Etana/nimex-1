@@ -377,7 +377,11 @@ export const VendorProfileScreen: React.FC = () => {
                       navigate('/login');
                       return;
                     }
-                    navigate(`/chat/${vendor.id}`);
+                    const targetVendorId = vendor?.user_id || vendor?.id || id;
+                    if (!targetVendorId || targetVendorId === 'undefined') {
+                      return;
+                    }
+                    navigate(`/chat/${targetVendorId}`);
                   }}
                   variant="outline"
                   className="border-neutral-300 hover:bg-neutral-100 text-neutral-800 font-semibold py-2.5 px-5 rounded-xl flex items-center justify-center gap-2"

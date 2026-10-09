@@ -1047,9 +1047,7 @@ async function sendSmsViaTermii(to: string, message: string) {
  * Secure endpoint to send SMS from client
  */
 export const sendTermiiSms = functions.https.onCall(async (request: any) => {
-    if (!request.app) {
-        throw new functions.https.HttpsError('failed-precondition', 'The function must be called from an App Check verified app.');
-    }
+
 
     if (!request.auth) {
         throw new functions.https.HttpsError('unauthenticated', 'Authentication required to send SMS');
@@ -1083,9 +1081,7 @@ export const sendTermiiSms = functions.https.onCall(async (request: any) => {
  * Secure endpoint to send transactional emails from the client via the Resend API.
  */
 export const sendEmail = functions.https.onCall(async (request: any) => {
-    if (!request.app) {
-        throw new functions.https.HttpsError('failed-precondition', 'The function must be called from an App Check verified app.');
-    }
+
 
     if (!request.auth) {
         throw new functions.https.HttpsError('unauthenticated', 'Authentication required to send email');
@@ -1136,9 +1132,7 @@ export const sendEmail = functions.https.onCall(async (request: any) => {
  * a reset is by definition not logged in.
  */
 export const sendPasswordResetEmailCustom = functions.https.onCall(async (request: any) => {
-    if (!request.app) {
-        throw new functions.https.HttpsError('failed-precondition', 'The function must be called from an App Check verified app.');
-    }
+
 
     const data = request.data || request;
     const { email } = data;

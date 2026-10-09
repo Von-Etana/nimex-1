@@ -24,9 +24,6 @@ const httpsError = (code: functions.https.FunctionsErrorCode, message: string) =
 };
 
 const requireAuthAndAppCheck = (request: functions.https.CallableRequest) => {
-  if (!request.app) {
-    httpsError("failed-precondition", "The function must be called from an App Check verified app.");
-  }
   if (!request.auth) {
     httpsError("unauthenticated", "Authentication required.");
   }
