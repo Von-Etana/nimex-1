@@ -12,7 +12,9 @@ dotenv.config();
 // Set global options to prevent GCP CPU quota issues on trial accounts
 setGlobalOptions({
     maxInstances: 1,
-    memory: "256MiB"
+    memory: "256MiB",
+    cpu: "gcf_gen1",
+    concurrency: 1
 });
 
 // Initialize Firebase Admin safely
@@ -711,53 +713,7 @@ export const verifyPayment = functions.https.onRequest(async (req, res) => {
     });
 });
 
-/**
- * Delete User Account & Associated Data
- */
-export const deleteAccount = functions.https.onRequest(async (req, res) => {
-    wrapCors(req, res, async () => {
-        const decodedToken = await verifyAuthToken(req);
-        const uid = decodedToken.uid;
 
-        const deleteQuery = async (query: any) => {
-            const snap = await query.get();
-            if (snap.empty) return;
-            const bulkWriter = db.bulkWriter();
-            snap.forEach((doc: any) => bulkWriter.delete(doc.ref));
-            await bulkWriter.close();
-        };
-
-        // 1. Delete dependent collections for buyer
-        await deleteQuery(db.collection("carts").where("user_id", "==", uid));
-        await deleteQuery(db.collection("cart_items").where("user_id", "==", uid));
-        await deleteQuery(db.collection("wishlists").where("user_id", "==", uid));
-        await deleteQuery(db.collection("addresses").where("user_id", "==", uid));
-        await deleteQuery(db.collection("orders").where("buyer_id", "==", uid));
-        await deleteQuery(db.collection("escrow_transactions").where("buyer_id", "==", uid));
-        await deleteQuery(db.collection("payment_transactions").where("buyer_id", "==", uid));
-
-        // 2. Delete dependent collections for vendor
-        await deleteQuery(db.collection("products").where("vendor_id", "==", uid));
-        await deleteQuery(db.collection("payouts").where("vendor_id", "==", uid));
-        await deleteQuery(db.collection("wallet_transactions").where("vendor_id", "==", uid));
-        await deleteQuery(db.collection("vendor_payout_accounts").where("vendor_id", "==", uid));
-        await deleteQuery(db.collection("orders").where("vendor_id", "==", uid));
-        await deleteQuery(db.collection("escrow_transactions").where("vendor_id", "==", uid));
-        await deleteQuery(db.collection("payment_transactions").where("vendor_id", "==", uid));
-        await deleteQuery(db.collection("deliveries").where("vendor_id", "==", uid));
-        await deleteQuery(db.collection("deliveries").where("buyer_id", "==", uid));
-
-        // 3. Delete Profile and Vendor docs
-        await db.collection("profiles").doc(uid).delete();
-        await db.collection("vendors").doc(uid).delete();
-
-        // 4. Delete Auth User
-        await admin.auth().deleteUser(uid);
-
-        console.log(`Account deleted successfully for user UID: ${uid}`);
-        res.json({ success: true, message: "Account deleted successfully" });
-    });
-});
 
 
 /**
@@ -1266,7 +1222,6 @@ export const createTerminalShipment = terminal.createTerminalShipment;
 export const quickTerminalShipment = terminal.quickTerminalShipment;
 export const trackTerminalShipment = terminal.trackTerminalShipment;
 export const getTerminalCarriers = terminal.getTerminalCarriers;
-export const terminalWebhook = terminal.terminalWebhook;
 
 // Export Google Maps proxy functions
 import * as googleMaps from './googleMaps';
