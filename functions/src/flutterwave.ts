@@ -5,7 +5,13 @@ import * as admin from "firebase-admin";
 // Use existing admin app or initialize
 const app = admin.apps.length ? admin.app() : admin.initializeApp();
 const db = app.firestore();
-const legacyConfig = () => ((functions as any).config?.() ?? {});
+const legacyConfig = () => {
+    try {
+        return typeof (functions as any).config === 'function' ? (functions as any).config() : {};
+    } catch {
+        return {};
+    }
+};
 
 // Flutterwave API v3 base URL
 const FLW_BASE_URL = "https://api.flutterwave.com/v3";

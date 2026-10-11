@@ -14,7 +14,13 @@ import axios, { AxiosError } from "axios";
  * `createTerminalShipment` path accordingly.
  */
 
-const legacyConfig = () => ((functions as any).config?.() ?? {});
+const legacyConfig = () => {
+    try {
+        return typeof (functions as any).config === 'function' ? (functions as any).config() : {};
+    } catch {
+        return {};
+    }
+};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Config helpers

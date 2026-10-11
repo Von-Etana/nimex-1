@@ -20,7 +20,13 @@ setGlobalOptions({
 // Initialize Firebase Admin safely
 const app = admin.apps.length ? admin.app() : admin.initializeApp();
 const db = app.firestore();
-const legacyConfig = () => ((functions as any).config?.() ?? {});
+const legacyConfig = () => {
+    try {
+        return typeof (functions as any).config === 'function' ? (functions as any).config() : {};
+    } catch {
+        return {};
+    }
+};
 
 // CORS Handler - Restrict to known origins
 const allowedOrigins = [
