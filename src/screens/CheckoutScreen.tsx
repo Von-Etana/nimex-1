@@ -261,8 +261,15 @@ export const CheckoutScreen: React.FC = () => {
 
     await flutterwaveService.loadFlutterwaveScript();
 
+    const selectedAddress = addresses.find((addr) => addr.id === selectedAddressId);
+    const customerEmail = user.email || `${user.uid}@nimex.ng`;
+    const customerPhone = selectedAddress?.phone || '';
+
     const paymentResult = await flutterwaveService.initializePayment({
-      email: user.email || '',
+      customerEmail,
+      email: customerEmail,
+      customerPhone,
+      amountNaira: totalAmount,
       amount: totalAmount,
       orderId: orderIds[0],
       callbackUrl: `${import.meta.env.VITE_APP_URL || window.location.origin}/orders/${orderIds[0]}`,
@@ -271,7 +278,7 @@ export const CheckoutScreen: React.FC = () => {
         buyer_id: user.uid,
         type: 'order',
       },
-    });
+    } as any);
 
     if (!paymentResult.success || !paymentResult.data) {
       throw new Error(

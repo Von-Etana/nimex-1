@@ -40,9 +40,13 @@ class FlutterwaveService {
   /**
    * Initialize Payment (Buyer to Platform)
    */
-  async initializePayment(data: NormalizedPaymentRequest): Promise<{ success: boolean; data?: any; error?: ServiceError }> {
+  async initializePayment(data: any): Promise<{ success: boolean; data?: any; error?: ServiceError }> {
     try {
-      const tx_ref = data.reference || `NIMEX-${data.orderId}-${Date.now()}`;
+      const email = data.customerEmail || data.email;
+      const amount = data.amountNaira ?? data.amount;
+      const phone = data.customerPhone || data.phone;
+      const orderId = data.orderId;
+      const tx_ref = data.reference || `NIMEX-${orderId}-${Date.now()}`;
 
       // Use backend Cloud Function
       const initPayment = httpsCallable<any, any>(
@@ -50,23 +54,43 @@ class FlutterwaveService {
         'initializeFlutterwavePayment'
       );
       const result = await initPayment({
-        email: data.customerEmail,
-        amount: data.amountNaira,
+        email,
+        amount,
         tx_ref,
-        redirect_url: data.callbackUrl || `${window.location.origin}/orders/${data.orderId}`,
+        redirect_url: data.callbackUrl || `${window.location.origin}/orders/${orderId}`,
         customer: {
-          email: data.customerEmail,
-          phonenumber: data.customerPhone,
+          email,
+          phonenumber: phone,
         },
         metadata: {
-          order_id: data.orderId,
+          order_id: orderId,
           ...data.metadata,
         },
       });
 
       const response = result.data;
       if (response.success) {
-        return { success: true, data: { ...response.data, tx_ref } };
+        return {
+          success: true,
+          data: {
+            ...response.data,
+            tx_ref,
+            amount,
+            currency: 'NGN',
+            customer: {
+              email,
+              phone_number: phone,
+            },
+            meta: {
+              order_id: orderId,
+              ...data.metadata,
+            },
+            customizations: {
+              title: 'NIMEX Payments',
+              description: `Payment for Order #${orderId}`,
+            },
+          },
+        };
       }
       
       return { 
