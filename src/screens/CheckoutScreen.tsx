@@ -288,59 +288,16 @@ export const CheckoutScreen: React.FC = () => {
       );
     }
 
-    // If Flutterwave generated a hosted payment link, we can open it or use inline modal
+    // If Flutterwave generated a secure hosted payment link, navigate directly to it
     if (paymentResult.data?.link) {
-      // If modal fails with PBFPubKey or user prefers hosted payment
-      const checkoutLink = paymentResult.data.link;
-      
+      localStorage.removeItem('nimex_cart');
       try {
-        flutterwaveService.openPaymentModal(
-          paymentResult.data,
-          async (response) => {
-            const verifyResult = await flutterwaveService.verifyPayment(response.transaction_id || response.tx_ref);
-
-            if (verifyResult.success) {
-              if (user.email) {
-                const orderItems = cartItems.map((item) => ({
-                  title: item.title,
-                  quantity: item.quantity,
-                  price: item.price,
-                }));
-
-                emailNotificationService
-                  .sendOrderConfirmation(user.email, orderIds[0], totalAmount, orderItems)
-                  .catch((err) => console.error('Failed to send order confirmation email:', err));
-              }
-
-              localStorage.removeItem('nimex_cart');
-              try {
-                sessionStorage.removeItem('nimex_checkout_items');
-              } catch (e) {
-                // ignore
-              }
-
-              analyticsService.trackPurchase(orderIds[0], totalAmount, cartItems.length);
-
-              navigate('/orders/' + orderIds[0], {
-                state: { paymentSuccess: true },
-                replace: true,
-              });
-            } else {
-              setPaymentError({
-                message: verifyResult.error?.message || 'Payment verification failed. You can retry.',
-                retryable: true,
-              });
-              setIsProcessing(false);
-            }
-          },
-          () => {
-            setIsProcessing(false);
-          }
-        );
-      } catch (modalErr) {
-        // Fallback: direct to secure Flutterwave payment page
-        window.location.href = checkoutLink;
+        sessionStorage.removeItem('nimex_checkout_items');
+      } catch (e) {
+        // ignore
       }
+      window.location.href = paymentResult.data.link;
+      return;
     } else {
       flutterwaveService.openPaymentModal(
         paymentResult.data,

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Package,
   Truck,
@@ -18,6 +18,7 @@ import { FirestoreService } from '../services/firestore.service';
 import { COLLECTIONS } from '../lib/collections';
 import { where, orderBy, limit } from 'firebase/firestore';
 import { orderService } from '../services/orderService';
+import { flutterwaveService } from '../services/flutterwaveService';
 
 interface Order {
   id: string;
@@ -60,6 +61,7 @@ interface EscrowTransaction {
 
 export const OrderTrackingScreen: React.FC = () => {
   const { orderId } = useParams<{ orderId: string }>();
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { user } = useAuth();
   const [order, setOrder] = useState<Order | null>(null);
@@ -87,11 +89,43 @@ export const OrderTrackingScreen: React.FC = () => {
 
     try {
       // 1. Fetch Order
-      const orderData = await FirestoreService.getDocument<any>(COLLECTIONS.ORDERS, orderId);
+      let orderData = await FirestoreService.getDocument<any>(COLLECTIONS.ORDERS, orderId);
 
       if (!orderData || orderData.buyer_id !== user.uid) {
         console.error('Order not found or unauthorized');
         return;
+      }
+
+      // Check if returning from Flutterwave hosted payment
+      const paymentStatusParam = searchParams.get('status');
+      const transactionIdParam = searchParams.get('transaction_id') || searchParams.get('tx_ref');
+
+      if (
+        (paymentStatusParam === 'successful' || paymentStatusParam === 'completed' || transactionIdParam) &&
+        orderData.payment_status !== 'paid'
+      ) {
+        try {
+          const verifyRef = transactionIdParam || orderData.payment_reference;
+          if (verifyRef) {
+            const verifyResult = await flutterwaveService.verifyPayment(verifyRef);
+            if (verifyResult.success) {
+              await orderService.updateOrderPaymentStatus(orderId, 'paid', verifyRef, 'flutterwave');
+              orderData = {
+                ...orderData,
+                payment_status: 'paid',
+                status: 'confirmed',
+              };
+              localStorage.removeItem('nimex_cart');
+              try {
+                sessionStorage.removeItem('nimex_checkout_items');
+              } catch (e) {
+                // ignore
+              }
+            }
+          }
+        } catch (verifyError) {
+          console.error('Failed to verify returning Flutterwave payment:', verifyError);
+        }
       }
 
       // 2. Fetch Vendor
