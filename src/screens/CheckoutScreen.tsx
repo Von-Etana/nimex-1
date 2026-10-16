@@ -274,7 +274,7 @@ export const CheckoutScreen: React.FC = () => {
       orderId: orderIds[0],
       callbackUrl: `${import.meta.env.VITE_APP_URL || window.location.origin}/orders/${orderIds[0]}`,
       metadata: {
-        order_ids: orderIds,
+        order_ids: orderIds.join(','),
         buyer_id: user.uid,
         type: 'order',
       },

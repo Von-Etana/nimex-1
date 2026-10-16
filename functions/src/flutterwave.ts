@@ -65,7 +65,21 @@ export const initializeFlutterwavePayment = functions.https.onCall(
                 redirect_url:
                     redirect_url || "https://nimex.ng/payment/callback",
                 customer: customer || { email },
-                meta: metadata || {},
+                meta: (() => {
+                    const sanitized: Record<string, string | number> = {};
+                    if (metadata && typeof metadata === 'object' && !Array.isArray(metadata)) {
+                        for (const [key, value] of Object.entries(metadata)) {
+                            if (typeof value === 'string' || typeof value === 'number') {
+                                sanitized[key] = value;
+                            } else if (Array.isArray(value)) {
+                                sanitized[key] = value.map((v) => String(v)).join(',');
+                            } else if (value !== null && value !== undefined) {
+                                sanitized[key] = String(value);
+                            }
+                        }
+                    }
+                    return sanitized;
+                })(),
                 customizations: {
                     title: "NIMEX Payments",
                     description: "Payment for items in cart",
